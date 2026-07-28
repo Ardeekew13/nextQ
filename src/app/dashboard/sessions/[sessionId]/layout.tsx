@@ -1,10 +1,11 @@
 "use client";
 
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@apollo/client";
 import { Tag, Button, Typography, Space, Skeleton, Popconfirm, App } from "antd";
 import { QrPopover } from "@/components/QrPopover";
+import { FinishCelebrationModal } from "@/components/FinishCelebrationModal";
 import {
   SESSION_DASHBOARD_QUERY,
   START_SESSION,
@@ -28,6 +29,13 @@ export default function SessionLayout({ children }: { children: ReactNode }) {
   const params = useParams<{ sessionId: string }>();
   const router = useRouter();
   const { message } = App.useApp();
+
+  const [celebrationOpen, setCelebrationOpen] = useState(false);
+  const [celebrationData, setCelebrationData] = useState<{
+    sessionName: string;
+    publicUrl: string;
+    podium: import("@/components/Podium").PodiumEntryView[];
+  } | null>(null);
 
   const { data, loading, error, refetch } = useQuery(SESSION_DASHBOARD_QUERY, {
     variables: { id: params.sessionId },
@@ -107,12 +115,22 @@ export default function SessionLayout({ children }: { children: ReactNode }) {
             okText="Yes, finish session"
             cancelText="Go back"
             okButtonProps={{ danger: false }}
-            onConfirm={() =>
-              run(async () => {
-                await finishSession({ variables: { id: session.id } });
-                router.push(base);
-              }, "Session finished")
-            }
+            onConfirm={async () => {
+                try {
+                  await finishSession({ variables: { id: session.id } });
+                  const result = await refetch();
+                  const finished = result.data?.session;
+                  setCelebrationData({
+                    sessionName: finished?.name ?? session.name,
+                    publicUrl: finished?.publicUrl ?? session.publicUrl,
+                    podium: finished?.podium ?? [],
+                  });
+                  setCelebrationOpen(true);
+                  message.success("Session finished!");
+                } catch (error) {
+                  message.error(error instanceof Error ? error.message : "Action failed");
+                }
+              }}
           >
             <Button size="small" type="primary">Finish session</Button>
           </Popconfirm>
@@ -132,5 +150,21 @@ export default function SessionLayout({ children }: { children: ReactNode }) {
   if (error) return <Typography.Text type="danger">{error.message}</Typography.Text>;
   if (!session) return <Typography.Text>Session not found.</Typography.Text>;
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      {celebrationData && (
+        <FinishCelebrationModal
+          open={celebrationOpen}
+          sessionName={celebrationData.sessionName}
+          publicUrl={celebrationData.publicUrl}
+          podium={celebrationData.podium}
+          onClose={() => {
+            setCelebrationOpen(false);
+            router.push(`${base}/standings`);
+          }}
+        />
+      )}
+    </>
+  );
 }

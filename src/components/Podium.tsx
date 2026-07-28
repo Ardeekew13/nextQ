@@ -114,7 +114,7 @@ export function Podium({ entries }: { entries: PodiumEntryView[] }) {
       {/* Mobile / narrow: vertical stack */}
       <div
         className="podium-mobile"
-        style={{ display: "flex", flexDirection: "column", gap: 12 }}
+        style={{ flexDirection: "column", gap: 12 }}
       >
         {[1, 2, 3].flatMap((pos) =>
           get(pos).map((entry) => <PodiumCard key={entry.player.id} entry={entry} />)
@@ -125,7 +125,6 @@ export function Podium({ entries }: { entries: PodiumEntryView[] }) {
       <div
         className="podium-desktop"
         style={{
-          display: "flex",
           alignItems: "flex-end",
           justifyContent: "center",
           gap: 12,
@@ -135,15 +134,6 @@ export function Podium({ entries }: { entries: PodiumEntryView[] }) {
           get(pos).map((entry) => <PodiumCard key={entry.player.id} entry={entry} />)
         )}
       </div>
-
-      <style>{`
-        .podium-mobile  { display: flex; }
-        .podium-desktop { display: none; }
-        @media (min-width: 520px) {
-          .podium-mobile  { display: none; }
-          .podium-desktop { display: flex; }
-        }
-      `}</style>
     </>
   );
 }

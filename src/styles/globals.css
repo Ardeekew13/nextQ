@@ -16,3 +16,11 @@ body {
     display: none;
   }
 }
+
+/* Podium: mobile = stacked, desktop = side-by-side */
+.podium-mobile  { display: flex; }
+.podium-desktop { display: none; }
+@media (min-width: 520px) {
+  .podium-mobile  { display: none; }
+  .podium-desktop { display: flex; }
+}

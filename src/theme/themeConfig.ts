@@ -63,8 +63,6 @@ export const themeConfig: ThemeConfig = {
       headerBorderRadius: 8,
       cellPaddingBlock: 12,
       cellPaddingInline: 16,
-      headerPaddingBlock: 4,
-      fontSizeHeading: 13,
     },
     Tag: {
       fontSizeSM: 13,
