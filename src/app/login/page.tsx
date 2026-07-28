@@ -6,8 +6,8 @@ import Link from "next/link";
 import { useMutation } from "@apollo/client";
 import { Form, Input, Button, Typography, Card, App } from "antd";
 import NProgress from "nprogress";
+import { AppLogo } from "@/components/AppLogo";
 import { LOGIN_ORGANISER } from "@/graphql/documents/organiser";
-import { BURGUNDY } from "@/theme/themeConfig";
 
 const { Title, Text } = Typography;
 
@@ -45,11 +45,8 @@ export default function LoginPage() {
       }}
     >
       <div style={{ width: "100%", maxWidth: 420 }}>
-        <Link
-          href="/"
-          style={{ display: "block", textAlign: "center", color: BURGUNDY.primary, fontWeight: 800, fontSize: 26, marginBottom: 20 }}
-        >
-          NextQ
+        <Link href="/" style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
+          <AppLogo variant="full" size="lg" />
         </Link>
         <Card>
           <Title level={3} style={{ textAlign: "center", marginTop: 0 }}>

@@ -2,6 +2,7 @@
 
 import { type ReactNode } from "react";
 import { Layout } from "antd";
+import { AppLogo } from "./AppLogo";
 
 const { Header } = Layout;
 
@@ -130,7 +131,7 @@ export function Navbar({
           zIndex: 50,
         }}
       >
-        {/* Pink dot + title */}
+        {/* Logo / title */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
           <div style={{
             width: 8,
@@ -140,10 +141,10 @@ export function Navbar({
             boxShadow: "0 0 6px rgba(236,72,153,0.6)",
             flexShrink: 0,
           }} />
-          {title && (
-            <div style={{ minWidth: 0 }}>
-              {title}
-            </div>
+          {title ? (
+            <div style={{ minWidth: 0 }}>{title}</div>
+          ) : (
+            <AppLogo variant="full" size="sm" />
           )}
         </div>
 

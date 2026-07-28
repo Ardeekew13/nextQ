@@ -93,8 +93,20 @@ export default function SessionLayout({ children }: { children: ReactNode }) {
         )}
         {(session.status === "ACTIVE" || session.status === "PAUSED") && (
           <Popconfirm
-            title="Finish this session?"
-            description="This publishes final results and cannot be undone."
+            title="End this session permanently?"
+            description={
+              <div style={{ maxWidth: 260 }}>
+                <p style={{ margin: "4px 0 6px" }}>
+                  Final standings will be published and the session will be <strong>locked</strong>.
+                </p>
+                <p style={{ margin: 0, color: "#dc2626", fontWeight: 600 }}>
+                  ⚠️ This cannot be undone or restarted.
+                </p>
+              </div>
+            }
+            okText="Yes, finish session"
+            cancelText="Go back"
+            okButtonProps={{ danger: false }}
             onConfirm={() =>
               run(async () => {
                 await finishSession({ variables: { id: session.id } });
@@ -102,7 +114,7 @@ export default function SessionLayout({ children }: { children: ReactNode }) {
               }, "Session finished")
             }
           >
-            <Button size="small" danger>Finish session</Button>
+            <Button size="small" type="primary">Finish session</Button>
           </Popconfirm>
         )}
         {session.status !== "COMPLETED" && session.status !== "CANCELLED" && (

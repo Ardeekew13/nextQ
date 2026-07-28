@@ -15,6 +15,7 @@ import {
 import { LOGOUT_ORGANISER } from "@/graphql/documents/organiser";
 import { BURGUNDY } from "@/theme/themeConfig";
 import { Navbar } from "./Navbar";
+import { AppLogo } from "./AppLogo";
 import {
 	NavbarActionsProvider,
 	useNavbarActions,
@@ -116,27 +117,9 @@ function DashboardShellInner({
 						}}
 					>
 						{collapsed ? (
-							<span
-								style={{
-									fontSize: 20,
-									fontWeight: 900,
-									color: BURGUNDY.primary,
-								}}
-							>
-								N
-							</span>
+							<AppLogo variant="icon" size="sm" />
 						) : (
-							<Title
-								level={3}
-								style={{
-									margin: 0,
-									color: BURGUNDY.primary,
-									fontWeight: 900,
-									letterSpacing: -0.5,
-								}}
-							>
-								NextQ
-							</Title>
+							<AppLogo variant="full" size="md" />
 						)}
 					</div>
 					<div
