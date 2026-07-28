@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useMutation } from "@apollo/client";
 import { Form, Input, Button, Typography, Card, App } from "antd";
+import NProgress from "nprogress";
 import { LOGIN_ORGANISER } from "@/graphql/documents/organiser";
 import { BURGUNDY } from "@/theme/themeConfig";
 
@@ -18,12 +19,14 @@ export default function LoginPage() {
 
   async function onFinish(values: { email: string; password: string }) {
     setLoading(true);
+    NProgress.start();
     try {
       await loginOrganiser({ variables: values });
       message.success("Welcome back!");
       router.push("/dashboard");
       router.refresh();
     } catch (error) {
+      NProgress.done();
       message.error(error instanceof Error ? error.message : "Login failed");
     } finally {
       setLoading(false);

@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { AntdRegistry } from "@ant-design/nextjs-registry";
 import { ConfigProvider, App as AntApp } from "antd";
 import { ApolloWrapper } from "@/apollo/ApolloWrapper";
 import { themeConfig } from "@/theme/themeConfig";
+import { RouteProgress } from "@/components/RouteProgress";
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {
@@ -17,6 +19,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AntdRegistry>
           <ConfigProvider theme={themeConfig}>
             <AntApp>
+              <Suspense fallback={null}>
+                <RouteProgress />
+              </Suspense>
               <ApolloWrapper>{children}</ApolloWrapper>
             </AntApp>
           </ConfigProvider>
