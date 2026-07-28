@@ -9,11 +9,13 @@ const { Header } = Layout;
 export function Navbar({
   actions,
   title,
+  hasSidebar = false,
 }: {
   collapsed?: boolean;
   onCollapse?: (collapsed: boolean) => void;
   actions?: ReactNode;
   title?: ReactNode;
+  hasSidebar?: boolean;
 }) {
   return (
     <>
@@ -77,7 +79,11 @@ export function Navbar({
           box-shadow: 0 4px 14px rgba(236,72,153,0.45) !important;
         }
 
-        /* Status tag */
+        /* Logo + optional page title */
+        .pickleq-navbar-logo { display: inline-flex; }
+        @media (max-width: 480px) {
+          .pickleq-navbar-logo.has-title { display: none; }
+        }
         .pickleq-navbar .ant-tag {
           border: none !important;
           font-size: 11px !important;
@@ -131,21 +137,17 @@ export function Navbar({
           zIndex: 50,
         }}
       >
-        {/* Logo / title */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-          <div style={{
-            width: 8,
-            height: 8,
-            borderRadius: "50%",
-            background: "linear-gradient(135deg, #ec4899, #f472b6)",
-            boxShadow: "0 0 6px rgba(236,72,153,0.6)",
-            flexShrink: 0,
-          }} />
-          {title ? (
-            <div style={{ minWidth: 0 }}>{title}</div>
-          ) : (
-            <AppLogo variant="full" size="sm" />
+        {/* Logo (only when no sidebar) + optional page title */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+          {!hasSidebar && (
+            <div className={`pickleq-navbar-logo${title ? " has-title" : ""}`}>
+              <AppLogo size="sm" />
+            </div>
           )}
+          {title && !hasSidebar && (
+            <div style={{ width: 1, height: 20, background: "#e5e7eb", flexShrink: 0 }} />
+          )}
+          {title && <div style={{ minWidth: 0 }}>{title}</div>}
         </div>
 
         {/* Actions */}

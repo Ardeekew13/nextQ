@@ -37,7 +37,7 @@ import { rebuildSessionStatistics } from "../src/lib/stats";
 import { SessionStatus, CourtStatus, GameStatus, DEFAULT_SESSION_SETTINGS } from "../src/types/enums";
 
 const ORGANISER_EMAIL = "organiser@nextq.test";
-const ORGANISER_PASSWORD = "password123";
+const ORGANISER_PASSWORD = process.env.SEED_PASSWORD ?? "dev-seed-only-123";
 const CLUB_NAME = "Pickle Ann";
 const CLUB_SLUG = "pickle-ann";
 const SESSION_NAME = "Friday Open Play";

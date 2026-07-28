@@ -117,9 +117,9 @@ function DashboardShellInner({
 						}}
 					>
 						{collapsed ? (
-							<AppLogo variant="icon" size="sm" />
+							<AppLogo size="sm" />
 						) : (
-							<AppLogo variant="full" size="md" />
+							<AppLogo size="md" />
 						)}
 					</div>
 					<div
@@ -226,7 +226,7 @@ function DashboardShellInner({
 					flexDirection: "column",
 				}}
 			>
-				<Navbar collapsed={collapsed} actions={actions} title={title} />
+				<Navbar collapsed={collapsed} actions={actions} title={title} hasSidebar={!isSessionPage} />
 				<Content
 					style={{
 						padding: "24px 28px",
