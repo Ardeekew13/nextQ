@@ -16,7 +16,7 @@ export function QrPopover({ url }: { url: string }) {
       onOpenChange={setOpen}
       trigger="click"
       placement="bottomRight"
-      overlayInnerStyle={{ padding: 20, borderRadius: 16 }}
+      styles={{ body: { padding: 20, borderRadius: 16 } }}
       content={
         <div style={{ textAlign: "center" }}>
           <div

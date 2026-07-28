@@ -7,6 +7,15 @@ import { themeConfig } from "@/theme/themeConfig";
 import { RouteProgress } from "@/components/RouteProgress";
 import "@/styles/globals.css";
 
+// Suppress Ant Design v5 React-version compatibility warning (we're on React 18)
+if (typeof window !== "undefined") {
+  const _warn = console.warn.bind(console);
+  console.warn = (...args: unknown[]) => {
+    if (typeof args[0] === "string" && args[0].includes("[antd: compatible]")) return;
+    _warn(...args);
+  };
+}
+
 export const metadata: Metadata = {
   title: "NextQ — Pickleball Open Play",
   description: "Pickleball session and queue management for organisers.",

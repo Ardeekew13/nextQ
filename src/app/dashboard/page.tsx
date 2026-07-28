@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@apollo/client";
 import { Button, Card, Col, Row, Typography, Tag, Empty, Skeleton, Modal, Form, Input, App } from "antd";
 import { PlusOutlined, TeamOutlined, ThunderboltOutlined, FileOutlined, CheckCircleOutlined } from "@ant-design/icons";
@@ -22,6 +23,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function DashboardPage() {
   const { data, loading, refetch } = useQuery(DASHBOARD_QUERY);
   const { message } = App.useApp();
+  const router = useRouter();
   const [createClubOpen, setCreateClubOpen] = useState(false);
   const [createClub, { loading: creating }] = useMutation(CREATE_CLUB);
   const [form] = Form.useForm();
@@ -112,9 +114,10 @@ export default function DashboardPage() {
 
           return (
             <Col xs={24} sm={24} lg={8} key={club.id}>
-              <Link href={`/dashboard/clubs/${club.id}`} style={{ textDecoration: "none" }}>
                 <Card
                   title={club.name}
+                  onClick={() => router.push(`/dashboard/clubs/${club.id}`)}
+                  style={{ cursor: "pointer" }}
                   styles={{
                     header: {
                       backgroundColor: "#ec4899",
@@ -145,7 +148,6 @@ export default function DashboardPage() {
                     </div>
                   ))}
                 </Card>
-              </Link>
             </Col>
           );
         })}
