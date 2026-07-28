@@ -1,0 +1,18 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+/* Utility: hide text on very small screens */
+@media (max-width: 400px) {
+  .hide-xs {
+    display: none;
+  }
+}

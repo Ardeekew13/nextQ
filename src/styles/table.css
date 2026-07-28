@@ -1,0 +1,4 @@
+.compact-table .ant-table-thead > tr > th {
+  padding: 12px 6px !important;
+  height: auto !important;
+}
