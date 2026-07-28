@@ -1,16 +1,19 @@
 import { connectToDatabase } from "@/lib/db";
 import { getSessionFromCookies, type AuthTokenPayload } from "@/lib/auth";
+import { getCSRFToken } from "@/lib/csrf";
 import { SessionPlayer } from "@/models/SessionPlayer";
 
 export interface GraphQLContext {
   organiser: AuthTokenPayload | null;
   playerNameCache: Map<string, Promise<Map<string, string>>>;
+  csrfToken: string;
 }
 
 export async function createContext(): Promise<GraphQLContext> {
   await connectToDatabase();
   const organiser = await getSessionFromCookies();
-  return { organiser, playerNameCache: new Map() };
+  const csrfToken = await getCSRFToken();
+  return { organiser, playerNameCache: new Map(), csrfToken };
 }
 
 /** Per-request cached lookup of playerId -> name for a session, used to resolve history entries. */

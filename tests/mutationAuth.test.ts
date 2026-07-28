@@ -6,7 +6,7 @@ import { courtResolvers } from "@/graphql/resolvers/court";
 import { gameResolvers } from "@/graphql/resolvers/game";
 import type { GraphQLContext } from "@/graphql/context";
 
-const loggedOutContext: GraphQLContext = { organiser: null, playerNameCache: new Map() };
+const loggedOutContext: GraphQLContext = { organiser: null, playerNameCache: new Map(), csrfToken: "test-token" };
 
 /**
  * Every organiser-only mutation must reject anonymous (public) callers

@@ -8,6 +8,7 @@ import {
   authCookieName,
   authCookieMaxAge,
 } from "@/lib/auth";
+import { generateCSRFToken } from "@/lib/csrf";
 import type { GraphQLContext } from "../context";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -17,10 +18,11 @@ async function setAuthCookie(token: string) {
   store.set(authCookieName, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: "strict",
     path: "/",
     maxAge: authCookieMaxAge,
   });
+  await generateCSRFToken();
 }
 
 export const authResolvers = {
@@ -41,13 +43,36 @@ export const authResolvers = {
           extensions: { code: "BAD_USER_INPUT" },
         });
       }
-      if (args.password.length < 8) {
-        throw new GraphQLError("Password must be at least 8 characters long.", {
+      const password = args.password;
+      if (password.length < 12) {
+        throw new GraphQLError("Password must be at least 12 characters long.", {
           extensions: { code: "BAD_USER_INPUT" },
         });
       }
-      if (!args.name.trim()) {
+      if (!/[A-Z]/.test(password)) {
+        throw new GraphQLError("Password must contain at least one uppercase letter.", {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
+      if (!/[0-9]/.test(password)) {
+        throw new GraphQLError("Password must contain at least one number.", {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
+      if (!/[!@#$%^&*]/.test(password)) {
+        throw new GraphQLError("Password must contain at least one special character (!@#$%^&*).", {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
+
+      const name = args.name.trim();
+      if (!name) {
         throw new GraphQLError("Name is required.", { extensions: { code: "BAD_USER_INPUT" } });
+      }
+      if (name.length > 100) {
+        throw new GraphQLError("Name must be less than 100 characters.", {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
       }
 
       const existing = await User.findOne({ email });

@@ -16,6 +16,7 @@ function contextFor(organiserId: string | null): GraphQLContext {
   return {
     organiser: organiserId ? { sub: organiserId, email: "organiser@test.dev", name: "Test Organiser" } : null,
     playerNameCache: new Map(),
+    csrfToken: "test-csrf-token",
   };
 }
 
