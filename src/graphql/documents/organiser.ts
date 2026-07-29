@@ -164,6 +164,7 @@ export const CLUB_QUERY = gql`
       logoUrl
       location
       description
+      joinCode
       sessions {
         id
         name
@@ -202,6 +203,25 @@ export const UPDATE_CLUB = gql`
 export const DELETE_CLUB = gql`
   mutation DeleteClub($id: ID!) {
     deleteClub(id: $id)
+  }
+`;
+
+export const GENERATE_CLUB_JOIN_CODE = gql`
+  mutation GenerateClubJoinCode($id: ID!) {
+    generateClubJoinCode(id: $id) {
+      id
+      joinCode
+    }
+  }
+`;
+
+export const JOIN_CLUB = gql`
+  mutation JoinClub($joinCode: String!) {
+    joinClub(joinCode: $joinCode) {
+      id
+      name
+      slug
+    }
   }
 `;
 

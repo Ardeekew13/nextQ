@@ -6,6 +6,10 @@ import { SessionStatus } from "@/types/enums";
 import { requireOrganiser, requireClubOwner } from "../guards";
 import type { GraphQLContext } from "../context";
 
+function generateJoinCode(): string {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
 async function uniqueClubSlug(desired: string): Promise<string> {
   let slug = slugify(desired) || "club";
   // eslint-disable-next-line no-constant-condition
@@ -20,7 +24,12 @@ export const clubResolvers = {
   Query: {
     myClubs: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
       const organiser = requireOrganiser(context);
-      return Club.find({ organiserId: organiser.sub }).sort({ createdAt: -1 });
+      return Club.find({
+        $or: [
+          { organiserId: organiser.sub },
+          { coOrganiserIds: organiser.sub },
+        ],
+      }).sort({ createdAt: -1 });
     },
     club: async (_parent: unknown, args: { id: string }, context: GraphQLContext) => {
       return requireClubOwner(context, args.id);
@@ -81,6 +90,35 @@ export const clubResolvers = {
       await Session.deleteMany({ clubId: club._id });
       await club.deleteOne();
       return true;
+    },
+
+    generateClubJoinCode: async (_parent: unknown, args: { id: string }, context: GraphQLContext) => {
+      const club = await requireClubOwner(context, args.id);
+      let code = generateJoinCode();
+      // Ensure unique
+      while (await Club.findOne({ joinCode: code })) {
+        code = generateJoinCode();
+      }
+      club.joinCode = code;
+      await club.save();
+      return club;
+    },
+
+    joinClub: async (_parent: unknown, args: { joinCode: string }, context: GraphQLContext) => {
+      const organiser = requireOrganiser(context);
+      const club = await Club.findOne({ joinCode: args.joinCode.trim().toUpperCase() });
+      if (!club) {
+        throw new GraphQLError("Invalid join code.", { extensions: { code: "NOT_FOUND" } });
+      }
+      if (String(club.organiserId) === String(organiser.sub)) {
+        throw new GraphQLError("You already own this club.", { extensions: { code: "BAD_USER_INPUT" } });
+      }
+      const coOrganiserIds = (club.coOrganiserIds ?? []) as unknown[];
+      if (coOrganiserIds.some((id) => String(id) === String(organiser.sub))) {
+        throw new GraphQLError("You have already joined this club.", { extensions: { code: "BAD_USER_INPUT" } });
+      }
+      await Club.updateOne({ _id: club._id }, { $addToSet: { coOrganiserIds: organiser.sub } });
+      return Club.findById(club._id);
     },
   },
   Club: {

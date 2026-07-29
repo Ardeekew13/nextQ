@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CLUB_QUERY, DELETE_CLUB, CLUB_MEMBERS_QUERY, ADD_CLUB_MEMBER, UPDATE_CLUB_MEMBER, REMOVE_CLUB_MEMBER } from "@/graphql/documents/organiser";
+import { CLUB_QUERY, DELETE_CLUB, CLUB_MEMBERS_QUERY, ADD_CLUB_MEMBER, UPDATE_CLUB_MEMBER, REMOVE_CLUB_MEMBER, GENERATE_CLUB_JOIN_CODE } from "@/graphql/documents/organiser";
 import { humanizeStatus } from "@/lib/format";
 import { buildPublicClubUrl } from "@/lib/urls";
 import "@/styles/table.css";
@@ -64,6 +64,7 @@ export default function ClubDetailPage() {
 		variables: { clubId: params.clubId },
 	});
 	const [deleteClub] = useMutation(DELETE_CLUB);
+	const [generateJoinCode, { loading: generatingCode }] = useMutation(GENERATE_CLUB_JOIN_CODE);
 	const [addClubMember] = useMutation(ADD_CLUB_MEMBER);
 	const [updateClubMember] = useMutation(UPDATE_CLUB_MEMBER);
 	const [removeClubMember] = useMutation(REMOVE_CLUB_MEMBER);
@@ -284,6 +285,78 @@ export default function ClubDetailPage() {
 									/>
 								</Card>
 							</>
+						),
+					},
+					{
+						key: "share",
+						label: <span><LinkOutlined /> Share &amp; Invite</span>,
+						children: (
+							<Card style={{ maxWidth: 480 }}>
+								<Title level={5} style={{ marginBottom: 4 }}>Public club link</Title>
+								<Text type="secondary" style={{ fontSize: 13, display: "block", marginBottom: 12 }}>
+									Share this link so players can view your sessions.
+								</Text>
+								<Space>
+									<Text code style={{ fontSize: 13 }}>{publicUrl}</Text>
+									<Button
+										icon={<CopyOutlined />}
+										size="small"
+										onClick={() => { navigator.clipboard.writeText(publicUrl); message.success("Link copied!"); }}
+									>
+										Copy
+									</Button>
+								</Space>
+
+								<div style={{ borderTop: "1px solid #f0f0f0", margin: "24px 0" }} />
+
+								<Title level={5} style={{ marginBottom: 4 }}>Co-organiser join code</Title>
+								<Text type="secondary" style={{ fontSize: 13, display: "block", marginBottom: 12 }}>
+									Generate a 6-character code so another organiser can join and manage this club.
+								</Text>
+								{club.joinCode ? (
+									<Space direction="vertical" size={12} style={{ width: "100%" }}>
+										<div style={{
+											display: "inline-flex", alignItems: "center", gap: 12,
+											background: "#f9fafb", border: "1px solid #e5e7eb",
+											borderRadius: 10, padding: "10px 16px",
+										}}>
+											<Text style={{ fontSize: 24, fontWeight: 800, letterSpacing: "0.25em", color: "#111" }}>
+												{club.joinCode}
+											</Text>
+											<Button
+												icon={<CopyOutlined />}
+												size="small"
+												onClick={() => { navigator.clipboard.writeText(club.joinCode); message.success("Code copied!"); }}
+											/>
+										</div>
+										<Text type="secondary" style={{ fontSize: 12 }}>
+											Share this code with the other organiser. They can enter it via <strong>Join club</strong> on their dashboard.
+										</Text>
+										<Button
+											size="small"
+											loading={generatingCode}
+											onClick={async () => {
+												await generateJoinCode({ variables: { id: club.id } });
+												refetch();
+												message.success("New join code generated");
+											}}
+										>
+											Regenerate code
+										</Button>
+									</Space>
+								) : (
+									<Button
+										type="primary"
+										loading={generatingCode}
+										onClick={async () => {
+											await generateJoinCode({ variables: { id: club.id } });
+											refetch();
+										}}
+									>
+										Generate join code
+									</Button>
+								)}
+							</Card>
 						),
 					},
 				]}

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@apollo/client";
 import { Button, Card, Col, Row, Typography, Tag, Empty, Skeleton, Modal, Form, Input, App } from "antd";
 import { PlusOutlined, TeamOutlined, ThunderboltOutlined, FileOutlined, CheckCircleOutlined } from "@ant-design/icons";
-import { DASHBOARD_QUERY, CREATE_CLUB } from "@/graphql/documents/organiser";
+import { DASHBOARD_QUERY, CREATE_CLUB, JOIN_CLUB } from "@/graphql/documents/organiser";
 import { StatTile } from "@/components/StatTile";
 import { humanizeStatus } from "@/lib/format";
 
@@ -25,8 +25,11 @@ export default function DashboardPage() {
   const { message } = App.useApp();
   const router = useRouter();
   const [createClubOpen, setCreateClubOpen] = useState(false);
+  const [joinClubOpen, setJoinClubOpen] = useState(false);
   const [createClub, { loading: creating }] = useMutation(CREATE_CLUB);
+  const [joinClub, { loading: joining }] = useMutation(JOIN_CLUB);
   const [form] = Form.useForm();
+  const [joinForm] = Form.useForm();
 
   async function handleCreateClub(values: { name: string; location?: string }) {
     try {
@@ -37,6 +40,18 @@ export default function DashboardPage() {
       refetch();
     } catch (error) {
       message.error(error instanceof Error ? error.message : "Could not create club");
+    }
+  }
+
+  async function handleJoinClub(values: { joinCode: string }) {
+    try {
+      await joinClub({ variables: { joinCode: values.joinCode.trim().toUpperCase() } });
+      message.success("Joined club!");
+      setJoinClubOpen(false);
+      joinForm.resetFields();
+      refetch();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "Invalid join code");
     }
   }
 
@@ -54,9 +69,14 @@ export default function DashboardPage() {
         <Title level={4} style={{ margin: 0 }}>
           Dashboard
         </Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateClubOpen(true)}>
-          Create club
-        </Button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Button icon={<TeamOutlined />} onClick={() => setJoinClubOpen(true)}>
+            Join club
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateClubOpen(true)}>
+            Create club
+          </Button>
+        </div>
       </div>
 
       <Row gutter={[12, 12]} style={{ marginBottom: 4 }}>
@@ -166,6 +186,33 @@ export default function DashboardPage() {
           </Form.Item>
           <Form.Item label="Location" name="location">
             <Input size="large" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="Join a club"
+        open={joinClubOpen}
+        onCancel={() => { setJoinClubOpen(false); joinForm.resetFields(); }}
+        onOk={() => joinForm.submit()}
+        okText="Join club"
+        confirmLoading={joining}
+      >
+        <p style={{ color: "#6b7280", marginBottom: 16 }}>
+          Ask the club owner for their 6-character join code, then enter it below.
+        </p>
+        <Form form={joinForm} layout="vertical" onFinish={handleJoinClub} requiredMark={false}>
+          <Form.Item
+            label="Join code"
+            name="joinCode"
+            rules={[{ required: true, message: "Enter the join code" }, { len: 6, message: "Join code must be 6 characters" }]}
+          >
+            <Input
+              size="large"
+              placeholder="ABC123"
+              maxLength={6}
+              style={{ textTransform: "uppercase", letterSpacing: "0.2em", fontWeight: 700 }}
+            />
           </Form.Item>
         </Form>
       </Modal>

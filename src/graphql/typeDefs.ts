@@ -116,11 +116,13 @@ export const typeDefs = gql`
   type Club {
     id: ID!
     organiserId: ID!
+    coOrganiserIds: [ID!]!
     name: String!
     slug: String!
     logoUrl: String
     location: String
     description: String
+    joinCode: String
     sessions: [Session!]!
     createdAt: Date!
     updatedAt: Date!
@@ -420,6 +422,8 @@ export const typeDefs = gql`
     createClub(input: CreateClubInput!): Club!
     updateClub(id: ID!, input: UpdateClubInput!): Club!
     deleteClub(id: ID!): Boolean!
+    generateClubJoinCode(id: ID!): Club!
+    joinClub(joinCode: String!): Club!
 
     createSession(input: CreateSessionInput!): Session!
     updateSession(id: ID!, input: UpdateSessionInput!): Session!
