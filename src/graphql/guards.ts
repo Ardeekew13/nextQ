@@ -13,6 +13,23 @@ export function requireOrganiser(context: GraphQLContext): AuthTokenPayload {
   return context.organiser;
 }
 
+export async function requireClubAccess(context: GraphQLContext, clubId: string) {
+  const organiser = requireOrganiser(context);
+  const club = await Club.findById(clubId);
+  if (!club) {
+    throw new GraphQLError("Club not found.", { extensions: { code: "NOT_FOUND" } });
+  }
+  const isOwner = String(club.organiserId) === organiser.sub;
+  const coOrganiserIds = (club.coOrganiserIds ?? []) as unknown[];
+  const isCoOrganiser = coOrganiserIds.some((id) => String(id) === organiser.sub);
+  if (!isOwner && !isCoOrganiser) {
+    throw new GraphQLError("You do not have access to this club.", {
+      extensions: { code: "FORBIDDEN" },
+    });
+  }
+  return club;
+}
+
 export async function requireClubOwner(context: GraphQLContext, clubId: string) {
   const organiser = requireOrganiser(context);
   const club = await Club.findById(clubId);

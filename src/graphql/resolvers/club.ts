@@ -3,7 +3,7 @@ import { Club } from "@/models/Club";
 import { Session } from "@/models/Session";
 import { slugify, withRandomSuffix } from "@/lib/slug";
 import { SessionStatus } from "@/types/enums";
-import { requireOrganiser, requireClubOwner } from "../guards";
+import { requireOrganiser, requireClubOwner, requireClubAccess } from "../guards";
 import type { GraphQLContext } from "../context";
 
 function generateJoinCode(): string {
@@ -32,7 +32,7 @@ export const clubResolvers = {
       }).sort({ createdAt: -1 });
     },
     club: async (_parent: unknown, args: { id: string }, context: GraphQLContext) => {
-      return requireClubOwner(context, args.id);
+      return requireClubAccess(context, args.id);
     },
     publicClub: async (_parent: unknown, args: { slug: string }) => {
       return Club.findOne({ slug: args.slug.toLowerCase() });

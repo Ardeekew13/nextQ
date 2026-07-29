@@ -6,12 +6,15 @@ import { SessionPlayer } from "@/models/SessionPlayer";
 import { requireOrganiser } from "../guards";
 import type { GraphQLContext } from "../context";
 
-/** Ensure the calling organiser owns the club */
-async function requireClubOwner(context: GraphQLContext, clubId: string) {
+/** Ensure the calling organiser has access to the club (owner or co-organiser) */
+async function requireClubAccess(context: GraphQLContext, clubId: string) {
   requireOrganiser(context);
   const club = await Club.findById(clubId);
   if (!club) throw new GraphQLError("Club not found.", { extensions: { code: "NOT_FOUND" } });
-  if (String(club.organiserId) !== String(context.organiser!.sub)) {
+  const isOwner = String(club.organiserId) === String(context.organiser!.sub);
+  const coOrganiserIds = (club.coOrganiserIds ?? []) as unknown[];
+  const isCoOrg = coOrganiserIds.some((id) => String(id) === String(context.organiser!.sub));
+  if (!isOwner && !isCoOrg) {
     throw new GraphQLError("Not authorised.", { extensions: { code: "FORBIDDEN" } });
   }
   return club;
@@ -22,7 +25,7 @@ async function requireMemberOwner(context: GraphQLContext, memberId: string) {
   requireOrganiser(context);
   const member = await ClubMember.findById(memberId);
   if (!member) throw new GraphQLError("Club member not found.", { extensions: { code: "NOT_FOUND" } });
-  await requireClubOwner(context, String(member.clubId));
+  await requireClubAccess(context, String(member.clubId));
   return member;
 }
 
@@ -33,7 +36,7 @@ export const clubMemberResolvers = {
       args: { clubId: string },
       context: GraphQLContext
     ) => {
-      await requireClubOwner(context, args.clubId);
+      await requireClubAccess(context, args.clubId);
       return ClubMember.find({ clubId: args.clubId }).sort({ name: 1 });
     },
   },
@@ -44,7 +47,7 @@ export const clubMemberResolvers = {
       args: { clubId: string; input: { name: string; nickname?: string; skillLevel?: string } },
       context: GraphQLContext
     ) => {
-      await requireClubOwner(context, args.clubId);
+      await requireClubAccess(context, args.clubId);
       if (!args.input.name.trim()) {
         throw new GraphQLError("Name is required.", { extensions: { code: "BAD_USER_INPUT" } });
       }
