@@ -42,8 +42,8 @@ export function PlayersTab({ sessionId, onHeader }: { sessionId: string; onHeade
   const [bulkForm] = Form.useForm();
   const [editForm] = Form.useForm();
 
-  const [addSessionPlayer] = useMutation(ADD_SESSION_PLAYER);
-  const [addSessionPlayers] = useMutation(ADD_SESSION_PLAYERS);
+  const [addSessionPlayer, { loading: addingSingle }] = useMutation(ADD_SESSION_PLAYER);
+  const [addSessionPlayers, { loading: addingBulk }] = useMutation(ADD_SESSION_PLAYERS);
   const [updateSessionPlayer] = useMutation(UPDATE_SESSION_PLAYER);
   const [removeSessionPlayer] = useMutation(REMOVE_SESSION_PLAYER);
   const [checkInPlayer] = useMutation(CHECK_IN_PLAYER);
@@ -96,8 +96,13 @@ export function PlayersTab({ sessionId, onHeader }: { sessionId: string; onHeade
   }
 
   async function handleAddSingle(values: { name: string; nickname?: string; skillLevel?: string }) {
+    const name = values.name.trim().toUpperCase();
+    if (existingNames.has(name.toLowerCase())) {
+      message.error(`"${name}" is already in this session`);
+      return;
+    }
     try {
-      const result = await addSessionPlayer({ variables: { sessionId, input: values } });
+      const result = await addSessionPlayer({ variables: { sessionId, input: { ...values, name } } });
       const newId = result.data?.addSessionPlayer?.id;
       if (newId) await checkInPlayer({ variables: { id: newId, checkedIn: true } });
       message.success("Player added and checked in");
@@ -109,13 +114,22 @@ export function PlayersTab({ sessionId, onHeader }: { sessionId: string; onHeade
   }
 
   async function handleAddBulk(values: { names: string }) {
-    const inputs = values.names.split("\n").map((l) => l.trim()).filter(Boolean).map((name) => ({ name }));
+    const lines = values.names.split("\n").map((l) => l.trim().toUpperCase()).filter(Boolean);
+    // Deduplicate within input
+    const unique = [...new Set(lines)];
+    // Remove already-existing players
+    const dupes = unique.filter((n) => existingNames.has(n.toLowerCase()));
+    const inputs = unique.filter((n) => !existingNames.has(n.toLowerCase())).map((name) => ({ name }));
+
+    if (dupes.length > 0) {
+      message.warning(`Skipped ${dupes.length} duplicate${dupes.length > 1 ? "s" : ""}: ${dupes.join(", ")}`);
+    }
     if (inputs.length === 0) return;
     try {
       const result = await addSessionPlayers({ variables: { sessionId, inputs } });
       const newIds: string[] = result.data?.addSessionPlayers?.map((p: any) => p.id) ?? [];
       if (newIds.length > 0) await Promise.all(newIds.map((id) => checkInPlayer({ variables: { id, checkedIn: true } })));
-      message.success(`${inputs.length} players added and checked in`);
+      message.success(`${inputs.length} player${inputs.length > 1 ? "s" : ""} added and checked in`);
       bulkForm.resetFields();
       setAddOpen(false);
       refetch();
@@ -293,8 +307,13 @@ export function PlayersTab({ sessionId, onHeader }: { sessionId: string; onHeade
               label: "One player",
               children: (
                 <Form form={singleForm} layout="vertical" onFinish={handleAddSingle}>
-                  <Form.Item label="Name" name="name" rules={[{ required: true }]}>
-                    <Input size="large" />
+                  <Form.Item
+                    label="Name"
+                    name="name"
+                    rules={[{ required: true, message: "Enter a name" }]}
+                    normalize={(v: string) => v?.toUpperCase()}
+                  >
+                    <Input size="large" style={{ textTransform: "uppercase" }} placeholder="PLAYER NAME" />
                   </Form.Item>
                   <Form.Item label="Nickname" name="nickname">
                     <Input size="large" />
@@ -302,7 +321,9 @@ export function PlayersTab({ sessionId, onHeader }: { sessionId: string; onHeade
                   <Form.Item label="Skill level (optional)" name="skillLevel">
                     <Select allowClear options={SKILL_OPTIONS} size="large" />
                   </Form.Item>
-                  <Button type="primary" htmlType="submit" block size="large">Add player</Button>
+                  <Button type="primary" htmlType="submit" block size="large" loading={addingSingle}>
+                    Add player
+                  </Button>
                 </Form>
               ),
             },
@@ -311,10 +332,24 @@ export function PlayersTab({ sessionId, onHeader }: { sessionId: string; onHeade
               label: "Multiple players",
               children: (
                 <Form form={bulkForm} layout="vertical" onFinish={handleAddBulk}>
-                  <Form.Item label="One name per line" name="names" rules={[{ required: true, message: "Enter at least one name" }]}>
-                    <Input.TextArea rows={8} placeholder={"Alex\nJordan\nSam"} />
+                  <Form.Item
+                    label="One name per line"
+                    name="names"
+                    rules={[{ required: true, message: "Enter at least one name" }]}
+                    extra="Names will be saved in UPPERCASE. Duplicates are skipped automatically."
+                  >
+                    <Input.TextArea
+                      rows={8}
+                      placeholder={"ALEX\nJORDAN\nSAM"}
+                      style={{ textTransform: "uppercase" }}
+                      onChange={(e) => {
+                        bulkForm.setFieldValue("names", e.target.value.toUpperCase());
+                      }}
+                    />
                   </Form.Item>
-                  <Button type="primary" htmlType="submit" block size="large">Add players</Button>
+                  <Button type="primary" htmlType="submit" block size="large" loading={addingBulk}>
+                    Add players
+                  </Button>
                 </Form>
               ),
             },
