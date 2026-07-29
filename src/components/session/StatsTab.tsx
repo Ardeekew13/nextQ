@@ -2,16 +2,16 @@
 
 import { useQuery } from "@apollo/client";
 import { Typography, Empty } from "antd";
-import { SESSION_DASHBOARD_QUERY } from "@/graphql/documents/organiser";
+import { SESSION_STANDINGS_QUERY } from "@/graphql/documents/organiser";
 import { Podium } from "@/components/Podium";
 import { StandingsTable } from "@/components/StandingsTable";
 
 const { Title } = Typography;
 
 export function StatsTab({ sessionId }: { sessionId: string }) {
-  const { data, loading, error } = useQuery(SESSION_DASHBOARD_QUERY, {
+  const { data, loading, error } = useQuery(SESSION_STANDINGS_QUERY, {
     variables: { id: sessionId },
-    pollInterval: 5000,
+    pollInterval: 10000,
   });
 
   if (loading && !data) return null;

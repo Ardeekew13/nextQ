@@ -85,8 +85,8 @@ export const typeDefs = gql`
   }
 
   input ScoringSettingsInput {
-    pointsTarget: Int!
-    winByTwo: Boolean!
+    pointsTarget: Int
+    winByTwo: Boolean
   }
 
   input SessionSettingsInput {

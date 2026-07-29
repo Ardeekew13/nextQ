@@ -62,8 +62,6 @@ interface FormValues {
 	name: string;
 	sessionDate: dayjs.Dayjs;
 	numberOfCourts: number;
-	pointsTarget: number;
-	winByTwo: boolean;
 	maxConsecutiveGames: number;
 }
 
@@ -85,10 +83,6 @@ export default function NewSessionPage() {
 						sessionDate: values.sessionDate.toISOString(),
 						numberOfCourts: values.numberOfCourts,
 						settings: {
-							scoring: {
-								pointsTarget: values.pointsTarget,
-								winByTwo: values.winByTwo,
-							},
 							queueMode,
 							maxConsecutiveGames: values.maxConsecutiveGames,
 						},

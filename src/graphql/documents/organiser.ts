@@ -364,6 +364,112 @@ export const SESSION_DASHBOARD_QUERY = gql`
   }
 `;
 
+// ── Lean focused queries (used by individual tabs for faster polling) ──
+
+/** Header-only: used by layout to show name/status/buttons without fetching all data */
+export const SESSION_HEADER_QUERY = gql`
+  query SessionHeader($id: ID!) {
+    session(id: $id) {
+      id
+      name
+      status
+      publicPublished
+      publicUrl
+      clubId
+    }
+  }
+`;
+
+/** Courts + queued players: used by Courts tab */
+export const SESSION_COURTS_QUERY = gql`
+  ${GAME_FIELDS}
+  query SessionCourts($id: ID!) {
+    session(id: $id) {
+      id
+      status
+      courts {
+        id
+        courtNumber
+        name
+        status
+        currentGame {
+          ...GameFields
+        }
+      }
+      queuedPlayers {
+        id
+        name
+        gamesPlayed
+        queueEnteredAt
+      }
+      checkedInPlayerCount
+    }
+  }
+`;
+
+/** Players list: used by Players tab */
+export const SESSION_PLAYERS_QUERY = gql`
+  query SessionPlayers($id: ID!) {
+    session(id: $id) {
+      id
+      status
+      players {
+        id
+        name
+        nickname
+        skillLevel
+        checkedIn
+        checkedInAt
+        active
+        gamesPlayed
+        wins
+        losses
+        winRate
+        currentStreak
+        longestWinStreak
+        gamesSatOut
+        queueEnteredAt
+      }
+    }
+  }
+`;
+
+/** Games log: used by Games tab */
+export const SESSION_GAMES_LOG_QUERY = gql`
+  ${GAME_FIELDS}
+  query SessionGamesLog($id: ID!) {
+    session(id: $id) {
+      id
+      status
+      completedGames {
+        ...GameFields
+      }
+      activeGames {
+        ...GameFields
+      }
+    }
+  }
+`;
+
+/** Standings + podium: used by Standings tab */
+export const SESSION_STANDINGS_QUERY = gql`
+  ${STANDING_FIELDS}
+  ${PODIUM_FIELDS}
+  query SessionStandings($id: ID!) {
+    session(id: $id) {
+      id
+      status
+      standings {
+        ...StandingFields
+      }
+      podium {
+        ...PodiumFields
+      }
+      publicUrl
+    }
+  }
+`;
+
 export const SESSION_GAMES_QUERY = gql`
   ${GAME_FIELDS}
   query SessionGames($sessionId: ID!) {

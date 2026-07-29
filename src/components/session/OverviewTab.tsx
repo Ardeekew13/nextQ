@@ -91,7 +91,7 @@ export function OverviewTab({ sessionId }: { sessionId: string }) {
 	const { message } = App.useApp();
 	const { data, loading, error, refetch } = useQuery(SESSION_DASHBOARD_QUERY, {
 		variables: { id: sessionId },
-		pollInterval: 5000,
+		pollInterval: 6000,
 	});
 
 	const [generateNextGame, { loading: generating }] =

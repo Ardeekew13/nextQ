@@ -8,7 +8,7 @@ import {
 } from "antd";
 import { PlusOutlined, DeleteOutlined, EditOutlined, CheckOutlined, TeamOutlined } from "@ant-design/icons";
 import {
-  SESSION_DASHBOARD_QUERY,
+  SESSION_PLAYERS_QUERY,
   ADD_SESSION_PLAYER,
   ADD_SESSION_PLAYERS,
   UPDATE_SESSION_PLAYER,
@@ -32,7 +32,7 @@ const SKILL_OPTIONS = [
 
 export function PlayersTab({ sessionId, onHeader }: { sessionId: string; onHeader?: (node: ReactNode) => void }) {
   const { message } = App.useApp();
-  const { data, refetch } = useQuery(SESSION_DASHBOARD_QUERY, { variables: { id: sessionId } });
+  const { data, refetch } = useQuery(SESSION_PLAYERS_QUERY, { variables: { id: sessionId }, pollInterval: 5000 });
 
   const [addOpen, setAddOpen] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<any>(null);

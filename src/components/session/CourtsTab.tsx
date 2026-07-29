@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "@apollo/client";
 import { Table, Button, Modal, Form, Input, InputNumber, Switch, Tag, Space, App, Card } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import {
-  SESSION_DASHBOARD_QUERY,
+  SESSION_COURTS_QUERY,
   ADD_COURT,
   UPDATE_COURT,
   DISABLE_COURT,
@@ -21,7 +21,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function CourtsTab({ sessionId, onHeader }: { sessionId: string; onHeader?: (node: ReactNode) => void }) {
   const { message } = App.useApp();
-  const { data, refetch } = useQuery(SESSION_DASHBOARD_QUERY, { variables: { id: sessionId } });
+  const { data, refetch } = useQuery(SESSION_COURTS_QUERY, { variables: { id: sessionId }, pollInterval: 4000 });
 
   const [addOpen, setAddOpen] = useState(false);
   const [editingCourt, setEditingCourt] = useState<any>(null);

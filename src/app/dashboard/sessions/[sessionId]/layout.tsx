@@ -7,6 +7,7 @@ import { Tag, Button, Typography, Space, Skeleton, Popconfirm, App } from "antd"
 import { QrPopover } from "@/components/QrPopover";
 import { FinishCelebrationModal } from "@/components/FinishCelebrationModal";
 import {
+  SESSION_HEADER_QUERY,
   SESSION_DASHBOARD_QUERY,
   START_SESSION,
   PAUSE_SESSION,
@@ -37,9 +38,16 @@ export default function SessionLayout({ children }: { children: ReactNode }) {
     podium: import("@/components/Podium").PodiumEntryView[];
   } | null>(null);
 
-  const { data, loading, error, refetch } = useQuery(SESSION_DASHBOARD_QUERY, {
+  // Layout only needs header-level data (name, status, publicUrl) — poll lightly
+  const { data, loading, error, refetch } = useQuery(SESSION_HEADER_QUERY, {
     variables: { id: params.sessionId },
-    pollInterval: 5000,
+    pollInterval: 8000,
+  });
+
+  // Used only after finishSession to grab podium for the celebration modal
+  const { refetch: refetchFull } = useQuery(SESSION_DASHBOARD_QUERY, {
+    variables: { id: params.sessionId },
+    skip: true,
   });
 
   const [startSession] = useMutation(START_SESSION);
@@ -118,8 +126,10 @@ export default function SessionLayout({ children }: { children: ReactNode }) {
             onConfirm={async () => {
                 try {
                   await finishSession({ variables: { id: session.id } });
-                  const result = await refetch();
+                  // Use full query to get podium for celebration modal
+                  const result = await refetchFull();
                   const finished = result.data?.session;
+                  await refetch(); // refresh header too
                   setCelebrationData({
                     sessionName: finished?.name ?? session.name,
                     publicUrl: finished?.publicUrl ?? session.publicUrl,

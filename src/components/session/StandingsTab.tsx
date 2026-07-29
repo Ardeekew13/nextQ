@@ -3,7 +3,7 @@
 import { useQuery } from "@apollo/client";
 import { Typography, Button, App } from "antd";
 import { ShareAltOutlined, LinkOutlined } from "@ant-design/icons";
-import { SESSION_DASHBOARD_QUERY } from "@/graphql/documents/organiser";
+import { SESSION_STANDINGS_QUERY } from "@/graphql/documents/organiser";
 import { Podium } from "@/components/Podium";
 import { StandingsTable } from "@/components/StandingsTable";
 
@@ -11,9 +11,9 @@ const { Title } = Typography;
 
 export function StandingsTab({ sessionId }: { sessionId: string }) {
   const { message } = App.useApp();
-  const { data, loading } = useQuery(SESSION_DASHBOARD_QUERY, {
+  const { data, loading } = useQuery(SESSION_STANDINGS_QUERY, {
     variables: { id: sessionId },
-    pollInterval: 5000,
+    pollInterval: 8000,
   });
 
   const session = data?.session;

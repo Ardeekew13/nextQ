@@ -6,7 +6,7 @@ const { Schema, model, models } = mongoose;
 const ScoringSettingsSchema = new Schema(
   {
     pointsTarget: { type: Number, required: true, default: 11 },
-    winByTwo: { type: Boolean, required: true, default: true },
+    winByTwo: { type: Boolean, required: true, default: false },
   },
   { _id: false }
 );
@@ -67,6 +67,8 @@ const SessionSchema = new Schema(
 );
 
 SessionSchema.index({ clubId: 1, slug: 1 }, { unique: true });
+SessionSchema.index({ organiserId: 1, status: 1 });
+SessionSchema.index({ clubId: 1, status: 1 });
 
 export type SessionDoc = InferSchemaType<typeof SessionSchema>;
 

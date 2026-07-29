@@ -37,6 +37,8 @@ const SessionPlayerSchema = new Schema(
 );
 
 SessionPlayerSchema.index({ sessionId: 1, name: 1 });
+SessionPlayerSchema.index({ sessionId: 1, checkedIn: 1 });
+SessionPlayerSchema.index({ sessionId: 1, active: 1, queueEnteredAt: 1 });
 
 export type SessionPlayerDoc = InferSchemaType<typeof SessionPlayerSchema>;
 

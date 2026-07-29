@@ -18,7 +18,7 @@ export function GamesTab({ sessionId }: { sessionId: string }) {
   const { message } = App.useApp();
   const { data, refetch } = useQuery(SESSION_GAMES_QUERY, {
     variables: { sessionId },
-    pollInterval: 5000,
+    pollInterval: 8000,
   });
 
   const [editingGame, setEditingGame] = useState<GameLogView | null>(null);
