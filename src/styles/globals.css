@@ -24,3 +24,11 @@ body {
   .podium-mobile  { display: none; }
   .podium-desktop { display: flex; }
 }
+
+/* Sessions list: card list on mobile, table on desktop */
+.sessions-mobile  { display: block; }
+.sessions-desktop { display: none; }
+@media (min-width: 640px) {
+  .sessions-mobile  { display: none; }
+  .sessions-desktop { display: block; }
+}

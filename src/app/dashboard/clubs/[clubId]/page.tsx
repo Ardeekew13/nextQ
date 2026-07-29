@@ -133,15 +133,16 @@ export default function ClubDetailPage() {
 				<Button
 					key="copy"
 					icon={<CopyOutlined />}
+					size="small"
 					onClick={() => {
 						navigator.clipboard.writeText(publicUrl);
 						message.success("Public club link copied");
 					}}
 				>
-					Copy public link
+					Copy link
 				</Button>,
 				<Link key="new" href={`/dashboard/clubs/${club.id}/sessions/new`}>
-					<Button type="primary" icon={<PlusOutlined />}>
+					<Button type="primary" icon={<PlusOutlined />} size="small">
 						New session
 					</Button>
 				</Link>,
@@ -151,9 +152,7 @@ export default function ClubDetailPage() {
 					description="This cannot be undone. Clubs with an active or paused session cannot be deleted."
 					onConfirm={handleDelete}
 				>
-					<Button danger icon={<DeleteOutlined />}>
-						Delete club
-					</Button>
+					<Button danger icon={<DeleteOutlined />} size="small" />
 				</Popconfirm>,
 			]}
 		>
@@ -172,7 +171,54 @@ export default function ClubDetailPage() {
 										allowClear
 									/>
 								</div>
-								<Card style={{ border: "1px solid #e8e8e8" }}>
+
+								{/* Mobile: card list */}
+								<div className="sessions-mobile">
+									{(club.sessions ?? []).length === 0 && (
+										<Text type="secondary">No sessions yet.</Text>
+									)}
+									{(club.sessions ?? []).map((s: any) => (
+										<Link key={s.id} href={`/dashboard/sessions/${s.id}`} style={{ textDecoration: "none" }}>
+											<div style={{
+												background: "#fff",
+												border: "1px solid #f0f0f0",
+												borderRadius: 12,
+												padding: "12px 14px",
+												marginBottom: 8,
+												display: "flex",
+												justifyContent: "space-between",
+												alignItems: "center",
+												gap: 8,
+											}}>
+												<div style={{ minWidth: 0 }}>
+													<Text strong style={{ fontSize: 14, color: "#ec4899", display: "block" }} ellipsis>
+														{s.name}
+													</Text>
+													<Text type="secondary" style={{ fontSize: 12 }}>
+														{new Date(s.sessionDate).toLocaleDateString()}
+													</Text>
+												</div>
+												<div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+													<Tag color={STATUS_COLORS[s.status]} style={{ margin: 0 }}>
+														{humanizeStatus(s.status)}
+													</Tag>
+													<Button
+														size="small"
+														icon={<LinkOutlined />}
+														onClick={(e) => {
+															e.preventDefault();
+															navigator.clipboard.writeText(s.publicUrl);
+															message.success("Link copied");
+														}}
+													/>
+												</div>
+											</div>
+										</Link>
+									))}
+								</div>
+
+								{/* Desktop: table */}
+								<Card className="sessions-desktop" style={{ border: "1px solid #e8e8e8" }}>
 									<Table
 										className="compact-table"
 										rowKey="id"
@@ -204,6 +250,7 @@ export default function ClubDetailPage() {
 											{
 												title: "Public link",
 												dataIndex: "publicUrl",
+												width: 90,
 												render: (url: string) => (
 													<Button
 														size="small"
