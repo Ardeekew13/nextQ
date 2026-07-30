@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@apollo/client";
 import { Button, Card, Modal, Form, Input, App, Skeleton, Typography, Tag, Space, Divider } from "antd";
 import { DASHBOARD_QUERY, CREATE_CLUB, JOIN_CLUB } from "@/graphql/documents/organiser";
-import { DashboardHeader } from "@/components/Dashboard/DashboardHeader";
+import { useNavbarActions } from "@/components/NavbarActionsContext";
 import { humanizeStatus } from "@/lib/format";
 
 const { Text } = Typography;
@@ -22,12 +22,73 @@ export default function DashboardPage() {
   const { data, loading, refetch } = useQuery(DASHBOARD_QUERY);
   const { message } = App.useApp();
   const router = useRouter();
+  const { setTitle, setActions } = useNavbarActions();
   const [createClubOpen, setCreateClubOpen] = useState(false);
   const [joinClubOpen, setJoinClubOpen] = useState(false);
   const [createClub, { loading: creating }] = useMutation(CREATE_CLUB);
   const [joinClub, { loading: joining }] = useMutation(JOIN_CLUB);
   const [form] = Form.useForm();
   const [joinForm] = Form.useForm();
+
+  const clubs = data?.myClubs ?? [];
+
+  useEffect(() => {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).toUpperCase();
+    const dayStr = now.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "short",
+      day: "numeric",
+    }).toUpperCase();
+
+    setTitle(
+      <div>
+        <Text
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: "#bd2153",
+            letterSpacing: "0.2em",
+            textTransform: "uppercase",
+            display: "block",
+            marginBottom: 4,
+          }}
+        >
+          {dayStr} · {timeStr}
+        </Text>
+        <h1
+          style={{
+            fontSize: 28,
+            margin: 0,
+            fontFamily: "'Barlow Condensed', sans-serif",
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.03em",
+            color: "#1d1f20",
+            lineHeight: 1.2,
+          }}
+        >
+          Good evening, Ron
+        </h1>
+      </div>
+    );
+
+    setActions(
+      <Space>
+        <Button onClick={() => setJoinClubOpen(true)} style={{ color: "#8d1a3f" }}>
+          Join club
+        </Button>
+        <Button onClick={() => setCreateClubOpen(true)}>Create club</Button>
+        <Button type="primary" onClick={() => clubs.length > 0 && router.push(`/dashboard/clubs/${clubs[0].id}/sessions/new`)}>
+          New session
+        </Button>
+      </Space>
+    );
+  }, [setTitle, setActions, clubs, router]);
 
   async function handleCreateClub(values: { name: string; location?: string }) {
     try {
@@ -55,7 +116,6 @@ export default function DashboardPage() {
 
   if (loading) return <Skeleton active />;
 
-  const clubs = data?.myClubs ?? [];
   const allSessions = clubs.flatMap((club: any) => club.sessions ?? []);
   const liveCount = allSessions.filter((s: any) => s.status === "ACTIVE" || s.status === "PAUSED").length;
   const completedCount = allSessions.filter((s: any) => s.status === "COMPLETED").length;
@@ -63,12 +123,6 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <DashboardHeader
-        userName="Ron Derick"
-        onJoinClub={() => setJoinClubOpen(true)}
-        onCreateClub={() => setCreateClubOpen(true)}
-        onNewSession={() => clubs.length > 0 && router.push(`/dashboard/clubs/${clubs[0].id}/sessions/new`)}
-      />
 
       {/* Stats Row */}
       <div
