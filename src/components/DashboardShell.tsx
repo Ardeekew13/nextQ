@@ -55,21 +55,23 @@ function DashboardShellInner({
 		: "dashboard";
 
 	return (
-		<Layout style={{ minHeight: "100vh", display: "flex" }}>
+		<Layout style={{ minHeight: "100vh", display: "flex", position: "relative" }}>
 			{!isSessionPage && (
-				<Sidebar
-					selectedKey={selectedKey}
-					onSelect={(key) => {
-						if (key === "dashboard") {
-							window.location.href = "/dashboard";
-						} else if (key === "sessions") {
-							window.location.href = "/dashboard/clubs";
-						}
-					}}
-					userInitials={initials(organiserName)}
-					userName={organiserName}
-					clubCode="BPC"
-				/>
+				<div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 236, zIndex: 10 }}>
+					<Sidebar
+						selectedKey={selectedKey}
+						onSelect={(key) => {
+							if (key === "dashboard") {
+								window.location.href = "/dashboard";
+							} else if (key === "sessions") {
+								window.location.href = "/dashboard/clubs";
+							}
+						}}
+						userInitials={initials(organiserName)}
+						userName={organiserName}
+						clubCode="BPC"
+					/>
+				</div>
 			)}
 			<Layout
 				style={{
