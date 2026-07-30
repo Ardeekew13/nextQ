@@ -1,8 +1,9 @@
 "use client";
 
 import React from "react";
-import { Button, Space } from "antd";
-import { Text } from "antd/es/typography";
+import { Button, Typography } from "antd";
+
+const { Text } = Typography;
 
 interface UpNextHeroBandProps {
   sessionName?: string;
