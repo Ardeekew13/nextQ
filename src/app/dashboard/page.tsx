@@ -1,24 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@apollo/client";
-import { Button, Card, Col, Row, Typography, Tag, Empty, Skeleton, Modal, Form, Input, App } from "antd";
-import { PlusOutlined, TeamOutlined, ThunderboltOutlined, FileOutlined, CheckCircleOutlined } from "@ant-design/icons";
+import { Col, Row, Modal, Form, Input, App, Skeleton } from "antd";
 import { DASHBOARD_QUERY, CREATE_CLUB, JOIN_CLUB } from "@/graphql/documents/organiser";
-import { StatTile } from "@/components/StatTile";
-import { humanizeStatus } from "@/lib/format";
-
-const { Title, Text } = Typography;
-
-const STATUS_COLORS: Record<string, string> = {
-  DRAFT: "default",
-  ACTIVE: "green",
-  PAUSED: "orange",
-  COMPLETED: "blue",
-  CANCELLED: "red",
-};
+import { DashboardHeader } from "@/components/Dashboard/DashboardHeader";
+import { UpNextHeroBand } from "@/components/Dashboard/UpNextHeroBand";
+import { StatStrip } from "@/components/Dashboard/StatStrip";
+import { SessionsSection } from "@/components/Dashboard/SessionsSection";
+import { ClubLeaders } from "@/components/Dashboard/ClubLeaders";
+import { RecentActivity } from "@/components/Dashboard/RecentActivity";
 
 export default function DashboardPage() {
   const { data, loading, refetch } = useQuery(DASHBOARD_QUERY);
@@ -58,119 +50,70 @@ export default function DashboardPage() {
   if (loading) return <Skeleton active />;
 
   const clubs = data?.myClubs ?? [];
+  const firstClub = clubs[0];
   const allSessions = clubs.flatMap((club: any) => club.sessions ?? []);
-  const activeCount = allSessions.filter((s: any) => s.status === "ACTIVE" || s.status === "PAUSED").length;
-  const draftCount = allSessions.filter((s: any) => s.status === "DRAFT").length;
-  const completedCount = allSessions.filter((s: any) => s.status === "COMPLETED").length;
+  const upNextSession = allSessions.find((s: any) => s.status === "DRAFT") || allSessions[0];
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-        <Title level={4} style={{ margin: 0 }}>
-          Dashboard
-        </Title>
-        <div style={{ display: "flex", gap: 8 }}>
-          <Button icon={<TeamOutlined />} onClick={() => setJoinClubOpen(true)}>
-            Join club
-          </Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateClubOpen(true)}>
-            Create club
-          </Button>
-        </div>
-      </div>
+      <DashboardHeader
+        userName="Ron Derick"
+        onJoinClub={() => setJoinClubOpen(true)}
+        onCreateClub={() => setCreateClubOpen(true)}
+        onNewSession={() => router.push(`/dashboard/clubs/${firstClub?.id}/sessions/new`)}
+      />
 
-      <Row gutter={[12, 12]} style={{ marginBottom: 4 }}>
-        <Col xs={12} sm={12} lg={6}>
-          <StatTile icon={<TeamOutlined />} label="Clubs" value={clubs.length} suffix="total" />
-        </Col>
-        <Col xs={12} sm={12} lg={6}>
-          <StatTile
-            icon={<ThunderboltOutlined />}
-            iconColor="#c2410c"
-            iconBg="#fff7ed"
-            label="Active sessions"
-            value={activeCount}
-            suffix="live"
-          />
-        </Col>
-        <Col xs={12} sm={12} lg={6}>
-          <StatTile
-            icon={<FileOutlined />}
-            iconColor="#0369a1"
-            iconBg="#f0f9ff"
-            label="Drafts"
-            value={draftCount}
-            suffix="pending"
-          />
-        </Col>
-        <Col xs={12} sm={12} lg={6}>
-          <StatTile
-            icon={<CheckCircleOutlined />}
-            iconColor="#15803d"
-            iconBg="#f0fdf4"
-            label="Completed"
-            value={completedCount}
-            suffix="sessions"
-          />
-        </Col>
-      </Row>
-
-      {clubs.length === 0 && (
-        <Card style={{ marginTop: 16 }}>
-          <Empty description="No clubs yet. Create your first club to start a session.">
-            <Button type="primary" onClick={() => setCreateClubOpen(true)}>
-              Create club
-            </Button>
-          </Empty>
-        </Card>
+      {upNextSession && (
+        <UpNextHeroBand
+          sessionName={upNextSession.name}
+          startsInMinutes={48}
+          rsvpCount={18}
+          checkedInCount={0}
+          status={upNextSession.status}
+          onOpenQueue={() => router.push(`/dashboard/sessions/${upNextSession.id}`)}
+          onEditSetup={() => router.push(`/dashboard/sessions/${upNextSession.id}`)}
+        />
       )}
 
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-        {clubs.map((club: any) => {
-          const sessions = club.sessions ?? [];
-          const active = sessions.filter((s: any) => s.status === "ACTIVE" || s.status === "PAUSED");
-          const drafts = sessions.filter((s: any) => s.status === "DRAFT");
-          const completed = sessions.filter((s: any) => s.status === "COMPLETED").slice(0, 3);
+      <StatStrip sessionsRun={14} gamesLogged={312} avgTurnout={17} needsAttention={1} />
 
-          return (
-            <Col xs={24} sm={24} lg={8} key={club.id}>
-                <Card
-                  title={club.name}
-                  onClick={() => router.push(`/dashboard/clubs/${club.id}`)}
-                  style={{ cursor: "pointer" }}
-                  styles={{
-                    header: {
-                      backgroundColor: "#ec4899",
-                      borderRadius: "8px 8px 0 0",
-                    },
-                    title: {
-                      color: "white",
-                      margin: 0,
-                    },
-                  }}
-                >
-                  {sessions.length === 0 && <Text type="secondary">No sessions yet.</Text>}
+      <Row gutter={26}>
+        <Col xs={24} lg={14}>
+          <SessionsSection
+            sessions={allSessions.map((s: any) => ({
+              id: s.id,
+              name: s.name,
+              sessionDate: s.sessionDate,
+              status: s.status,
+              courts: 2,
+              players: 8,
+              games: 3,
+            }))}
+            onViewAll={() => router.push("/dashboard/clubs")}
+          />
+        </Col>
 
-                  {[...active, ...drafts, ...completed].map((session: any) => (
-                    <div
-                      key={session.id}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        padding: "10px 0",
-                        borderBottom: "1px solid #f8e1ec",
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Link href={`/dashboard/sessions/${session.id}`}>{session.name}</Link>
-                      <Tag color={STATUS_COLORS[session.status]}>{humanizeStatus(session.status)}</Tag>
-                    </div>
-                  ))}
-                </Card>
-            </Col>
-          );
-        })}
+        <Col xs={24} lg={10}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <ClubLeaders
+              leaders={[
+                { id: "1", name: "M. Santos", wins: 14, losses: 3 },
+                { id: "2", name: "L. Yap", wins: 12, losses: 5 },
+                { id: "3", name: "J. Lim", wins: 11, losses: 7 },
+                { id: "4", name: "R. Cruz", wins: 10, losses: 8 },
+                { id: "5", name: "A. Garcia", wins: 9, losses: 10 },
+              ]}
+            />
+            <RecentActivity
+              activities={[
+                { id: "1", time: "14:22", event: "Wednesday session completed" },
+                { id: "2", time: "13:45", event: "New player registered: Ana Garcia" },
+                { id: "3", time: "12:30", event: "Friday Open Play moved to 19:00" },
+                { id: "4", time: "11:15", event: "Join code regenerated for BPC" },
+              ]}
+            />
+          </div>
+        </Col>
       </Row>
 
       <Modal
@@ -193,7 +136,10 @@ export default function DashboardPage() {
       <Modal
         title="Join a club"
         open={joinClubOpen}
-        onCancel={() => { setJoinClubOpen(false); joinForm.resetFields(); }}
+        onCancel={() => {
+          setJoinClubOpen(false);
+          joinForm.resetFields();
+        }}
         onOk={() => joinForm.submit()}
         okText="Join club"
         confirmLoading={joining}
@@ -205,13 +151,20 @@ export default function DashboardPage() {
           <Form.Item
             label="Join code"
             name="joinCode"
-            rules={[{ required: true, message: "Enter the join code" }, { len: 6, message: "Join code must be 6 characters" }]}
+            rules={[
+              { required: true, message: "Enter the join code" },
+              { len: 6, message: "Join code must be 6 characters" },
+            ]}
           >
             <Input
               size="large"
               placeholder="ABC123"
               maxLength={6}
-              style={{ textTransform: "uppercase", letterSpacing: "0.2em", fontWeight: 700 }}
+              style={{
+                textTransform: "uppercase",
+                letterSpacing: "0.2em",
+                fontWeight: 700,
+              }}
             />
           </Form.Item>
         </Form>
