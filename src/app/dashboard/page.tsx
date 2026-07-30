@@ -88,7 +88,7 @@ export default function DashboardPage() {
         </Button>
       </Space>
     );
-  }, [setTitle, setActions, clubs, router]);
+  }, []);
 
   async function handleCreateClub(values: { name: string; location?: string }) {
     try {
