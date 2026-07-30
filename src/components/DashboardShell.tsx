@@ -57,7 +57,7 @@ function DashboardShellInner({
 	return (
 		<Layout style={{ minHeight: "100vh", display: "flex", position: "relative" }}>
 			{!isSessionPage && (
-				<div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 236, zIndex: 10 }}>
+				<div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 236, zIndex: 10, height: "100vh" }}>
 					<Sidebar
 						selectedKey={selectedKey}
 						onSelect={(key) => {

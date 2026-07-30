@@ -39,7 +39,7 @@ export function Sidebar({
   }));
 
   return (
-    <Sider width={236} theme="light" style={{ background: "#fef4f7", borderRight: "1px solid rgba(138,39,72,0.24)" }}>
+    <Sider width={236} theme="light" style={{ background: "#fef4f7", borderRight: "1px solid rgba(138,39,72,0.24)", height: "100%" }}>
       {/* Logo block */}
       <div style={{ padding: "20px", borderBottom: "1px solid rgba(138,39,72,0.24)", height: 82 }}>
         <div style={{ fontSize: 20, fontWeight: 700, color: "#f43f75" }}>NextQ</div>
