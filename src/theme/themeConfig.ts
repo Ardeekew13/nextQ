@@ -1,87 +1,102 @@
 import type { ThemeConfig } from "antd";
 
-export const BURGUNDY = {
-  primary: "#ec4899",
-  soft: "#f0f0f0",
-  softer: "#f5f5f5",
-  border: "#e0e0e0",
-  text: "#ec4899",
-};
-
-/**
- * Higher-contrast, larger-control theme tuned for courtside use: bright
- * outdoor light, touch input on phones/tablets, and fast score entry.
- * Visual language: soft pink wash background, white rounded cards with a
- * gentle shadow, pill-shaped controls.
- */
-export const themeConfig: ThemeConfig = {
+export const nextQTheme: ThemeConfig = {
   token: {
-    colorPrimary: BURGUNDY.primary,
-    colorLink: BURGUNDY.primary,
-    colorInfo: BURGUNDY.primary,
-    colorBgLayout: BURGUNDY.soft,
+    colorPrimary: "#f43f75",
+    colorInfo: "#f43f75",
+    colorLink: "#bd2153",
+    colorLinkHover: "#f43f75",
+    colorText: "#1d1f20",
+    colorTextSecondary: "rgba(29,31,32,0.62)",
+    colorTextTertiary: "rgba(29,31,32,0.5)",
+    colorBgLayout: "#f7eef1",
+    colorBgContainer: "#ffffff",
+    colorBgElevated: "#ffffff",
+    colorBorder: "rgba(138,39,72,0.24)",
+    colorBorderSecondary: "rgba(138,39,72,0.14)",
+    colorFillQuaternary: "#fff1f5",
+
+    borderRadius: 0,
+    borderRadiusLG: 0,
+    borderRadiusSM: 0,
+    borderRadiusXS: 0,
+
+    fontFamily: "'Barlow', system-ui, sans-serif",
     fontSize: 14,
-    fontSizeHeading1: 28,
-    fontSizeHeading2: 24,
-    fontSizeHeading3: 20,
-    fontSizeHeading4: 16,
-    fontSizeHeading5: 14,
-    borderRadius: 12,
-    borderRadiusLG: 18,
-    controlHeight: 44,
-    margin: 8,
-    marginXS: 4,
-    padding: 12,
-    paddingXS: 6,
-    boxShadowTertiary:
-      "0 2px 8px rgba(236, 72, 153, 0.06), 0 1px 2px rgba(236, 72, 153, 0.08)",
+    lineWidth: 1,
+    controlHeight: 40,
+    controlHeightLG: 48,
+    wireframe: false,
+
+    boxShadow: "0 1px 3px rgba(0,0,0,0.07)",
+    boxShadowSecondary: "0 1px 3px rgba(0,0,0,0.07)",
   },
   components: {
     Button: {
-      controlHeight: 34,
-      controlHeightLG: 40,
-      controlHeightSM: 26,
       fontWeight: 600,
-      borderRadius: 10,
-      borderRadiusLG: 12,
-      paddingInline: 24,
-      paddingInlineLG: 32,
+      primaryShadow: "none",
+      defaultShadow: "none",
+      contentFontSize: 15,
     },
     Card: {
-      borderRadiusLG: 20,
-      boxShadowTertiary:
-        "0 2px 8px rgba(236, 72, 153, 0.06), 0 1px 2px rgba(236, 72, 153, 0.08)",
-      colorBorderSecondary: "#f8e1ec",
-    },
-    Table: {
-      cellFontSizeSM: 14,
-      headerBg: "#ffffff",
-      colorTextHeading: "#333333",
-      borderRadiusLG: 16,
-      colorBorder: "#e8e8e8",
-      rowHoverBg: "#fafafa",
-      headerBorderRadius: 8,
-      cellPaddingBlock: 12,
-      cellPaddingInline: 16,
-    },
-    Tag: {
-      fontSizeSM: 13,
-      borderRadiusSM: 999,
-    },
-    Modal: {
-      borderRadiusLG: 20,
+      paddingLG: 20,
+      headerFontSize: 18,
     },
     Layout: {
+      bodyBg: "#ffffff",
       headerBg: "#ffffff",
-      siderBg: "#ffffff",
-      bodyBg: BURGUNDY.soft,
+      siderBg: "#fef4f7",
+      headerHeight: 64,
     },
     Menu: {
-      itemBorderRadius: 12,
-      itemSelectedBg: BURGUNDY.soft,
-      itemSelectedColor: BURGUNDY.primary,
-      itemHoverBg: "#fef7fb",
+      itemBg: "transparent",
+      itemSelectedBg: "#f43f75",
+      itemSelectedColor: "#ffffff",
+      itemHoverBg: "#ffdde7",
+      itemBorderRadius: 0,
+      itemMarginInline: 0,
       itemHeight: 44,
+      iconSize: 17,
+    },
+    Table: {
+      headerBg: "#fff1f5",
+      headerColor: "#8d1a3f",
+      headerSplitColor: "transparent",
+      rowHoverBg: "#fff1f5",
+      borderColor: "rgba(138,39,72,0.14)",
+      cellPaddingBlock: 12,
+    },
+    Input: {
+      paddingBlock: 9,
+      activeShadow: "none",
+    },
+    Select: {
+      optionSelectedBg: "#fff1f5",
+    },
+    Radio: {
+      buttonSolidCheckedBg: "#f43f75",
+      buttonCheckedBg: "#ffdde7",
+    },
+    Tag: {
+      defaultBg: "#fff1f5",
+      defaultColor: "#8d1a3f",
+    },
+    Segmented: {
+      itemSelectedBg: "#f43f75",
+      itemSelectedColor: "#ffffff",
+      itemHoverBg: "#ffdde7",
+      trackBg: "#fff1f5",
+      trackPadding: 2,
+    },
+    Progress: {
+      defaultColor: "#f43f75",
+    },
+    Statistic: {
+      contentFontSize: 34,
+      titleFontSize: 11,
+      fontFamily: "'Barlow Condensed', sans-serif",
     },
   },
 };
+
+export const themeConfig = nextQTheme;

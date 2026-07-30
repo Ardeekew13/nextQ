@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600&display=swap');
+
 *,
 *::before,
 *::after {
@@ -8,6 +10,29 @@ html,
 body {
   margin: 0;
   padding: 0;
+  font-family: 'Barlow', system-ui, sans-serif;
+}
+
+h1, h2, h3, h4, h5, .ant-typography h1, .ant-typography h2, .ant-typography h3,
+.ant-btn, .ant-table-thead > tr > th, .ant-statistic-content {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+h1 {
+  font-size: 44px;
+  line-height: 0.95;
+}
+
+:focus-visible {
+  outline: 2px solid #f43f75;
+  outline-offset: 2px;
+}
+
+::selection {
+  background: #ffdde7;
 }
 
 /* Utility: hide text on very small screens */
