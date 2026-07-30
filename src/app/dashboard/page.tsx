@@ -63,17 +63,15 @@ export default function DashboardPage() {
         onNewSession={() => router.push(`/dashboard/clubs/${firstClub?.id}/sessions/new`)}
       />
 
-      {upNextSession && (
-        <UpNextHeroBand
-          sessionName={upNextSession.name}
-          startsInMinutes={48}
-          rsvpCount={18}
-          checkedInCount={0}
-          status={upNextSession.status}
-          onOpenQueue={() => router.push(`/dashboard/sessions/${upNextSession.id}`)}
-          onEditSetup={() => router.push(`/dashboard/sessions/${upNextSession.id}`)}
-        />
-      )}
+      <UpNextHeroBand
+        sessionName={upNextSession?.name}
+        startsInMinutes={48}
+        rsvpCount={18}
+        checkedInCount={0}
+        status={upNextSession?.status}
+        onOpenQueue={() => upNextSession && router.push(`/dashboard/sessions/${upNextSession.id}`)}
+        onEditSetup={() => upNextSession && router.push(`/dashboard/sessions/${upNextSession.id}`)}
+      />
 
       <StatStrip sessionsRun={14} gamesLogged={312} avgTurnout={17} needsAttention={1} />
 
