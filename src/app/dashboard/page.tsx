@@ -245,50 +245,53 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Sessions List */}
-              {(club.sessions ?? []).length === 0 ? (
-                <div style={{ padding: "12px 0" }}>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    No sessions yet. Add courts and a roster, then schedule the first open play.
-                  </Text>
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-                  {(club.sessions ?? []).map((session: any, idx: number) => (
-                    <div
-                      key={session.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        paddingBottom: idx < (club.sessions?.length ?? 0) - 1 ? 8 : 0,
-                        borderBottom: idx < (club.sessions?.length ?? 0) - 1 ? "1px solid rgba(138,39,72,0.14)" : "none",
-                      }}
-                    >
-                      <div>
-                        <Text
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 600,
-                            fontFamily: "'Barlow Condensed', sans-serif",
-                            textTransform: "uppercase",
-                            color: "#1d1f20",
-                            display: "block",
-                          }}
-                        >
-                          {session.name}
-                        </Text>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          {session.sessionDate ? new Date(session.sessionDate).toLocaleDateString() : "No date set"} · {session.courts || "0"} courts · {session.queueMode || "queue mode not set"}
-                        </Text>
+              {/* Sessions List - Only Draft */}
+              {(() => {
+                const draftSessions = (club.sessions ?? []).filter((s: any) => s.status === "DRAFT");
+                return draftSessions.length === 0 ? (
+                  <div style={{ padding: "12px 0" }}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      No draft sessions. Add courts and a roster, then schedule the first open play.
+                    </Text>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                    {draftSessions.map((session: any, idx: number) => (
+                      <div
+                        key={session.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          paddingBottom: idx < draftSessions.length - 1 ? 8 : 0,
+                          borderBottom: idx < draftSessions.length - 1 ? "1px solid rgba(138,39,72,0.14)" : "none",
+                        }}
+                      >
+                        <div>
+                          <Text
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 600,
+                              fontFamily: "'Barlow Condensed', sans-serif",
+                              textTransform: "uppercase",
+                              color: "#1d1f20",
+                              display: "block",
+                            }}
+                          >
+                            {session.name}
+                          </Text>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {session.sessionDate ? new Date(session.sessionDate).toLocaleDateString() : "No date set"} · {session.courts || "0"} courts · {session.queueMode || "queue mode not set"}
+                          </Text>
+                        </div>
+                        <Tag color={STATUS_COLORS[session.status]} style={{ margin: 0 }}>
+                          {humanizeStatus(session.status)}
+                        </Tag>
                       </div>
-                      <Tag color={STATUS_COLORS[session.status]} style={{ margin: 0 }}>
-                        {humanizeStatus(session.status)}
-                      </Tag>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                );
+              })()}
 
               {/* Actions */}
               <Divider style={{ margin: "12px 0" }} />
