@@ -120,14 +120,14 @@ export function Navbar({
           backgroundColor: "#ffffff",
           borderBottom: "1px solid #f3e8f0",
           boxShadow: "0 2px 16px rgba(236,72,153,0.07), 0 1px 3px rgba(0,0,0,0.05)",
-          paddingTop: 10,
-          paddingBottom: 10,
+          paddingTop: 12,
+          paddingBottom: 12,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           flexWrap: "wrap",
-          gap: 10,
-          minHeight: 58,
+          gap: 20,
+          minHeight: "auto",
           height: "auto",
           lineHeight: "normal",
           margin: 0,
@@ -138,7 +138,7 @@ export function Navbar({
         }}
       >
         {/* Logo (only when no sidebar) + optional page title */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flex: 1 }}>
           {!hasSidebar && (
             <div className={`pickleq-navbar-logo${title ? " has-title" : ""}`}>
               <AppLogo size="sm" />
