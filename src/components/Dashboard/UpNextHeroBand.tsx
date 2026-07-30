@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Button, Space, Divider } from "antd";
+import { Button, Space } from "antd";
 import { Text } from "antd/es/typography";
 
 interface UpNextHeroBandProps {
@@ -111,11 +111,11 @@ export function UpNextHeroBand({
           </Text>
         </div>
 
-        <Divider
-          type="vertical"
+        <div
           style={{
-            borderColor: "rgba(255,255,255,0.22)",
+            width: "1px",
             height: 60,
+            background: "rgba(255,255,255,0.22)",
             margin: 0,
           }}
         />
@@ -146,11 +146,11 @@ export function UpNextHeroBand({
           </Text>
         </div>
 
-        <Divider
-          type="vertical"
+        <div
           style={{
-            borderColor: "rgba(255,255,255,0.22)",
+            width: "1px",
             height: 60,
+            background: "rgba(255,255,255,0.22)",
             margin: 0,
           }}
         />
