@@ -122,7 +122,8 @@ function selectPlayers(
   eligible: QueuePlayer[],
   mode: QueueMode,
   maxConsecutiveGames: number,
-  random: () => number
+  random: () => number,
+  pastGroups?: ReadonlySet<string>
 ): { ok: true; selected: PlayerQuad } | { ok: false; reason: string } {
   if (eligible.length < 4) {
     return {
@@ -144,7 +145,20 @@ function selectPlayers(
   const pool = belowLimit.length >= 4 ? belowLimit : scored;
 
   pool.sort((a, b) => a.score - b.score);
-  const selected = pool.slice(0, 4).map((s) => s.player) as PlayerQuad;
+  let selected = pool.slice(0, 4).map((s) => s.player) as PlayerQuad;
+
+  // HARD RULE: Don't allow the same exact group of 4 to be drawn consecutively
+  if (pastGroups && pastGroups.has(groupKey(selected)) && eligible.length >= 5) {
+    // Try to swap one player to break the group
+    for (let i = 4; i < pool.length; i++) {
+      const candidate = pool[i].player;
+      const newGroup = [selected[0], selected[1], selected[2], candidate] as PlayerQuad;
+      if (!pastGroups.has(groupKey(newGroup))) {
+        selected = newGroup;
+        break;
+      }
+    }
+  }
 
   return { ok: true, selected };
 }
@@ -156,7 +170,8 @@ function selectPlayers(
 function assignTeams(
   players: PlayerQuad,
   pastGroups: ReadonlySet<string>,
-  random: () => number
+  random: () => number,
+  randomizeTeams: boolean = false
 ): TeamAssignment {
   const [p1, p2, p3, p4] = players;
 
@@ -166,6 +181,13 @@ function assignTeams(
     { teamA: [p1, p4], teamB: [p2, p3] },
   ];
 
+  // If randomizeTeams is true, just pick a random split
+  if (randomizeTeams) {
+    const randomSplit = splits[Math.floor(random() * splits.length)];
+    return { teamA: randomSplit.teamA, teamB: randomSplit.teamB, score: 0 };
+  }
+
+  // Otherwise, use smart matching to minimize repeats
   const scored = splits.map((split) => {
     const [a1, a2] = split.teamA;
     const [b1, b2] = split.teamB;
@@ -202,6 +224,7 @@ export interface QueueEngineOptions {
   maxConsecutiveGames?: number;
   pastGroups?: ReadonlySet<string>;
   random?: () => number;
+  randomizeTeams?: boolean;
 }
 
 export function generateNextGame(
@@ -213,12 +236,13 @@ export function generateNextGame(
     maxConsecutiveGames = 2,
     pastGroups = new Set(),
     random = Math.random,
+    randomizeTeams = mode === QueueMode.HYBRID,
   } = options;
 
-  const selection = selectPlayers(eligible, mode, maxConsecutiveGames, random);
+  const selection = selectPlayers(eligible, mode, maxConsecutiveGames, random, pastGroups);
   if (!selection.ok) return selection;
 
-  const { teamA, teamB } = assignTeams(selection.selected, pastGroups, random);
+  const { teamA, teamB } = assignTeams(selection.selected, pastGroups, random, randomizeTeams);
 
   return { ok: true, selected: selection.selected, teamA, teamB };
 }
