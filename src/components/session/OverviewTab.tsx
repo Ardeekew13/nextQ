@@ -92,15 +92,6 @@ export function OverviewTab({
 		if (session) onStats?.({ checkedIn, onCourt, gamesDone, longestWaitMins });
 	}, [session, checkedIn, onCourt, gamesDone, longestWaitMins, onStats]);
 
-	// Auto-revert to a valid page if current page exceeds total pages
-	useEffect(() => {
-		if (queuePage > totalQueuePages && totalQueuePages > 0) {
-			setQueuePage(totalQueuePages);
-		} else if (totalQueuePages === 0 && queuePage !== 1) {
-			setQueuePage(1);
-		}
-	}, [totalQueuePages, queuePage]);
-
 	if (loading && !data) return null;
 	if (error) return <Empty description={error.message} />;
 	if (!session) return <Empty description="Session not found" />;
@@ -131,6 +122,14 @@ export function OverviewTab({
 		p.name.toLowerCase().includes(queueSearch.toLowerCase()),
 	);
 	const totalQueuePages = Math.ceil(filteredQueue.length / QUEUE_PAGE_SIZE);
+
+	// Auto-revert to valid page if current page exceeds total pages
+	if (queuePage > totalQueuePages && totalQueuePages > 0) {
+		setQueuePage(totalQueuePages);
+	} else if (totalQueuePages === 0 && queuePage !== 1) {
+		setQueuePage(1);
+	}
+
 	const pagedQueue = filteredQueue.slice(
 		(queuePage - 1) * QUEUE_PAGE_SIZE,
 		queuePage * QUEUE_PAGE_SIZE,
