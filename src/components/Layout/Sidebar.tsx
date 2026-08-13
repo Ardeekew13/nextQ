@@ -18,10 +18,6 @@ interface SidebarProps {
 
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard" },
-  { key: "sessions", label: "Sessions" },
-  { key: "queue", label: "Queue" },
-  { key: "standings", label: "Standings" },
-  { key: "members", label: "Members" },
 ];
 
 export function Sidebar({

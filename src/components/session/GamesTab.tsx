@@ -2,19 +2,25 @@
 
 import { useState } from "react";
 import { useMutation, useQuery } from "@apollo/client";
-import { Button, Space, Popconfirm, App } from "antd";
-import { EditOutlined, StopOutlined, DeleteOutlined } from "@ant-design/icons";
+import { App } from "antd";
 import {
   SESSION_GAMES_QUERY,
   UPDATE_GAME_RESULT,
   CANCEL_GAME,
   DELETE_GAME,
 } from "@/graphql/documents/organiser";
-import { GameLog, type GameLogView } from "@/components/GameLog";
+import { GameLog, type GameLogView, type GameLogStats } from "@/components/GameLog";
 import { ScoreEntryForm, type ScoreEntryValues } from "@/components/ScoreEntryForm";
-import { PageHeader } from "@/components/PageHeader";
 
-export function GamesTab({ sessionId }: { sessionId: string }) {
+export function GamesTab({
+  sessionId,
+  onStats,
+  scoringLabel,
+}: {
+  sessionId: string;
+  onStats?: (s: GameLogStats) => void;
+  scoringLabel?: string;
+}) {
   const { message } = App.useApp();
   const { data, refetch } = useQuery(SESSION_GAMES_QUERY, {
     variables: { sessionId },
@@ -32,7 +38,7 @@ export function GamesTab({ sessionId }: { sessionId: string }) {
     if (!editingGame) return;
     try {
       await updateGameResult({ variables: { id: editingGame.id, input: values } });
-      message.success("Result updated and standings recalculated");
+      message.success("Result updated");
       setEditingGame(null);
       refetch();
     } catch (err) {
@@ -43,10 +49,10 @@ export function GamesTab({ sessionId }: { sessionId: string }) {
   async function handleCancel(id: string) {
     try {
       await cancelGame({ variables: { id } });
-      message.success("Game cancelled");
+      message.success("Game voided");
       refetch();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "Could not cancel game");
+      message.error(err instanceof Error ? err.message : "Could not void game");
     }
   }
 
@@ -64,20 +70,33 @@ export function GamesTab({ sessionId }: { sessionId: string }) {
     <div>
       <GameLog
         games={games}
+        onStats={onStats}
+        scoringLabel={scoringLabel}
         renderActions={(game) => (
-          <Space>
+          <div style={{ display: "flex", flexDirection: "column" }}>
             {game.status === "COMPLETED" && (
-              <Button size="small" icon={<EditOutlined />} onClick={() => setEditingGame(game)} />
+              <button
+                onClick={() => setEditingGame(game)}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: "8px 16px", textAlign: "left", fontSize: 13, color: "#1d1f20" }}
+              >
+                Edit result
+              </button>
             )}
             {game.status !== "CANCELLED" && (
-              <Popconfirm title="Cancel this game?" onConfirm={() => handleCancel(game.id)}>
-                <Button size="small" danger icon={<StopOutlined />} />
-              </Popconfirm>
+              <button
+                onClick={() => handleCancel(game.id)}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: "8px 16px", textAlign: "left", fontSize: 13, color: "#e11d74" }}
+              >
+                Void game
+              </button>
             )}
-            <Popconfirm title="Delete this game permanently?" onConfirm={() => handleDelete(game.id)}>
-              <Button size="small" danger icon={<DeleteOutlined />} />
-            </Popconfirm>
-          </Space>
+            <button
+              onClick={() => handleDelete(game.id)}
+              style={{ background: "none", border: "none", cursor: "pointer", padding: "8px 16px", textAlign: "left", fontSize: 13, color: "#e11d74" }}
+            >
+              Delete game
+            </button>
+          </div>
         )}
       />
 
@@ -91,3 +110,4 @@ export function GamesTab({ sessionId }: { sessionId: string }) {
     </div>
   );
 }
+

@@ -143,6 +143,9 @@ export const DASHBOARD_QUERY = gql`
       id
       name
       slug
+      location
+      createdAt
+      memberCount
       sessions {
         id
         name
@@ -150,6 +153,12 @@ export const DASHBOARD_QUERY = gql`
         status
         sessionDate
         publicUrl
+        settings {
+          queueMode
+        }
+        courts {
+          id
+        }
       }
     }
   }
@@ -165,6 +174,7 @@ export const CLUB_QUERY = gql`
       location
       description
       joinCode
+      createdAt
       sessions {
         id
         name
@@ -172,6 +182,49 @@ export const CLUB_QUERY = gql`
         status
         sessionDate
         publicUrl
+        createdAt
+      }
+    }
+  }
+`;
+
+export const CLUB_DETAIL_QUERY = gql`
+  query ClubDetail($id: ID!) {
+    club(id: $id) {
+      id
+      name
+      slug
+      location
+      memberCount
+      organisers {
+        id
+        name
+        role
+      }
+      sessions {
+        id
+        name
+        status
+        sessionDate
+        startTime
+        publicUrl
+        settings {
+          queueMode
+        }
+        courts {
+          id
+        }
+        players {
+          id
+          checkedIn
+          wins
+          losses
+          gamesPlayed
+          name
+        }
+        completedGames {
+          id
+        }
       }
     }
   }
@@ -459,6 +512,7 @@ export const SESSION_STANDINGS_QUERY = gql`
     session(id: $id) {
       id
       status
+      clubSlug
       standings {
         ...StandingFields
       }
@@ -644,6 +698,9 @@ export const CLUB_MEMBER_FIELDS = gql`
     nickname
     skillLevel
     totalGames
+    wins
+    losses
+    winRate
     sessionsPlayed
     active
   }
@@ -699,3 +756,17 @@ export const IMPORT_CLUB_MEMBERS_TO_SESSION = gql`
   }
 `;
 
+export const SESSION_PLAYERS_ALLTIME_QUERY = gql`
+  query SessionPlayersAllTime($sessionId: ID!) {
+    sessionPlayersAllTime(sessionId: $sessionId) {
+      name
+      nickname
+      skillLevel
+      totalGames
+      totalWins
+      totalLosses
+      winRate
+      sessionsPlayed
+    }
+  }
+`;

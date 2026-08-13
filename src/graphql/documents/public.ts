@@ -30,6 +30,23 @@ export const PUBLIC_CLUB_QUERY = gql`
   }
 `;
 
+export const CLUB_STANDINGS_QUERY = gql`
+  query ClubStandings($slug: String!) {
+    clubStandings(slug: $slug) {
+      rank
+      name
+      nickname
+      totalGames
+      wins
+      losses
+      winRate
+      sessionsPlayed
+      currentStreak
+      longestWinStreak
+    }
+  }
+`;
+
 export const PUBLIC_SESSION_QUERY = gql`
   ${GAME_FIELDS}
   ${STANDING_FIELDS}

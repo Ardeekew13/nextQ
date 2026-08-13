@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit -m 'Prevent same 4-player groups from being drawn consecutively *)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(grep -E \"^/Users.*\\\\.\\(tsx|ts\\)$\")",
+      "Bash(curl -v http://localhost:3000/login)",
+      "Bash(pkill -f \"npm run dev\")",
+      "Bash(node -c /Users/hisd3dev3/pickleq-app/src/app/login/page.tsx)",
+      "Bash(git -C /Users/hisd3dev3/pickleq-app log --oneline -5)",
+      "Bash(git checkout *)",
+      "Bash(pkill -9 node)",
+      "Bash(curl -s http://localhost:3007/dashboard)",
+      "Bash(git diff *)",
+      "Bash(curl -s http://localhost:3000/api/graphql)",
+      "Bash(curl -s http://localhost:3000/dashboard/clubs/test-club)",
+      "Bash(sed -i '646,949d' /Users/hisd3dev3/pickleq-app/src/app/dashboard/clubs/\\\\[clubId\\\\]/page.tsx && echo \"Old inline code removed\")"
+    ],
+    "additionalDirectories": [
+      "/Users/hisd3dev3/pickleq-app/src/app/dashboard/clubs/[clubId]"
+    ]
+  }
+}

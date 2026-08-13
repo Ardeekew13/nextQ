@@ -259,6 +259,10 @@ export const sessionResolvers = {
 
   Session: {
     id: (parent: { _id: unknown }) => String(parent._id),
+    clubSlug: async (parent: { clubId: unknown }) => {
+      const club = await Club.findById(parent.clubId).select("slug").lean();
+      return club?.slug ?? "";
+    },
     players: async (parent: { _id: unknown }) => SessionPlayer.find({ sessionId: parent._id }),
     courts: async (parent: { _id: unknown }) => Court.find({ sessionId: parent._id }).sort({ courtNumber: 1 }),
     activeGames: async (parent: { _id: unknown }) =>

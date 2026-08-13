@@ -54,7 +54,7 @@ export function DashboardHeader({
             color: "#1d1f20",
           }}
         >
-          Good evening, {userName.split(" ")[0]}
+          Good Day, {userName.split(" ")[0]}
         </h1>
       </div>
 

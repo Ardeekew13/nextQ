@@ -124,8 +124,16 @@ export const typeDefs = gql`
     description: String
     joinCode: String
     sessions: [Session!]!
+    memberCount: Int!
+    organisers: [ClubOrganiser!]!
     createdAt: Date!
     updatedAt: Date!
+  }
+
+  type ClubOrganiser {
+    id: ID!
+    name: String!
+    role: String!
   }
 
   type PublicClub {
@@ -256,6 +264,7 @@ export const typeDefs = gql`
   type Session {
     id: ID!
     clubId: ID!
+    clubSlug: String!
     organiserId: ID!
     name: String!
     slug: String!
@@ -342,10 +351,24 @@ export const typeDefs = gql`
     nickname: String
     skillLevel: SkillLevel
     totalGames: Int!
+    wins: Int!
+    losses: Int!
+    winRate: Float!
     sessionsPlayed: Int!
     active: Boolean!
     createdAt: Date!
     updatedAt: Date!
+  }
+
+  type SessionPlayerAllTime {
+    name: String!
+    nickname: String
+    skillLevel: SkillLevel
+    totalGames: Int!
+    totalWins: Int!
+    totalLosses: Int!
+    winRate: Float!
+    sessionsPlayed: Int!
   }
 
   input AddPlayerInput {
@@ -389,6 +412,19 @@ export const typeDefs = gql`
     notes: String
   }
 
+  type ClubStanding {
+    rank: Int!
+    name: String!
+    nickname: String
+    totalGames: Int!
+    wins: Int!
+    losses: Int!
+    winRate: Float!
+    sessionsPlayed: Int!
+    currentStreak: Int!
+    longestWinStreak: Int!
+  }
+
   type Query {
     me: User
 
@@ -400,11 +436,13 @@ export const typeDefs = gql`
 
     publicClub(slug: String!): PublicClub
     publicSession(clubSlug: String!, sessionSlug: String!): PublicSession
+    clubStandings(slug: String!): [ClubStanding!]!
 
     sessionPlayers(sessionId: ID!): [SessionPlayer!]!
     sessionCourts(sessionId: ID!): [Court!]!
     sessionGames(sessionId: ID!, status: GameStatus): [Game!]!
     sessionStandings(sessionId: ID!): [SessionStanding!]!
+    sessionPlayersAllTime(sessionId: ID!): [SessionPlayerAllTime!]!
     sessionPodium(sessionId: ID!): [PodiumEntry!]!
     sessionSummary(sessionId: ID!): SessionSummary!
 

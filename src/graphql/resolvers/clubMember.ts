@@ -37,7 +37,115 @@ export const clubMemberResolvers = {
       context: GraphQLContext
     ) => {
       await requireClubAccess(context, args.clubId);
-      return ClubMember.find({ clubId: args.clubId }).sort({ name: 1 });
+      const members = await ClubMember.find({ clubId: args.clubId }).sort({ name: 1 }).lean();
+
+      // Get all sessions for this club
+      const sessions = await Session.find({ clubId: args.clubId }).select("_id").lean();
+      const sessionIds = sessions.map((s) => s._id);
+
+      if (sessionIds.length === 0) {
+        // No sessions, return members with 0 stats
+        return members.map((m) => ({
+          ...m,
+          wins: 0,
+          losses: 0,
+          winRate: 0,
+        }));
+      }
+
+      // Aggregate stats for all members in one go
+      const memberNames = members.map((m) => m.name);
+      const stats = await SessionPlayer.aggregate([
+        { $match: { sessionId: { $in: sessionIds }, name: { $in: memberNames } } },
+        {
+          $group: {
+            _id: "$name",
+            totalWins: { $sum: "$wins" },
+            totalLosses: { $sum: "$losses" },
+          },
+        },
+      ]);
+
+      // Create a map for O(1) lookups
+      const statsMap = new Map(
+        stats.map((s) => [
+          s._id,
+          {
+            wins: s.totalWins,
+            losses: s.totalLosses,
+            totalGames: s.totalWins + s.totalLosses,
+          },
+        ])
+      );
+
+      // Merge stats into members
+      return members.map((m) => {
+        const playerStats = statsMap.get(m.name) || { wins: 0, losses: 0, totalGames: 0 };
+        return {
+          ...m,
+          wins: playerStats.wins,
+          losses: playerStats.losses,
+          winRate: playerStats.totalGames > 0 ? playerStats.wins / playerStats.totalGames : 0,
+        };
+      });
+    },
+
+    /** Aggregate all-time stats for each player in a session across all club sessions */
+    sessionPlayersAllTime: async (
+      _p: unknown,
+      args: { sessionId: string },
+      context: GraphQLContext
+    ) => {
+      requireOrganiser(context);
+      const session = await Session.findById(args.sessionId).select("clubId organiserId").lean();
+      if (!session) throw new GraphQLError("Session not found.", { extensions: { code: "NOT_FOUND" } });
+
+      // Get all session IDs for this club
+      const clubSessions = await Session.find({ clubId: session.clubId }).select("_id").lean();
+      const clubSessionIds = clubSessions.map((s) => s._id);
+
+      // Get current session players (to know which names to aggregate)
+      const currentPlayers = await SessionPlayer.find({ sessionId: args.sessionId })
+        .select("name nickname skillLevel")
+        .lean();
+      if (currentPlayers.length === 0) return [];
+
+      const names = currentPlayers.map((p) => p.name);
+
+      // Aggregate wins/losses/gamesPlayed by player name across all club sessions
+      const agg = await SessionPlayer.aggregate([
+        { $match: { sessionId: { $in: clubSessionIds }, name: { $in: names } } },
+        {
+          $group: {
+            _id: "$name",
+            totalGames: { $sum: "$gamesPlayed" },
+            totalWins: { $sum: "$wins" },
+            totalLosses: { $sum: "$losses" },
+            sessionsPlayed: { $sum: { $cond: [{ $gt: ["$gamesPlayed", 0] }, 1, 0] } },
+          },
+        },
+      ]);
+
+      // Build a map for O(1) lookups
+      const statsMap = new Map(agg.map((r) => [r._id as string, r]));
+
+      // Merge with current-session player metadata (nickname, skillLevel)
+      return currentPlayers.map((p) => {
+        const s = statsMap.get(p.name);
+        const totalGames = s?.totalGames ?? 0;
+        const totalWins = s?.totalWins ?? 0;
+        const totalLosses = s?.totalLosses ?? 0;
+        return {
+          name: p.name,
+          nickname: p.nickname ?? null,
+          skillLevel: p.skillLevel ?? null,
+          totalGames,
+          totalWins,
+          totalLosses,
+          winRate: totalGames > 0 ? totalWins / totalGames : 0,
+          sessionsPlayed: s?.sessionsPlayed ?? 0,
+        };
+      });
     },
   },
 

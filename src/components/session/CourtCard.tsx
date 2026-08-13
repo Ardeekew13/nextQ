@@ -1,55 +1,62 @@
 "use client";
 
-import { useState } from "react";
-import { Button, Tag, Tooltip, Typography, Avatar, Select } from "antd";
-import {
-	TrophyOutlined,
-	EditOutlined,
-	SwapOutlined,
-	CheckOutlined,
-	CloseOutlined,
-	ClockCircleOutlined,
-} from "@ant-design/icons";
+import { useState, useEffect, useRef } from "react";
+import { Button, Select, Typography, Tooltip } from "antd";
+import { ClockCircleOutlined, SwapOutlined, CheckOutlined, CloseOutlined, EditOutlined } from "@ant-design/icons";
 
 const { Text } = Typography;
 
-function initials(name: string) {
-	return name
-		.split(" ")
-		.filter(Boolean)
-		.slice(0, 2)
-		.map((p) => p[0]?.toUpperCase())
-		.join("");
+function formatClock(seconds: number) {
+	const m = Math.floor(seconds / 60);
+	const s = seconds % 60;
+	return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function PlayerChip({ name }: { name: string }) {
+/** Live game clock — counts up from game.startedAt */
+function GameClock({ startedAt }: { startedAt?: string }) {
+	const [secs, setSecs] = useState(0);
+	const ref = useRef<ReturnType<typeof setInterval> | null>(null);
+
+	useEffect(() => {
+		if (!startedAt) return;
+		const start = new Date(startedAt).getTime();
+		const tick = () => setSecs(Math.max(0, Math.floor((Date.now() - start) / 1000)));
+		tick();
+		ref.current = setInterval(tick, 1000);
+		return () => { if (ref.current) clearInterval(ref.current); };
+	}, [startedAt]);
+
+	if (!startedAt) return null;
 	return (
-		<div
-			style={{
-				display: "flex",
-				alignItems: "center",
-				gap: 6,
-				background: "#f9fafb",
-				border: "1px solid #e5e7eb",
-				borderRadius: 20,
-				padding: "4px 10px 4px 4px",
-			}}
-		>
-			<Avatar
-				size={24}
-				style={{
-					backgroundColor: "#fce7f3",
-					color: "#db2777",
-					fontSize: 10,
-					fontWeight: 700,
-					flexShrink: 0,
-				}}
-			>
-				{initials(name)}
-			</Avatar>
-			<Text style={{ fontSize: 13, fontWeight: 500 }}>{name}</Text>
-		</div>
+		<span style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", color: "#e11d74", letterSpacing: "0.04em" }}>
+			{formatClock(secs)}
+		</span>
 	);
+}
+
+/** Build Select options: queued first, then other eligible players */
+function buildOptions(
+	pickablePlayers: any[],
+	queuedIds: Set<string>,
+	queueOrder: Map<string, number>,
+	excluded: string[],
+) {
+	const available = pickablePlayers.filter((p: any) => !excluded.includes(p.id));
+	const queued = available
+		.filter((p: any) => queuedIds.has(p.id))
+		.sort((a: any, b: any) => (queueOrder.get(a.id) ?? 99) - (queueOrder.get(b.id) ?? 99));
+	const rest = available.filter((p: any) => !queuedIds.has(p.id));
+	const toOption = (p: any, inQueue: boolean, pos?: number) => ({
+		value: p.id,
+		label: p.name,
+		inQueue,
+		queuePos: pos,
+		gamesPlayed: p.gamesPlayed ?? 0,
+	});
+	return [
+		...queued.map((p: any, i: number) => toOption(p, true, i + 1)),
+		...rest.map((p: any) => toOption(p, false)),
+	];
 }
 
 interface CourtCardProps {
@@ -60,37 +67,9 @@ interface CourtCardProps {
 	queuedPlayers?: any[];
 	updatingTeams?: boolean;
 	onFill: (courtId: string) => void;
-	onRecordResult: (game: any) => void;
+	onRecordResult: (game: any, winner: "A" | "B") => void;
+	onCancelGame?: (gameId: string) => void;
 	onUpdateTeams?: (gameId: string, teamAPlayerIds: string[], teamBPlayerIds: string[]) => Promise<void>;
-}
-
-/** Build Select options sorted: queued first (by queue position), then on-court players. */
-function buildOptions(
-	pickablePlayers: any[],
-	queuedIds: Set<string>,
-	queueOrder: Map<string, number>,
-	excluded: string[],
-) {
-	const available = pickablePlayers.filter((p: any) => !excluded.includes(p.id));
-
-	const queued = available
-		.filter((p: any) => queuedIds.has(p.id))
-		.sort((a: any, b: any) => (queueOrder.get(a.id) ?? 99) - (queueOrder.get(b.id) ?? 99));
-
-	const onCourt = available.filter((p: any) => !queuedIds.has(p.id));
-
-	const toOption = (p: any, inQueue: boolean, pos?: number) => ({
-		value: p.id,
-		label: p.name,
-		inQueue,
-		queuePos: pos,
-		gamesPlayed: p.gamesPlayed ?? 0,
-	});
-
-	return [
-		...queued.map((p: any, i: number) => toOption(p, true, i + 1)),
-		...onCourt.map((p: any) => toOption(p, false)),
-	];
 }
 
 export function CourtCard({
@@ -102,25 +81,30 @@ export function CourtCard({
 	updatingTeams,
 	onFill,
 	onRecordResult,
+	onCancelGame,
 	onUpdateTeams,
 }: CourtCardProps) {
-	const isLive = court.status === "IN_USE";
-	const isAvailable = court.status === "AVAILABLE";
-
 	const [editing, setEditing] = useState(false);
 	const [editTeamA, setEditTeamA] = useState<string[]>([]);
 	const [editTeamB, setEditTeamB] = useState<string[]>([]);
 
-	function startEditing() {
-		const game = court.currentGame;
-		if (!game) return;
-		setEditTeamA(game.teamA.players.map((p: any) => p.id));
-		setEditTeamB(game.teamB.players.map((p: any) => p.id));
-		setEditing(true);
-	}
+	const currentCourtPlayerIds = new Set([
+		...(court.currentGame?.teamA.players.map((p: any) => p.id) ?? []),
+		...(court.currentGame?.teamB.players.map((p: any) => p.id) ?? []),
+	]);
+	const queuedIds = new Set(queuedPlayers.map((p: any) => p.id));
+	const queueOrder = new Map(queuedPlayers.map((p: any, i: number) => [p.id, i + 1]));
+	const pickablePlayers = allPlayers.filter(
+		(p: any) => currentCourtPlayerIds.has(p.id) || queuedIds.has(p.id),
+	);
+	const teamAOptions = buildOptions(pickablePlayers, queuedIds, queueOrder, editTeamB);
+	const teamBOptions = buildOptions(pickablePlayers, queuedIds, queueOrder, editTeamA);
 
-	function cancelEditing() {
-		setEditing(false);
+	function startEditing() {
+		if (!court.currentGame) return;
+		setEditTeamA(court.currentGame.teamA.players.map((p: any) => p.id));
+		setEditTeamB(court.currentGame.teamB.players.map((p: any) => p.id));
+		setEditing(true);
 	}
 
 	async function saveEditing() {
@@ -129,329 +113,142 @@ export function CourtCard({
 		setEditing(false);
 	}
 
-	// Players available for selection: current court players + queued players
-	const currentCourtPlayerIds = new Set([
-		...(court.currentGame?.teamA.players.map((p: any) => p.id) ?? []),
-		...(court.currentGame?.teamB.players.map((p: any) => p.id) ?? []),
-	]);
-	const queuedIds = new Set(queuedPlayers.map((p: any) => p.id));
-	// Map from player id → queue position (1-based, lower = sooner)
-	const queueOrder = new Map(queuedPlayers.map((p: any, i: number) => [p.id, i + 1]));
-
-	const pickablePlayers = allPlayers.filter(
-		(p: any) => currentCourtPlayerIds.has(p.id) || queuedIds.has(p.id),
-	);
-
-	const teamAOptions = buildOptions(pickablePlayers, queuedIds, queueOrder, editTeamB);
-	const teamBOptions = buildOptions(pickablePlayers, queuedIds, queueOrder, editTeamA);
-
-	function renderOption(option: any) {
-		return (
-			<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-				<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-					{option.data.inQueue && (
-						<ClockCircleOutlined style={{ color: "#ec4899", fontSize: 11, flexShrink: 0 }} />
-					)}
-					<span style={{ fontWeight: option.data.inQueue ? 600 : 400 }}>
-						{option.label}
-					</span>
-				</div>
-				<div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-					{option.data.inQueue && (
-						<Tag
-							color="pink"
-							style={{
-								fontSize: 10,
-								padding: "0 5px",
-								lineHeight: "16px",
-								margin: 0,
-								borderRadius: 99,
-							}}
-						>
-							#{option.data.queuePos} in queue
-						</Tag>
-					)}
-					<Text type="secondary" style={{ fontSize: 11 }}>
-						{option.data.gamesPlayed}g
-					</Text>
-				</div>
-			</div>
-		);
-	}
+	const game = court.currentGame;
 
 	return (
-		<div
-			style={{
-				border: "1px solid #e5e7eb",
-				borderTop: `3px solid ${isLive ? "#10b981" : "#e5e7eb"}`,
-				borderRadius: 12,
-				padding: 8,
-				background: "#fff",
-			}}
-		>
-			{/* Court header */}
-			<div
-				style={{
-					display: "flex",
-					justifyContent: "space-between",
-					alignItems: "center",
-					marginBottom: 12,
-				}}
-			>
-				<Text strong style={{ fontSize: 16 }}>
+		<div style={{ border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff", overflow: "hidden" }}>
+
+			{/* ── Court header ── */}
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 18px 10px" }}>
+				<span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: "0.12em", textTransform: "uppercase", color: "#1d1f20" }}>
 					{court.name || `Court ${court.courtNumber}`}
-				</Text>
-				<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-					{isLive && (
-						<Tag
-							color="green"
-							style={{
-								borderRadius: 20,
-								fontWeight: 600,
-								display: "flex",
-								alignItems: "center",
-								gap: 4,
-								margin: 0,
-							}}
-						>
-							<span
-								style={{
-									width: 7,
-									height: 7,
-									borderRadius: "50%",
-									background: "#10b981",
-									display: "inline-block",
-								}}
-							/>
-							Live
-						</Tag>
-					)}
-					{isAvailable && (
-						<Tag color="default" style={{ borderRadius: 20, margin: 0 }}>
-							Available
-						</Tag>
-					)}
-					{isLive && court.currentGame && !editing && onUpdateTeams && (
+				</span>
+				<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+					{game?.startedAt && <GameClock startedAt={game.startedAt} />}
+					{game && !editing && onUpdateTeams && (
 						<Tooltip title="Edit lineup">
-							<Button
-								size="small"
-								type="text"
-								icon={<EditOutlined />}
+							<button
 								onClick={startEditing}
-								style={{ color: "#9ca3af" }}
-							/>
+								style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(29,31,32,0.35)", padding: "2px 4px", lineHeight: 1, display: "flex", alignItems: "center" }}
+							>
+								<EditOutlined style={{ fontSize: 13 }} />
+							</button>
 						</Tooltip>
 					)}
 				</div>
 			</div>
 
-			{court.currentGame ? (
-				<div>
-					{court.currentGame.round && (
-						<Text
-							type="secondary"
-							style={{
-								fontSize: 11,
-								fontWeight: 600,
-								textTransform: "uppercase",
-								letterSpacing: 0.5,
-								display: "block",
-								marginBottom: 10,
-							}}
-						>
-							Round {court.currentGame.round}
-						</Text>
-					)}
-
-					{editing ? (
-						<div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+			{game ? (
+				editing ? (
+					/* ── Edit lineup mode ── */
+					<div style={{ padding: "0 18px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+						<div>
+							<div style={{ fontSize: 10, fontWeight: 700, color: "#e11d74", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Team A</div>
+							<Select mode="multiple" size="small" style={{ width: "100%" }} value={editTeamA} onChange={setEditTeamA}
+								placeholder="Search players…" showSearch
+								filterOption={(input, opt: any) => opt?.label?.toLowerCase().includes(input.toLowerCase())}
+								options={teamAOptions}
+								optionRender={(opt) => (
+									<div style={{ display: "flex", justifyContent: "space-between" }}>
+										<span style={{ fontWeight: opt.data.inQueue ? 600 : 400 }}>
+											{opt.label}{opt.data.inQueue && <ClockCircleOutlined style={{ color: "#e11d74", fontSize: 10, marginLeft: 4 }} />}
+										</span>
+										<Text type="secondary" style={{ fontSize: 11 }}>{opt.data.inQueue ? `#${opt.data.queuePos}` : `${opt.data.gamesPlayed}g`}</Text>
+									</div>
+								)}
+							/>
+						</div>
+						<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+							<div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
+							<SwapOutlined style={{ color: "#9ca3af", fontSize: 11 }} />
+							<div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
+						</div>
+						<div>
+							<div style={{ fontSize: 10, fontWeight: 700, color: "#e11d74", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Team B</div>
+							<Select mode="multiple" size="small" style={{ width: "100%" }} value={editTeamB} onChange={setEditTeamB}
+								placeholder="Search players…" showSearch
+								filterOption={(input, opt: any) => opt?.label?.toLowerCase().includes(input.toLowerCase())}
+								options={teamBOptions}
+								optionRender={(opt) => (
+									<div style={{ display: "flex", justifyContent: "space-between" }}>
+										<span style={{ fontWeight: opt.data.inQueue ? 600 : 400 }}>
+											{opt.label}{opt.data.inQueue && <ClockCircleOutlined style={{ color: "#e11d74", fontSize: 10, marginLeft: 4 }} />}
+										</span>
+										<Text type="secondary" style={{ fontSize: 11 }}>{opt.data.inQueue ? `#${opt.data.queuePos}` : `${opt.data.gamesPlayed}g`}</Text>
+									</div>
+								)}
+							/>
+						</div>
+						<div style={{ display: "flex", gap: 6 }}>
+							<Button size="small" block icon={<CloseOutlined />} onClick={() => setEditing(false)}>Cancel</Button>
+							<Button size="small" type="primary" block icon={<CheckOutlined />} loading={updatingTeams} onClick={saveEditing}
+								style={{ background: "#e11d74", borderColor: "#e11d74" }}>Save</Button>
+						</div>
+					</div>
+				) : (
+					/* ── Live game view ── */
+					<div>
+						{/* Teams row */}
+						<div style={{ display: "grid", gridTemplateColumns: "1fr 32px 1fr", alignItems: "start", padding: "2px 18px 14px" }}>
 							{/* Team A */}
 							<div>
-								<Text
-									style={{
-										fontSize: 11,
-										fontWeight: 700,
-										color: "#ec4899",
-										textTransform: "uppercase",
-										letterSpacing: 0.5,
-										display: "block",
-										marginBottom: 6,
-									}}
-								>
-									Team A
-								</Text>
-								<Select
-									mode="multiple"
-									size="small"
-									style={{ width: "100%" }}
-									value={editTeamA}
-									onChange={setEditTeamA}
-									placeholder="Search players…"
-									showSearch
-									filterOption={(input, option: any) =>
-										option?.label?.toLowerCase().includes(input.toLowerCase())
-									}
-									options={teamAOptions}
-									optionRender={renderOption}
-								/>
+								<div style={{ fontSize: 9, fontWeight: 700, color: "#e11d74", textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 5 }}>TEAM A</div>
+								{game.teamA.players.map((p: any) => (
+									<div key={p.id} style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", color: "#1d1f20", lineHeight: 1.3, textTransform: "uppercase" }}>
+										{p.name}
+									</div>
+								))}
 							</div>
-
-							<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-								<div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
-								<SwapOutlined style={{ color: "#9ca3af", fontSize: 12 }} />
-								<div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
+							{/* VS */}
+							<div style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 18 }}>
+								<span style={{ fontSize: 11, fontWeight: 600, color: "rgba(29,31,32,0.3)", letterSpacing: "0.06em" }}>VS</span>
 							</div>
-
 							{/* Team B */}
-							<div>
-								<Text
-									style={{
-										fontSize: 11,
-										fontWeight: 700,
-										color: "#ec4899",
-										textTransform: "uppercase",
-										letterSpacing: 0.5,
-										display: "block",
-										marginBottom: 6,
-									}}
-								>
-									Team B
-								</Text>
-								<Select
-									mode="multiple"
-									size="small"
-									style={{ width: "100%" }}
-									value={editTeamB}
-									onChange={setEditTeamB}
-									placeholder="Search players…"
-									showSearch
-									filterOption={(input, option: any) =>
-										option?.label?.toLowerCase().includes(input.toLowerCase())
-									}
-									options={teamBOptions}
-									optionRender={renderOption}
-								/>
-							</div>
-
-							{/* Queue legend */}
-							{queuedPlayers.length > 0 && (
-								<div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-									<ClockCircleOutlined style={{ color: "#ec4899", fontSize: 10 }} />
-									<Text type="secondary" style={{ fontSize: 11 }}>
-										Pink = next in queue · sorted by wait time
-									</Text>
-								</div>
-							)}
-
-							<div style={{ display: "flex", gap: 6 }}>
-								<Button
-									size="small"
-									block
-									onClick={cancelEditing}
-									icon={<CloseOutlined />}
-								>
-									Cancel
-								</Button>
-								<Button
-									size="small"
-									type="primary"
-									block
-									loading={updatingTeams}
-									icon={<CheckOutlined />}
-									onClick={saveEditing}
-									style={{ background: "#ec4899", borderColor: "#ec4899" }}
-								>
-									Save
-								</Button>
+							<div style={{ textAlign: "right" }}>
+								<div style={{ fontSize: 9, fontWeight: 700, color: "#e11d74", textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 5 }}>TEAM B</div>
+								{game.teamB.players.map((p: any) => (
+									<div key={p.id} style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", color: "#1d1f20", lineHeight: 1.3, textTransform: "uppercase" }}>
+										{p.name}
+									</div>
+								))}
 							</div>
 						</div>
-					) : (
-						<>
-							{/* Team A */}
-							<Text
-								style={{
-									fontSize: 11,
-									fontWeight: 700,
-									color: "#ec4899",
-									textTransform: "uppercase",
-									letterSpacing: 0.5,
-									display: "block",
-									marginBottom: 6,
-								}}
-							>
-								Team A
-							</Text>
-							<div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
-								{court.currentGame.teamA.players.map((p: any) => (
-									<PlayerChip key={p.id} name={p.name} />
-								))}
-							</div>
 
-							{/* VS divider */}
-							<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-								<div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
-								<Text type="secondary" style={{ fontSize: 12, fontWeight: 600 }}>
-									VS
-								</Text>
-								<div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
-							</div>
+						{/* Divider */}
+						<div style={{ height: 1, background: "#f3f4f6", margin: "0 18px" }} />
 
-							{/* Team B */}
-							<Text
+						{/* Record Result + Cancel */}
+						<div style={{ padding: "12px 18px 14px" }}>
+							<Button block
 								style={{
-									fontSize: 11,
-									fontWeight: 700,
-									color: "#ec4899",
-									textTransform: "uppercase",
-									letterSpacing: 0.5,
-									display: "block",
-									marginBottom: 6,
+									background: "#e11d74", borderColor: "#e11d74", color: "#fff",
+									fontWeight: 700, fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif",
+									letterSpacing: "0.1em", textTransform: "uppercase", height: 40,
+									marginBottom: 10,
 								}}
+								onClick={() => onRecordResult(game, "A")}
 							>
-								Team B
-							</Text>
-							<div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
-								{court.currentGame.teamB.players.map((p: any) => (
-									<PlayerChip key={p.id} name={p.name} />
-								))}
-							</div>
-
-							<Button
-								type="primary"
-								icon={<TrophyOutlined />}
-								block
-								disabled={!sessionActive}
-								onClick={() => onRecordResult(court.currentGame)}
-								style={{
-									background: sessionActive ? "#ec4899" : undefined,
-									borderColor: sessionActive ? "#ec4899" : undefined,
-									borderRadius: 8,
-									fontWeight: 600,
-								}}
-							>
-								{sessionActive ? (
-									"Record result"
-								) : (
-									<Tooltip title="Start the session before recording a result">
-										Record result
-									</Tooltip>
-								)}
+								Record Result
 							</Button>
-						</>
-					)}
-				</div>
-			) : isAvailable ? (
-				<Button
-					type="dashed"
-					block
-					loading={generating}
-					onClick={() => onFill(court.id)}
-					style={{ borderRadius: 8 }}
-				>
-					Fill Court
-				</Button>
+							<div style={{ textAlign: "center" }}>
+								<button
+									style={{ background: "none", border: "none", color: "rgba(29,31,32,0.4)", fontSize: 12, cursor: "pointer", padding: 0 }}
+									onClick={() => onCancelGame?.(game.id)}
+								>
+									Cancel game
+								</button>
+							</div>
+						</div>
+					</div>
+				)
 			) : (
-				<Text type="secondary">Court unavailable</Text>
+				/* ── Empty court ── */
+				<div style={{ padding: "8px 18px 16px" }}>
+					<Button type="dashed" block loading={generating} onClick={() => onFill(court.id)}
+						style={{ borderRadius: 6, fontWeight: 600 }}>
+						Fill Court
+					</Button>
+				</div>
 			)}
 		</div>
 	);
