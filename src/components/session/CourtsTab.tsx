@@ -26,6 +26,10 @@ export function CourtsTab({ sessionId, onHeader }: { sessionId: string; onHeader
   const [addForm] = Form.useForm();
   const [editForm] = Form.useForm();
 
+  const { data, refetch } = useQuery(SESSION_COURTS_QUERY, {
+    variables: { sessionId },
+  });
+
   const [addCourt, { loading: adding }] = useMutation(ADD_COURT);
   const [updateCourt] = useMutation(UPDATE_COURT);
   const [deleteCourt] = useMutation(DELETE_COURT);
