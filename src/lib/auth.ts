@@ -8,6 +8,7 @@ export interface AuthTokenPayload {
   sub: string; // User id
   email: string;
   name: string;
+  role: string;
 }
 
 function requireJwtSecret(): string {

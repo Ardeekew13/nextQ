@@ -39,6 +39,7 @@ export type WinningTeam = (typeof WinningTeam)[keyof typeof WinningTeam];
 
 export const UserRole = {
   ORGANISER: "ORGANISER",
+  ADMIN: "ADMIN",
 } as const;
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 

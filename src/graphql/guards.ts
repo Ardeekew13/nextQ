@@ -19,10 +19,11 @@ export async function requireClubAccess(context: GraphQLContext, clubId: string)
   if (!club) {
     throw new GraphQLError("Club not found.", { extensions: { code: "NOT_FOUND" } });
   }
+  const isAdmin = organiser.role === "ADMIN";
   const isOwner = String(club.organiserId) === organiser.sub;
   const coOrganiserIds = (club.coOrganiserIds ?? []) as unknown[];
   const isCoOrganiser = coOrganiserIds.some((id) => String(id) === organiser.sub);
-  if (!isOwner && !isCoOrganiser) {
+  if (!isAdmin && !isOwner && !isCoOrganiser) {
     throw new GraphQLError("You do not have access to this club.", {
       extensions: { code: "FORBIDDEN" },
     });

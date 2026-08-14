@@ -1,32 +1,37 @@
 "use client";
 
-import { LOGIN_ORGANISER } from "@/graphql/documents/organiser";
+import { REGISTER_ORGANISER } from "@/graphql/documents/organiser";
 import { useMutation } from "@apollo/client";
-import { App, Button, Form, Input } from "antd";
+import { App, Button, Form, Input, Checkbox } from "antd";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import NProgress from "nprogress";
 import { useState } from "react";
+import { AppLogo } from "@/components/AppLogo";
 
-export default function LoginPage() {
+export default function RegisterPage() {
 	const router = useRouter();
 	const { message } = App.useApp();
 	const [loading, setLoading] = useState(false);
-	const [loginOrganiser] = useMutation(LOGIN_ORGANISER);
+	const [registerOrganiser] = useMutation(REGISTER_ORGANISER);
 	const [form] = Form.useForm();
 
-	async function onFinish(values: { email: string; password: string }) {
+	async function onFinish(values: {
+		name: string;
+		email: string;
+		password: string;
+	}) {
 		setLoading(true);
-		NProgress.start();
 		try {
-			await loginOrganiser({ variables: values });
-			message.success("Welcome back!");
-			NProgress.done();
+			await registerOrganiser({ variables: values });
+			message.success("Account created!");
 			router.push("/dashboard");
 			router.refresh();
 		} catch (error) {
-			NProgress.done();
+			message.error(
+				error instanceof Error ? error.message : "Registration failed",
+			);
+		} finally {
 			setLoading(false);
-			message.error(error instanceof Error ? error.message : "Login failed");
 		}
 	}
 
@@ -49,28 +54,28 @@ export default function LoginPage() {
 					font-weight: 600;
 					text-transform: uppercase;
 				}
-				.login-main {
+				.register-main {
 					grid-template-columns: 1fr 1fr;
 				}
 				@media (max-width: 768px) {
 					body {
 						overflow-x: hidden;
 					}
-					.login-main {
+					.register-main {
 						grid-template-columns: 1fr;
 					}
-					.login-left {
+					.register-left {
 						padding: 32px 16px !important;
 						min-height: 50vh;
 						justify-content: center !important;
 					}
-					.login-right {
+					.register-right {
 						padding: 32px 16px !important;
 					}
-					.login-left h1 {
+					.register-left h1 {
 						font-size: 28px !important;
 					}
-					.login-right h2 {
+					.register-right h2 {
 						font-size: 24px !important;
 					}
 				}
@@ -84,11 +89,11 @@ export default function LoginPage() {
 					display: "grid",
 					gridTemplateColumns: "1fr 1fr",
 				}}
-				className="login-main"
+				className="register-main"
 			>
-				{/* Left: Dark section */}
+				{/* Left: Dark marketing section */}
 				<section
-					className="login-left"
+					className="register-left"
 					style={{
 						background: "#5c1029",
 						padding: "64px 48px",
@@ -110,7 +115,7 @@ export default function LoginPage() {
 									marginBottom: 16,
 								}}
 							>
-								ORGANIZER LOGIN
+								Organiser Account
 							</div>
 							<h1
 								style={{
@@ -120,7 +125,7 @@ export default function LoginPage() {
 									color: "#fff",
 								}}
 							>
-								Welcome back
+								Run your first session tonight
 							</h1>
 							<p
 								style={{
@@ -131,7 +136,8 @@ export default function LoginPage() {
 									maxWidth: "42ch",
 								}}
 							>
-								Access your sessions, manage draws, and track standings.
+								Set up courts, let players scan in, and let NextQ handle the
+								draw. Free, no card required.
 							</p>
 						</div>
 
@@ -144,9 +150,9 @@ export default function LoginPage() {
 							}}
 						>
 							{[
-								"Manage live sessions from any device",
-								"View real-time player standings",
-								"Access historical session data",
+								"Fair random draws — everyone plays with everyone",
+								"Players scan a QR at the gate — no app to install",
+								"Standings post themselves as games finish",
 							].map((item, idx) => (
 								<div
 									key={idx}
@@ -175,9 +181,9 @@ export default function LoginPage() {
 					</div>
 				</section>
 
-				{/* Right: Form section */}
+				{/* Right: Registration form */}
 				<section
-					className="login-right"
+					className="register-right"
 					style={{
 						background: "#fff",
 						padding: "64px 48px",
@@ -195,7 +201,7 @@ export default function LoginPage() {
 								color: "#1d1f20",
 							}}
 						>
-							Log in
+							Create your account
 						</h2>
 						<p
 							style={{
@@ -205,7 +211,7 @@ export default function LoginPage() {
 								lineHeight: "1.5",
 							}}
 						>
-							Enter your email and password to continue.
+							Takes about a minute. You can add your club right after.
 						</p>
 
 						<Form
@@ -215,6 +221,27 @@ export default function LoginPage() {
 							requiredMark={false}
 							style={{ marginBottom: 24 }}
 						>
+							<Form.Item
+								label={
+									<span
+										style={{ fontSize: 13, fontWeight: 600, color: "#1d1f20" }}
+									>
+										Full name
+									</span>
+								}
+								name="name"
+								rules={[{ required: true, message: "Enter your name" }]}
+							>
+								<Input
+									size="large"
+									placeholder="Ron Quilicot"
+									autoComplete="name"
+									style={{
+										padding: "10px 12px",
+										fontSize: 14,
+									}}
+								/>
+							</Form.Item>
 							<Form.Item
 								label={
 									<span
@@ -242,7 +269,6 @@ export default function LoginPage() {
 									}}
 								/>
 							</Form.Item>
-
 							<Form.Item
 								label={
 									<span
@@ -252,17 +278,31 @@ export default function LoginPage() {
 									</span>
 								}
 								name="password"
-								rules={[{ required: true, message: "Enter your password" }]}
+								rules={[
+									{ required: true, min: 8, message: "At least 8 characters" },
+								]}
 							>
 								<Input.Password
 									size="large"
-									autoComplete="current-password"
+									autoComplete="new-password"
 									style={{
 										padding: "10px 12px",
 										fontSize: 14,
 									}}
 								/>
 							</Form.Item>
+
+							<div style={{ marginBottom: 20 }}>
+								<div
+									style={{
+										fontSize: 11,
+										color: "rgba(29,31,32,.6)",
+										marginTop: -16,
+									}}
+								>
+									Strong · at least 8 characters, one number
+								</div>
+							</div>
 
 							<Form.Item style={{ marginBottom: 0 }}>
 								<Button
@@ -284,11 +324,87 @@ export default function LoginPage() {
 										border: "none",
 									}}
 								>
-									Log in
+									Create account
 								</Button>
 							</Form.Item>
 						</Form>
 
+						{/* Divider */}
+						<div
+							style={{
+								display: "flex",
+								alignItems: "center",
+								gap: 12,
+								margin: "24px 0",
+							}}
+						>
+							<div
+								style={{
+									flex: 1,
+									height: 1,
+									background: "rgba(138,39,72,.18)",
+								}}
+							/>
+							<span
+								style={{
+									fontSize: 12,
+									color: "rgba(29,31,32,.5)",
+									textTransform: "uppercase",
+									fontWeight: 600,
+								}}
+							>
+								Or
+							</span>
+							<div
+								style={{
+									flex: 1,
+									height: 1,
+									background: "rgba(138,39,72,.18)",
+								}}
+							/>
+						</div>
+
+						{/* Google button */}
+						{/* <Button
+							block
+							size="large"
+							style={{
+								height: 48,
+								fontSize: 14,
+								fontFamily: "'Barlow Condensed', sans-serif",
+								fontWeight: 600,
+								textTransform: "uppercase",
+								letterSpacing: ".05em",
+								background: "#fff",
+								borderColor: "rgba(138,39,72,.24)",
+								color: "#1d1f20",
+								border: "1px solid rgba(138,39,72,.24)",
+								marginBottom: 24,
+							}}
+						>
+							Continue with Google
+						</Button> */}
+
+						{/* Login link */}
+						<div
+							style={{
+								textAlign: "center",
+								fontSize: 13,
+								color: "rgba(29,31,32,.6)",
+							}}
+						>
+							Already have an account?{" "}
+							<Link
+								href="/login"
+								style={{
+									color: "#f43f75",
+									fontWeight: 600,
+									textDecoration: "none",
+								}}
+							>
+								Log in
+							</Link>
+						</div>
 					</div>
 				</section>
 			</main>

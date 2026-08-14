@@ -85,7 +85,7 @@ export const authResolvers = {
       const passwordHash = await hashPassword(args.password);
       const user = await User.create({ email, passwordHash, name: args.name.trim() });
 
-      const token = signAuthToken({ sub: String(user._id), email: user.email, name: user.name });
+      const token = signAuthToken({ sub: String(user._id), email: user.email, name: user.name, role: user.role });
       await setAuthCookie(token);
 
       return { user };
@@ -107,7 +107,7 @@ export const authResolvers = {
         });
       }
 
-      const token = signAuthToken({ sub: String(user._id), email: user.email, name: user.name });
+      const token = signAuthToken({ sub: String(user._id), email: user.email, name: user.name, role: user.role });
       await setAuthCookie(token);
 
       return { user };

@@ -29,7 +29,8 @@
       "Bash(python3)",
       "Bash(grep -n \"useQuery.*CLUB_DETAIL_QUERY\\\\|const { data, loading\" /Users/hisd3dev3/pickleq-app/src/app/dashboard/clubs/\\\\[clubId\\\\]/page.tsx)",
       "Bash(yarn build *)",
-      "Bash(yarn install *)"
+      "Bash(yarn install *)",
+      "Bash(MONGODB_URI=\"mongodb+srv://rdquilicotwork_db_user:LstifQBztcrs0Zqp@cluster0.hist5fh.mongodb.net/pickleq?retryWrites=true&w=majority&appName=Cluster0\" yarn tsx scripts/make-admin.ts rdquilicot14@gmail.com)"
     ],
     "additionalDirectories": [
       "/Users/hisd3dev3/pickleq-app/src/app/dashboard/clubs/[clubId]"

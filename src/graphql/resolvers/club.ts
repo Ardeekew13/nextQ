@@ -27,6 +27,11 @@ export const clubResolvers = {
   Query: {
     myClubs: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
       const organiser = requireOrganiser(context);
+      // Admin users can see all clubs
+      if (organiser.role === "ADMIN") {
+        return Club.find({}).sort({ createdAt: -1 });
+      }
+      // Regular organisers see only their clubs
       return Club.find({
         $or: [
           { organiserId: organiser.sub },
