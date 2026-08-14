@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { AntdRegistry } from "@ant-design/nextjs-registry";
 import { ConfigProvider, App as AntApp } from "antd";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ApolloWrapper } from "@/apollo/ApolloWrapper";
 import { themeConfig } from "@/theme/themeConfig";
 import { RouteProgress } from "@/components/RouteProgress";
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </AntApp>
           </ConfigProvider>
         </AntdRegistry>
+        <SpeedInsights />
       </body>
     </html>
   );
