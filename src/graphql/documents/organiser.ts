@@ -174,6 +174,7 @@ export const CLUB_QUERY = gql`
       location
       description
       joinCode
+      memberCount
       createdAt
       sessions {
         id
@@ -183,6 +184,12 @@ export const CLUB_QUERY = gql`
         sessionDate
         publicUrl
         createdAt
+        courts {
+          id
+        }
+        settings {
+          queueMode
+        }
       }
     }
   }
@@ -617,6 +624,12 @@ export const DISABLE_COURT = gql`
   }
 `;
 
+export const DELETE_COURT = gql`
+  mutation DeleteCourt($id: ID!) {
+    deleteCourt(id: $id)
+  }
+`;
+
 export const GENERATE_NEXT_GAME = gql`
   ${GAME_FIELDS}
   mutation GenerateNextGame($sessionId: ID!, $courtId: ID!) {
@@ -708,8 +721,8 @@ export const CLUB_MEMBER_FIELDS = gql`
 
 export const CLUB_MEMBERS_QUERY = gql`
   ${CLUB_MEMBER_FIELDS}
-  query ClubMembers($clubId: ID!) {
-    clubMembers(clubId: $clubId) {
+  query ClubMembers($clubId: ID!, $filter: String) {
+    clubMembers(clubId: $clubId, filter: $filter) {
       ...ClubMemberFields
     }
   }

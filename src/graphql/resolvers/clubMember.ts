@@ -33,7 +33,7 @@ export const clubMemberResolvers = {
   Query: {
     clubMembers: async (
       _p: unknown,
-      args: { clubId: string },
+      args: { clubId: string; filter?: string },
       context: GraphQLContext
     ) => {
       await requireClubAccess(context, args.clubId);
@@ -47,6 +47,7 @@ export const clubMemberResolvers = {
         // No sessions, return members with 0 stats
         return members.map((m) => ({
           ...m,
+          totalGames: 0,
           wins: 0,
           losses: 0,
           winRate: 0,
@@ -79,15 +80,28 @@ export const clubMemberResolvers = {
       );
 
       // Merge stats into members
-      return members.map((m) => {
+      let result = members.map((m) => {
         const playerStats = statsMap.get(m.name) || { wins: 0, losses: 0, totalGames: 0 };
         return {
           ...m,
+          totalGames: playerStats.totalGames,
           wins: playerStats.wins,
           losses: playerStats.losses,
           winRate: playerStats.totalGames > 0 ? playerStats.wins / playerStats.totalGames : 0,
         };
       });
+
+      // Apply filter if provided
+      if (args.filter) {
+        result = result.filter((m: any) => {
+          if (args.filter === "played" && (m.totalGames ?? 0) === 0) return false;
+          if (args.filter === "never" && (m.totalGames ?? 0) > 0) return false;
+          if (args.filter === "unrated" && m.skillLevel) return false;
+          return true;
+        });
+      }
+
+      return result;
     },
 
     /** Aggregate all-time stats for each player in a session across all club sessions */
@@ -244,5 +258,10 @@ export const clubMemberResolvers = {
 
   ClubMember: {
     id: (parent: { _id: unknown }) => String(parent._id),
+
+    totalGames: (parent: any) => parent.totalGames ?? 0,
+    wins: (parent: any) => parent.wins ?? 0,
+    losses: (parent: any) => parent.losses ?? 0,
+    winRate: (parent: any) => parent.winRate ?? 0,
   },
 };

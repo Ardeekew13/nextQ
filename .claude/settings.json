@@ -16,7 +16,18 @@
       "Bash(git diff *)",
       "Bash(curl -s http://localhost:3000/api/graphql)",
       "Bash(curl -s http://localhost:3000/dashboard/clubs/test-club)",
-      "Bash(sed -i '646,949d' /Users/hisd3dev3/pickleq-app/src/app/dashboard/clubs/\\\\[clubId\\\\]/page.tsx && echo \"Old inline code removed\")"
+      "Bash(sed -i '646,949d' /Users/hisd3dev3/pickleq-app/src/app/dashboard/clubs/\\\\[clubId\\\\]/page.tsx && echo \"Old inline code removed\")",
+      "Bash(grep -E \"\\\\.tsx?$\")",
+      "Bash(grep -E \"\\\\.\\(ts|js\\)$\")",
+      "Bash(npm test *)",
+      "Bash(yarn test *)",
+      "Bash(yarn dev *)",
+      "Bash(sed -i '532s/gap: 8/gap: 4/' /Users/hisd3dev3/pickleq-app/src/components/session/OverviewTab.tsx)",
+      "Bash(sed -i '517s/gap: 8/gap: 20/' /Users/hisd3dev3/pickleq-app/src/components/session/OverviewTab.tsx)",
+      "Bash(sed -i '' '532s/gap: 8/gap: 4/' /Users/hisd3dev3/pickleq-app/src/components/session/OverviewTab.tsx)",
+      "Bash(sed -i '' '517s/gap: 8/gap: 20/' /Users/hisd3dev3/pickleq-app/src/components/session/OverviewTab.tsx)",
+      "Bash(python3)",
+      "Bash(grep -n \"useQuery.*CLUB_DETAIL_QUERY\\\\|const { data, loading\" /Users/hisd3dev3/pickleq-app/src/app/dashboard/clubs/\\\\[clubId\\\\]/page.tsx)"
     ],
     "additionalDirectories": [
       "/Users/hisd3dev3/pickleq-app/src/app/dashboard/clubs/[clubId]"

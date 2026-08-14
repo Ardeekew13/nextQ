@@ -182,6 +182,289 @@ export default function ClubDetailPage() {
 
 	return (
 		<div>
+			<style>{`
+				/* Up Next Banner responsive */
+				@media (max-width: 768px) {
+					.club-up-next-banner {
+						flex-direction: column !important;
+						padding: 16px !important;
+						gap: 16px !important;
+					}
+					.club-up-next-content {
+						flex: 1;
+					}
+					.club-up-next-stats {
+						flex-direction: column !important;
+						gap: 12px !important;
+						margin-right: 0 !important;
+						width: 100%;
+					}
+					.club-up-next-stat-item {
+						padding: 0 !important;
+						border-left: none !important;
+						border-bottom: 1px solid rgba(255,255,255,0.15) !important;
+						padding-bottom: 12px !important;
+					}
+					.club-up-next-stat-item:last-child {
+						border-bottom: none !important;
+						padding-bottom: 0 !important;
+					}
+					.club-up-next-actions {
+						min-width: auto !important;
+						width: 100% !important;
+					}
+					.club-up-next-actions button {
+						width: 100% !important;
+						height: 40px !important;
+					}
+					.club-up-next-title {
+						font-size: 20px !important;
+					}
+					.club-up-next-meta {
+						font-size: 11px !important;
+					}
+				}
+
+				@media (max-width: 480px) {
+					.club-up-next-banner {
+						padding: 12px !important;
+						gap: 12px !important;
+					}
+					.club-up-next-title {
+						font-size: 18px !important;
+					}
+					.club-up-next-label {
+						font-size: 9px !important;
+					}
+					.club-up-next-stat {
+						font-size: 22px !important;
+					}
+					.club-up-next-actions {
+						gap: 6px !important;
+					}
+				}
+
+				/* Stats row responsive */
+				@media (max-width: 768px) {
+					.club-stats-row {
+						grid-template-columns: 1fr 1fr !important;
+					}
+				}
+
+				@media (max-width: 480px) {
+					.club-stats-row {
+						grid-template-columns: 1fr !important;
+					}
+					.club-stats-row > div {
+						border-right: none !important;
+						border-bottom: 1px solid rgba(138,39,72,0.18) !important;
+						padding: 14px 16px !important;
+					}
+					.club-stats-row > div:last-child {
+						border-bottom: none !important;
+					}
+				}
+
+				/* View toggle responsive */
+				@media (max-width: 768px) {
+					.club-view-toggle {
+						gap: 0 !important;
+						overflow-x: auto;
+						-webkit-overflow-scrolling: touch;
+					}
+					.club-view-toggle button {
+						padding: 8px 16px !important;
+						font-size: 11px !important;
+						white-space: nowrap;
+						flex-shrink: 0;
+					}
+				}
+
+				/* Sessions container responsive */
+				@media (max-width: 768px) {
+					.club-sessions-container {
+						overflow-x: auto;
+						-webkit-overflow-scrolling: touch;
+					}
+					.club-sessions-container .ant-table {
+						font-size: 12px;
+					}
+					.club-sessions-container .ant-table thead > tr > th {
+						padding: 8px 12px !important;
+						font-size: 10px !important;
+					}
+					.club-sessions-container .ant-table tbody > tr > td {
+						padding: 10px 12px !important;
+						font-size: 11px !important;
+					}
+				}
+
+				@media (max-width: 480px) {
+					.club-sessions-container .ant-table {
+						font-size: 11px;
+					}
+					.club-sessions-container .ant-table thead > tr > th {
+						padding: 6px 8px !important;
+						font-size: 9px !important;
+					}
+					.club-sessions-container .ant-table tbody > tr > td {
+						padding: 8px 6px !important;
+						font-size: 10px !important;
+					}
+				}
+
+				/* Standings table responsive */
+				@media (max-width: 768px) {
+					.club-standings-container {
+						overflow-x: auto;
+						-webkit-overflow-scrolling: touch;
+					}
+					.club-standings-header,
+					.club-standings-row {
+						display: flex !important;
+						flex-wrap: nowrap;
+						min-width: 600px;
+					}
+					.club-standings-header {
+						padding: 10px 16px !important;
+						gap: 8px !important;
+						display: flex !important;
+					}
+					.club-standings-header span {
+						flex: 0 0 auto;
+						padding: 0 !important;
+						font-size: 10px !important;
+						min-width: 60px;
+					}
+					.club-standings-row {
+						padding: 12px 16px !important;
+						gap: 8px !important;
+						display: flex !important;
+						align-items: center !important;
+					}
+					.club-standings-row > span,
+					.club-standings-row > div {
+						flex: 0 0 auto;
+						font-size: 11px !important;
+						min-width: 60px;
+						padding: 0 !important;
+					}
+					.club-standings-row > div:first-child {
+						min-width: 150px;
+					}
+				}
+
+				@media (max-width: 480px) {
+					.club-standings-header span {
+						font-size: 9px !important;
+						min-width: 50px;
+					}
+					.club-standings-row > span,
+					.club-standings-row > div {
+						font-size: 10px !important;
+						min-width: 50px;
+					}
+					.club-standings-row > div:first-child {
+						min-width: 120px;
+					}
+				}
+
+				/* Players table responsive */
+				@media (max-width: 768px) {
+					.club-players-container {
+						overflow-x: auto;
+						-webkit-overflow-scrolling: touch;
+					}
+					.club-players-header,
+					.club-players-row {
+						display: flex !important;
+						flex-wrap: nowrap;
+						min-width: 700px;
+					}
+					.club-players-header {
+						padding: 10px 16px !important;
+						gap: 8px !important;
+						display: flex !important;
+					}
+					.club-players-header span {
+						flex: 0 0 auto;
+						padding: 0 !important;
+						font-size: 10px !important;
+						min-width: 70px;
+					}
+					.club-players-row {
+						padding: 12px 16px !important;
+						gap: 8px !important;
+						display: flex !important;
+						align-items: center !important;
+					}
+					.club-players-row > div,
+					.club-players-row > span {
+						flex: 0 0 auto;
+						font-size: 11px !important;
+						min-width: 70px;
+						padding: 0 !important;
+					}
+					.club-players-row > div:first-child {
+						min-width: 150px;
+					}
+					.club-players-row > div:last-child {
+						min-width: 100px;
+						display: flex !important;
+						gap: 4px;
+						flex-direction: row;
+					}
+					.club-players-row > div:last-child button {
+						padding: 2px 6px !important;
+						font-size: 10px !important;
+						height: auto !important;
+						white-space: nowrap;
+					}
+				}
+
+				@media (max-width: 480px) {
+					.club-players-header span {
+						font-size: 9px !important;
+						min-width: 60px;
+					}
+					.club-players-row > div,
+					.club-players-row > span {
+						font-size: 10px !important;
+						min-width: 60px;
+					}
+					.club-players-row > div:first-child {
+						min-width: 120px;
+					}
+					.club-players-row > div:last-child {
+						min-width: 80px;
+						gap: 2px;
+					}
+				}
+
+				/* Modal responsive */
+				@media (max-width: 768px) {
+					.ant-modal {
+						width: calc(100vw - 32px) !important;
+						max-width: 100% !important;
+					}
+				}
+
+				@media (max-width: 480px) {
+					.ant-modal {
+						width: calc(100vw - 16px) !important;
+					}
+					.ant-modal-header {
+						padding: 12px 16px !important;
+					}
+					.ant-modal-body {
+						padding: 12px 16px !important;
+					}
+					.ant-modal-footer {
+						padding: 12px 16px !important;
+					}
+				}
+			`}</style>
+
 			{/* ── Up Next Banner ── */}
 			{upNext && (() => {
 				const mins = minutesUntil(upNext.sessionDate, upNext.startTime);
@@ -198,35 +481,35 @@ export default function ClubDetailPage() {
 				].filter(Boolean);
 
 				return (
-					<div style={{ background: "#5a0b2e", color: "#fff", padding: "24px 28px", marginBottom: 24, display: "flex", alignItems: "stretch", gap: 0 }}>
-						<div style={{ flex: 1 }}>
-							<div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(255,255,255,0.55)", marginBottom: 10 }}>
+					<div className="club-up-next-banner" style={{ background: "#5a0b2e", color: "#fff", padding: "24px 28px", marginBottom: 24, display: "flex", alignItems: "stretch", gap: 0 }}>
+						<div className="club-up-next-content" style={{ flex: 1 }}>
+							<div className="club-up-next-label" style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(255,255,255,0.55)", marginBottom: 10 }}>
 								{isLive ? "● LIVE NOW" : mins > 0 ? `UP NEXT · STARTS IN ${mins} MIN` : "UP NEXT"}
 							</div>
-							<div style={{ fontSize: 28, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>
+							<div className="club-up-next-title" style={{ fontSize: 28, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>
 								{upNext.name}
 							</div>
-							<div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", fontWeight: 500 }}>
+							<div className="club-up-next-meta" style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", fontWeight: 500 }}>
 								{metaParts.join(" · ")}
 							</div>
 						</div>
 
 						{/* Stats */}
-						<div style={{ display: "flex", alignItems: "stretch", gap: 0, marginRight: 32 }}>
+						<div className="club-up-next-stats" style={{ display: "flex", alignItems: "stretch", gap: 0, marginRight: 32 }}>
 							{[
 								{ label: "RSVP'D", value: rsvpd },
 								{ label: "CHECKED IN", value: checkedIn },
 								{ label: "STATUS", value: humanizeStatus(upNext.status).toUpperCase() },
 							].map(({ label, value }) => (
-								<div key={label} style={{ padding: "0 28px", display: "flex", flexDirection: "column", justifyContent: "center", borderLeft: "1px solid rgba(255,255,255,0.15)" }}>
-									<div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)", marginBottom: 6 }}>{label}</div>
-									<div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif" }}>{value}</div>
+								<div key={label} className="club-up-next-stat-item" style={{ padding: "0 28px", display: "flex", flexDirection: "column", justifyContent: "center", borderLeft: "1px solid rgba(255,255,255,0.15)" }}>
+									<div className="club-up-next-stat-label" style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)", marginBottom: 6 }}>{label}</div>
+									<div className="club-up-next-stat" style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif" }}>{value}</div>
 								</div>
 							))}
 						</div>
 
 						{/* Actions */}
-						<div style={{ display: "flex", flexDirection: "column", gap: 8, justifyContent: "center", minWidth: 160 }}>
+						<div className="club-up-next-actions" style={{ display: "flex", flexDirection: "column", gap: 8, justifyContent: "center", minWidth: 160 }}>
 							{isLive ? (
 								<Button
 									style={{ background: "#fff", color: "#5a0b2e", fontWeight: 700, border: "none", height: 44 }}
@@ -257,7 +540,7 @@ export default function ClubDetailPage() {
 			})()}
 
 			{/* ── Stats Row ── */}
-			<div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 28, border: "1px solid rgba(138,39,72,0.18)", background: "#fff" }}>
+			<div className="club-stats-row" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 28, border: "1px solid rgba(138,39,72,0.18)", background: "#fff" }}>
 				<div style={{ padding: "18px 24px", borderRight: "1px solid rgba(138,39,72,0.18)" }}>
 					<div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "rgba(29,31,32,0.45)", marginBottom: 6 }}>Sessions Run</div>
 					<div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
@@ -288,7 +571,7 @@ export default function ClubDetailPage() {
 			</div>
 
 			{/* ── View Toggle ── */}
-			<div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "2px solid rgba(138,39,72,0.12)" }}>
+			<div className="club-view-toggle" style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "2px solid rgba(138,39,72,0.12)" }}>
 				{(["sessions", "players", "standings"] as const).map((v) => (
 					<button
 						key={v}
@@ -314,7 +597,7 @@ export default function ClubDetailPage() {
 
 			{/* ── Sessions ── */}
 			{view === "sessions" && (
-			<div>
+			<div className="club-sessions-container">
 				<div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
 					<span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.2em", textTransform: "uppercase", color: "#1d1f20", whiteSpace: "nowrap" }}>
 						{club.name} Sessions
@@ -359,12 +642,11 @@ export default function ClubDetailPage() {
 							render: (name: string, row: Session) => {
 								const courtsCount = (row.courts ?? []).length;
 								const queueLabel = row.settings?.queueMode?.toLowerCase().replace(/_/g, " ") ?? "queue";
-								const durationMins = 112;
 								return (
 									<div>
 										<div style={{ fontWeight: 600, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", fontSize: 14 }}>{name}</div>
 										<div style={{ fontSize: 12, color: "rgba(29,31,32,0.6)" }}>
-											{courtsCount > 0 ? `${courtsCount} court${courtsCount !== 1 ? 's' : ''}` : '0 courts'} · {queueLabel} · {Math.floor(durationMins / 60)}h {durationMins % 60}m
+											{courtsCount > 0 ? `${courtsCount} court${courtsCount !== 1 ? 's' : ''}` : '0 courts'} · {queueLabel}
 										</div>
 									</div>
 								);
@@ -442,7 +724,7 @@ export default function ClubDetailPage() {
 
 			{/* ── Standings View ── */}
 			{view === "standings" && (
-				<div>
+				<div className="club-standings-container">
 					{standingsLoading ? (
 						<Skeleton active />
 					) : clubStandings.length === 0 ? (
@@ -452,7 +734,7 @@ export default function ClubDetailPage() {
 					) : (
 						<>
 							{/* Table header */}
-							<div style={{
+							<div className="club-standings-header" style={{
 								display: "grid",
 								gridTemplateColumns: "48px 1fr 80px 100px 90px 80px",
 								padding: "10px 16px",
@@ -468,6 +750,7 @@ export default function ClubDetailPage() {
 							{clubStandings.map((row: any, i: number) => (
 								<div
 									key={i}
+									className="club-standings-row"
 									style={{
 										display: "grid",
 										gridTemplateColumns: "48px 1fr 80px 100px 90px 80px",
@@ -504,7 +787,7 @@ export default function ClubDetailPage() {
 
 			{/* ── Players View ── */}
 			{view === "players" && (
-				<div>
+				<div className="club-players-container">
 					<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
 						<span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(29,31,32,0.5)" }}>
 							{members.length} {members.length === 1 ? "Player" : "Players"}
@@ -528,7 +811,7 @@ export default function ClubDetailPage() {
 					) : (
 						<>
 							{/* Table header */}
-							<div style={{
+							<div className="club-players-header" style={{
 								display: "grid",
 								gridTemplateColumns: "1fr 120px 80px 80px 80px 100px",
 								padding: "10px 16px",
@@ -544,6 +827,7 @@ export default function ClubDetailPage() {
 							{members.map((m: any, i: number) => (
 								<div
 									key={m.id}
+									className="club-players-row"
 									style={{
 										display: "grid",
 										gridTemplateColumns: "1fr 120px 80px 80px 80px 100px",

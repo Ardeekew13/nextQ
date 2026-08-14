@@ -179,6 +179,30 @@ export const gameResolvers = {
         });
       }
 
+      // Prevent the same 4 players from queuing together again (require at least 1 new player)
+      const priorGames = await Game.find(
+        { sessionId: court.sessionId, status: { $ne: GameStatus.CANCELLED } },
+        { teamAPlayerIds: 1, teamBPlayerIds: 1 }
+      );
+      const pastGroups = new Set(
+        priorGames.map((g) => [...g.teamAPlayerIds, ...g.teamBPlayerIds].map(String).sort().join(":"))
+      );
+      const currentGroup = allPlayerIds.map(String).sort().join(":");
+      if (pastGroups.has(currentGroup)) {
+        // Check if at least 1 player is new (hasn't played in any completed game)
+        const allPlayerDocs = await SessionPlayer.find({ sessionId: court.sessionId });
+        const playersWhoHavePlayed = new Set(
+          priorGames.flatMap((g) => [...g.teamAPlayerIds, ...g.teamBPlayerIds]).map(String)
+        );
+        const newPlayers = allPlayerIds.filter((id) => !playersWhoHavePlayed.has(id));
+
+        if (newPlayers.length === 0) {
+          throw new GraphQLError("These 4 players have already played together. Add at least 1 new player.", {
+            extensions: { code: "DUPLICATE_GROUP" },
+          });
+        }
+      }
+
       const lastGame = await Game.findOne({ sessionId: court.sessionId }).sort({ gameNumber: -1 });
       const gameNumber = (lastGame?.gameNumber ?? 0) + 1;
 

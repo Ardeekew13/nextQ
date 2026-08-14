@@ -202,6 +202,7 @@ export const sessionResolvers = {
       const session = await requireSessionOwner(context, args.id);
       assertTransition(session.status, [SessionStatus.DRAFT], "start");
       session.status = SessionStatus.ACTIVE;
+      session.startTime = new Date().toISOString();
       session.publicPublished = true;
       await session.save();
       return session;
@@ -238,6 +239,7 @@ export const sessionResolvers = {
         winRate: entry.winRate,
       })) as typeof session.finalStandings;
       session.status = SessionStatus.COMPLETED;
+      session.endTime = new Date().toISOString();
       session.finalisedAt = new Date();
       session.publicPublished = true;
       await session.save();

@@ -329,8 +329,6 @@ export const typeDefs = gql`
     name: String!
     slug: String
     sessionDate: Date!
-    startTime: String
-    endTime: String
     numberOfCourts: Int
     settings: SessionSettingsInput
   }
@@ -339,8 +337,6 @@ export const typeDefs = gql`
     name: String
     slug: String
     sessionDate: Date
-    startTime: String
-    endTime: String
     settings: SessionSettingsInput
   }
 
@@ -446,7 +442,7 @@ export const typeDefs = gql`
     sessionPodium(sessionId: ID!): [PodiumEntry!]!
     sessionSummary(sessionId: ID!): SessionSummary!
 
-    clubMembers(clubId: ID!): [ClubMember!]!
+    clubMembers(clubId: ID!, filter: String): [ClubMember!]!
 
     playerSessionStats(sessionId: ID!, playerId: ID!): PlayerStatistics!
     playerGameLogs(sessionId: ID!, playerId: ID!): [Game!]!
@@ -486,6 +482,7 @@ export const typeDefs = gql`
     addCourt(sessionId: ID!, input: AddCourtInput!): Court!
     updateCourt(id: ID!, input: UpdateCourtInput!): Court!
     disableCourt(id: ID!, disabled: Boolean!): Court!
+    deleteCourt(id: ID!): Boolean!
 
     generateNextGame(sessionId: ID!, courtId: ID!): Game!
     fillCourtManually(courtId: ID!, teamAPlayerIds: [ID!]!, teamBPlayerIds: [ID!]!): Game!

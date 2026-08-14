@@ -11,7 +11,6 @@ const { Title } = Typography;
 export function StatsTab({ sessionId }: { sessionId: string }) {
   const { data, loading, error } = useQuery(SESSION_STANDINGS_QUERY, {
     variables: { id: sessionId },
-    pollInterval: 10000,
   });
 
   if (loading && !data) return null;

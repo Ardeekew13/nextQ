@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@apollo/client";
-import { Button, Modal, Form, Input, App, Skeleton, Typography, Space } from "antd";
+import { Button, Modal, Form, Input, App, Skeleton, Typography } from "antd";
 import Link from "next/link";
 import { DASHBOARD_QUERY, CREATE_CLUB, JOIN_CLUB } from "@/graphql/documents/organiser";
 import { useNavbarActions } from "@/components/NavbarActionsContext";
@@ -34,7 +34,6 @@ export default function DashboardPage() {
 	const [joinClub, { loading: joining }] = useMutation(JOIN_CLUB);
 	const [form] = Form.useForm();
 	const [joinForm] = Form.useForm();
-	const [navigatingClubId, setNavigatingClubId] = useState<string | null>(null);
 
 	const clubs = data?.myClubs ?? [];
 
@@ -53,10 +52,35 @@ export default function DashboardPage() {
 			</div>,
 		);
 		setActions(
-<Space>
-				<Button onClick={() => setJoinClubOpen(true)}>Join club</Button>
-				<Button onClick={() => setCreateClubOpen(true)}>Create club</Button>
-			</Space>,
+<div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+				<span
+					style={{
+						fontSize: 13,
+						fontWeight: 600,
+						color: "#1d1f20",
+						cursor: "pointer",
+					}}
+					onClick={() => setJoinClubOpen(true)}
+				>
+					Join club
+				</span>
+				<Button
+					type="primary"
+					onClick={() => setCreateClubOpen(true)}
+					style={{
+						background: "#f43f75",
+						border: "none",
+						fontWeight: 700,
+						fontSize: 12,
+						letterSpacing: "0.08em",
+						textTransform: "uppercase",
+						padding: "8px 24px",
+						height: 36,
+					}}
+				>
+					Create club
+				</Button>
+			</div>,
 		);
 	}, []);
 
@@ -285,9 +309,9 @@ export default function DashboardPage() {
 						];
 
 						return (
-<div key={club.id} style={{ border: "1px solid rgba(138,39,72,0.18)", background: "#fff" }}>
+<div key={club.id} style={{ border: "1px solid rgba(138,39,72,0.18)", background: "#fff", cursor: "pointer" }} onClick={() => router.push(`/dashboard/clubs/${club.id}`)}>
 								{/* Club header */}
-								<div className="club-card-header">
+								<div className="club-card-header" style={{ cursor: "pointer" }}>
 									<div className="club-avatar" style={{
 										width: 44, height: 44,
 										background: memberCount === 0 ? "#fce7ef" : "#f43f75",
@@ -326,21 +350,10 @@ export default function DashboardPage() {
 											}}>Empty</span>
 										)}
 										{sessions.length > 0 && (
-											<Link href={`/dashboard/clubs/${club.id}`} style={{ fontSize: 12, fontWeight: 600, color: "#bd2153", textDecoration: "underline" }}>
+											<Link href={`/dashboard/clubs/${club.id}`} style={{ fontSize: 12, fontWeight: 600, color: "#bd2153", textDecoration: "underline" }} onClick={(e) => e.stopPropagation()}>
 												Standings
 											</Link>
 										)}
-										<Button
-											size="small"
-											loading={navigatingClubId === club.id}
-											disabled={navigatingClubId !== null}
-											onClick={() => {
-												setNavigatingClubId(club.id);
-												router.push(`/dashboard/clubs/${club.id}`);
-											}}
-										>
-											Manage
-										</Button>
 									</div>
 								</div>
 

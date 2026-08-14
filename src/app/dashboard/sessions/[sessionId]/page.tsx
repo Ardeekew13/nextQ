@@ -1,15 +1,15 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Tabs, Button, App } from "antd";
 import { useQuery, useMutation } from "@apollo/client";
 import {
 	SESSION_DASHBOARD_QUERY,
+	START_SESSION,
 	PAUSE_SESSION,
 	FINISH_SESSION,
-	START_SESSION,
 	LOGOUT_ORGANISER,
 } from "@/graphql/documents/organiser";
 import { OverviewTab } from "@/components/session/OverviewTab";
@@ -38,14 +38,6 @@ function formatWait(minutes: number) {
 	return m > 0 ? `${h}h ${String(m).padStart(2, "0")}m` : `${h}h`;
 }
 
-function formatElapsed(seconds: number) {
-	const h = Math.floor(seconds / 3600);
-	const m = Math.floor((seconds % 3600) / 60);
-	const s = seconds % 60;
-	if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-	return `${m}:${String(s).padStart(2, "0")}`;
-}
-
 export default function SessionPage() {
 	const params = useParams<{ sessionId: string }>();
 	const router = useRouter();
@@ -56,33 +48,23 @@ export default function SessionPage() {
 	const [playerStats, setPlayerStats] = useState<PlayerTabStats | null>(null);
 	const [gameStats, setGameStats] = useState<GameLogStats | null>(null);
 	const [standingsStats, setStandingsStats] = useState<StandingsTabStats | null>(null);
-	const [elapsed, setElapsed] = useState(0);
-	const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+	const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
 	const { data, refetch } = useQuery(SESSION_DASHBOARD_QUERY, {
 		variables: { id: params.sessionId },
-		pollInterval: 10000,
 	});
+	const [startSession, { loading: starting }] = useMutation(START_SESSION);
 	const [pauseSession, { loading: pausing }] = useMutation(PAUSE_SESSION);
 	const [finishSession, { loading: finishing }] = useMutation(FINISH_SESSION);
-	const [startSession, { loading: starting }] = useMutation(START_SESSION);
 	const [logoutOrganiser, { loading: loggingOut }] = useMutation(LOGOUT_ORGANISER);
 
 	const session = data?.session;
 
-	// Live timer — ticks from startTime
-	useEffect(() => {
-		if (!session?.startTime || session.status !== "ACTIVE") return;
-		const start = new Date(session.startTime).getTime();
-		const tick = () => setElapsed(Math.floor((Date.now() - start) / 1000));
-		tick();
-		intervalRef.current = setInterval(tick, 1000);
-		return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-	}, [session?.startTime, session?.status]);
 
 	const courtsCount = session?.courts?.length ?? 0;
 	const queueMode = session?.settings?.queueMode ?? "";
 	const queueModeLabel = queueMode === "STRICT" ? "strict queue" : queueMode === "OPEN" ? "open queue" : queueMode.toLowerCase().replace(/_/g, " ");
+	const isDraft = session?.status === "DRAFT";
 	const isActive = session?.status === "ACTIVE";
 	const isPaused = session?.status === "PAUSED";
 
@@ -103,16 +85,6 @@ export default function SessionPage() {
 			message.success("Session paused");
 		} catch (err) {
 			message.error(err instanceof Error ? err.message : "Could not pause session");
-		}
-	}
-
-	async function handleResume() {
-		try {
-			await startSession({ variables: { id: params.sessionId } });
-			refetch();
-			message.success("Session resumed");
-		} catch (err) {
-			message.error(err instanceof Error ? err.message : "Could not resume session");
 		}
 	}
 
@@ -153,6 +125,104 @@ export default function SessionPage() {
 	return (
 		<div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
 			<style>{`
+				@media (max-width: 900px) {
+					.session-stats-container {
+						display: none !important;
+					}
+					.session-navbar {
+						padding: 0 12px !important;
+						height: 56px !important;
+						gap: 8px !important;
+					}
+					.session-navbar img {
+						height: 28px !important;
+					}
+					.session-divider {
+						display: none !important;
+					}
+					.session-subtitle {
+						display: none !important;
+					}
+					.session-name {
+						font-size: 14px !important;
+						margin-right: 8px !important;
+					}
+					.session-badge {
+						font-size: 10px !important;
+						padding: 2px 6px !important;
+						margin-right: auto !important;
+						white-space: nowrap !important;
+					}
+					.session-menu-hamburger {
+						display: flex !important;
+						margin-left: auto !important;
+					}
+					.session-actions {
+						display: flex !important;
+						gap: 6px !important;
+					}
+					.session-actions button:not(.session-end-btn) {
+						display: none !important;
+					}
+					.session-actions .session-end-btn {
+						padding: 4px 8px !important;
+						font-size: 12px !important;
+						height: 32px !important;
+						min-width: auto !important;
+					}
+					.session-tabs-container {
+						display: none !important;
+					}
+					.session-mobile-menu {
+						position: absolute;
+						top: 56px;
+						right: 0;
+						background: #fff;
+						border: 1px solid #f0f0f0;
+						border-top: none;
+						min-width: 220px;
+						z-index: 100;
+						box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+					}
+					.session-mobile-menu-item {
+						padding: 12px 16px;
+						border-bottom: 1px solid #f0f0f0;
+						cursor: pointer;
+						font-size: 14px;
+						color: #1d1f20;
+					}
+					.session-mobile-menu-item:last-child {
+						border-bottom: none;
+					}
+					.session-mobile-menu-item:hover {
+						background: #f5f5f5;
+					}
+					.session-mobile-menu-item.active {
+						color: #e11d74;
+						font-weight: 600;
+					}
+				}
+
+				@media (max-width: 768px) {
+					.standings-podium {
+						flex-direction: column !important;
+						gap: 12px !important;
+					}
+					.standings-podium-entry {
+						flex: 1 !important;
+						min-width: 100% !important;
+					}
+					.podium-medal {
+						font-size: 20px !important;
+					}
+					.podium-name {
+						font-size: 14px !important;
+					}
+					.podium-value {
+						font-size: 36px !important;
+					}
+				}
+
 				@media (max-width: 768px) {
 					.session-navbar {
 						padding: 0 12px !important;
@@ -234,7 +304,7 @@ export default function SessionPage() {
 						borderRadius: 20, padding: "3px 10px", marginRight: 12,
 					}}>
 						<span style={{ width: 6, height: 6, borderRadius: "50%", background: isActive ? "#e11d74" : "#d97706", display: "inline-block" }} />
-						{isActive ? `Live · ${formatElapsed(elapsed)}` : "Paused"}
+						{isActive ? "Live" : "Paused"}
 					</span>
 				)}
 
@@ -261,15 +331,16 @@ export default function SessionPage() {
 						<QrPopover url={session.publicUrl ?? ""} />
 					)}
 
+
 					{/* DRAFT — show Start Session */}
-					{!isActive && !isPaused && (
+					{isDraft && (
 						<Button
 							type="primary"
 							style={{ background: "#e11d74", borderColor: "#e11d74", fontWeight: 700, letterSpacing: "0.05em" }}
 							loading={starting}
 							onClick={handleStart}
 						>
-							Start Session
+							START SESSION
 						</Button>
 					)}
 
@@ -280,6 +351,7 @@ export default function SessionPage() {
 								Pause session
 							</Button>
 							<Button
+								className="session-end-btn"
 								type="primary"
 								style={{ background: "#e11d74", borderColor: "#e11d74", fontWeight: 700, letterSpacing: "0.05em" }}
 								loading={finishing}
@@ -290,26 +362,85 @@ export default function SessionPage() {
 						</>
 					)}
 
-					{/* PAUSED — show Resume + End Session */}
+					{/* PAUSED — show End Session */}
 					{isPaused && (
-						<>
-							<Button
-								type="primary"
-								style={{ background: "#16a34a", borderColor: "#16a34a", fontWeight: 600 }}
-								loading={starting}
-								onClick={handleResume}
+						<Button
+							type="primary"
+							style={{ background: "#e11d74", borderColor: "#e11d74", fontWeight: 700, letterSpacing: "0.05em" }}
+							loading={finishing}
+							onClick={handleEnd}
+						>
+							END SESSION
+						</Button>
+					)}
+				</div>
+
+				{/* Mobile Hamburger Menu */}
+				<div className="session-menu-hamburger" style={{ display: "none", position: "relative" }}>
+					<Button
+						type="text"
+						size="small"
+						onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+						style={{ padding: "4px 8px", fontSize: 20 }}
+					>
+						☰
+					</Button>
+					{mobileMenuOpen && (
+						<div className="session-mobile-menu">
+							{session?.publicPublished && (
+								<div
+									className="session-mobile-menu-item"
+									onClick={() => {
+										// QR popover handler
+										setMobileMenuOpen(false);
+									}}
+								>
+									Gate QR
+								</div>
+							)}
+							{isActive && (
+								<>
+									<div
+										className="session-mobile-menu-item"
+										onClick={() => {
+											handlePause();
+											setMobileMenuOpen(false);
+										}}
+									>
+										Pause Session
+									</div>
+									<div
+										className="session-mobile-menu-item"
+										onClick={() => {
+											handleEnd();
+											setMobileMenuOpen(false);
+										}}
+										style={{ color: "#e11d74", fontWeight: 700 }}
+									>
+										End Session
+									</div>
+								</>
+							)}
+							{isPaused && (
+								<div
+									className="session-mobile-menu-item"
+									onClick={() => {
+										handleEnd();
+										setMobileMenuOpen(false);
+									}}
+									style={{ color: "#e11d74", fontWeight: 700 }}
+								>
+									End Session
+								</div>
+							)}
+							<div style={{ borderTop: "1px solid #f0f0f0" }} />
+							<div
+								className="session-mobile-menu-item"
+								onClick={handleLogout}
 							>
-								Resume
-							</Button>
-							<Button
-								type="primary"
-								style={{ background: "#e11d74", borderColor: "#e11d74", fontWeight: 700, letterSpacing: "0.05em" }}
-								loading={finishing}
-								onClick={handleEnd}
-							>
-								END SESSION
-							</Button>
-						</>
+								Log out
+							</div>
+						</div>
 					)}
 				</div>
 			</div>
@@ -341,16 +472,46 @@ export default function SessionPage() {
 						}
 						.session-stats-container {
 							width: 100% !important;
-							justify-content: flex-start !important;
+							justify-content: space-between !important;
 							border-left: none !important;
 							border-top: 1px solid rgba(138,39,72,0.12) !important;
-							padding-left: 0 !important;
-							margin-top: 8px !important;
-							overflow-x: auto !important;
+							padding: 12px 8px !important;
+							margin-top: 0 !important;
+							margin-bottom: 32px !important;
+							overflow: hidden !important;
+							flex-wrap: wrap !important;
+							gap: 0 !important;
 						}
 						.session-stat-item {
-							min-width: 70px !important;
-							padding: 0 16px !important;
+							flex: 0 0 50% !important;
+							width: 50% !important;
+							max-width: 50% !important;
+							padding: 10px 8px !important;
+							border-right: none !important;
+							margin-right: 0 !important;
+							border-bottom: 1px solid rgba(138,39,72,0.08) !important;
+							display: flex !important;
+							flex-direction: column !important;
+							justify-content: center !important;
+							overflow: hidden !important;
+						}
+						.session-stat-item:nth-child(odd) {
+							border-right: 1px solid rgba(138,39,72,0.08) !important;
+						}
+						.session-stat-item > div {
+							overflow: hidden !important;
+							text-overflow: ellipsis !important;
+							white-space: nowrap !important;
+						}
+						.session-stat-item > div:first-child {
+							font-size: 7px !important;
+							letter-spacing: 0.08em !important;
+							margin-bottom: 4px !important;
+						}
+						.session-stat-item > div:last-child {
+							font-size: 14px !important;
+							font-weight: 700 !important;
+							line-height: 1.2 !important;
 						}
 					}
 				`}</style>
@@ -401,7 +562,7 @@ export default function SessionPage() {
 					</div>
 				)}
 				{activeTab === "games" && gameStats && (
-					<div style={{ display: "flex", marginLeft: "auto", borderLeft: "1px solid rgba(138,39,72,0.12)" }}>
+					<div className="session-stats-container" style={{ display: "flex", marginLeft: "auto", borderLeft: "1px solid rgba(138,39,72,0.12)" }}>
 						{([
 							{ label: "GAMES PLAYED", value: gameStats.gamesPlayed,                        pink: false },
 							{ label: "ROUNDS",        value: gameStats.rounds,                             pink: false },
@@ -420,7 +581,7 @@ export default function SessionPage() {
 					</div>
 				)}
 				{activeTab === "standings" && standingsStats && (
-					<div style={{ display: "flex", marginLeft: "auto", borderLeft: "1px solid rgba(138,39,72,0.12)" }}>
+					<div className="session-stats-container" style={{ display: "flex", marginLeft: "auto", borderLeft: "1px solid rgba(138,39,72,0.12)" }}>
 						{([
 							{ label: "PLAYERS RANKED", value: standingsStats.playersRanked, pink: false },
 							{ label: "GAMES",           value: standingsStats.games,         pink: false },

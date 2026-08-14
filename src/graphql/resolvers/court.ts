@@ -71,6 +71,17 @@ export const courtResolvers = {
       await court.save();
       return court;
     },
+
+    deleteCourt: async (_p: unknown, args: { id: string }, context: GraphQLContext) => {
+      const court = await requireCourtOwner(context, args.id);
+      if (court.activeGameId) {
+        throw new GraphQLError("Cannot delete a court that has a game in progress.", {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
+      await Court.findByIdAndDelete(args.id);
+      return true;
+    },
   },
 
   Court: {

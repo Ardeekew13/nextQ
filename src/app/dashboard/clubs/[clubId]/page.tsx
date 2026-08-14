@@ -115,9 +115,9 @@ export default function ClubDetailPage() {
 	const publicUrl = buildPublicClubUrl(club.slug);
 	const members: any[] = membersData?.clubMembers ?? [];
 	const clubStandings: any[] = standingsData?.clubStandings ?? [];
-	// 2. Derive games logged from sessions gamesCount, not member totals
+	// Calculate games logged from completed games across all sessions
 	const totalGames = (club.sessions ?? []).reduce(
-		(n: number, s: any) => n + ((s as any).gamesCount ?? 0),
+		(n: number, s: any) => n + ((s as any).completedGames?.length ?? 0),
 		0,
 	);
 
@@ -310,6 +310,7 @@ export default function ClubDetailPage() {
 					padding: 24px 32px;
 					border-right: 1px solid rgba(138,39,72,0.12);
 					overflow-y: auto;
+					overflow-x: hidden;
 				}
 				.club-rail {
 					padding: 24px;
@@ -510,9 +511,180 @@ export default function ClubDetailPage() {
 					.club-main {
 						border-right: none;
 						border-bottom: 1px solid rgba(138,39,72,0.12);
+						overflow-x: hidden !important;
 					}
 					.club-rail {
 						background: #fff;
+					}
+				}
+
+				@media (max-width: 768px) {
+					.club-header {
+						padding: 16px;
+					}
+					.club-header-top {
+						flex-direction: column;
+						align-items: stretch;
+						gap: 16px;
+					}
+					.club-title {
+						font-size: 28px;
+					}
+					.club-meta {
+						font-size: 12px;
+					}
+					.club-header-actions {
+						flex-direction: column;
+						width: 100%;
+					}
+					.club-header-actions button {
+						width: 100% !important;
+					}
+					.club-tabs-bar {
+						grid-template-columns: 1fr;
+					}
+					.club-tabs-nav {
+						padding: 0 16px;
+						gap: 16px;
+						border-bottom: 1px solid rgba(138,39,72,0.12);
+						flex-wrap: wrap;
+					}
+					.club-tab {
+						padding: 12px 0;
+						font-size: 12px;
+					}
+					.club-stats-strip {
+						width: 100%;
+						border-left: none;
+						border-top: 1px solid rgba(138,39,72,0.12);
+						flex-wrap: wrap;
+						background: #fff;
+					}
+					.club-stat {
+						flex: 1;
+						min-width: calc(50% - 4px);
+						padding: 12px;
+						border-left: none;
+						border-top: 1px solid rgba(138,39,72,0.12);
+					}
+					.club-stat:nth-child(1),
+					.club-stat:nth-child(2) {
+						border-top: none;
+					}
+					.club-stat:nth-child(odd) {
+						border-right: 1px solid rgba(138,39,72,0.12);
+					}
+					.club-main {
+						padding: 16px;
+					}
+					.club-rail {
+						padding: 16px;
+						flex-direction: row;
+						flex-wrap: wrap;
+						gap: 24px;
+					}
+					.rail-section {
+						flex: 1;
+						min-width: 160px;
+						margin-bottom: 0;
+						padding-bottom: 0;
+						border-bottom: none;
+					}
+					.rail-section:last-child {
+						margin-top: 0;
+					}
+					.session-table-header {
+						overflow-x: auto;
+						-webkit-overflow-scrolling: touch;
+						min-width: 100%;
+					}
+					.session-row {
+						overflow-x: auto;
+						-webkit-overflow-scrolling: touch;
+						min-width: 100%;
+					}
+					.search-filter-row {
+						gap: 8px;
+						overflow-x: auto;
+						-webkit-overflow-scrolling: touch;
+						margin-bottom: 16px;
+						padding-bottom: 8px;
+						align-items: stretch;
+						flex-wrap: nowrap;
+					}
+					.search-input {
+						max-width: 100%;
+						flex-shrink: 0;
+						width: 160px;
+					}
+					.status-filter {
+						display: flex;
+						gap: 0;
+						border: 1px solid #d4d7db;
+						flex-shrink: 0;
+					}
+					.status-filter-btn {
+						padding: 6px 12px;
+						border: none;
+						background: #fff;
+						border-right: 1px solid #d4d7db;
+						font-size: 12px;
+						cursor: pointer;
+						color: rgba(29,31,32,0.6);
+						font-weight: 600;
+						white-space: nowrap;
+					}
+					.status-filter-btn:last-child {
+						border-right: none;
+					}
+					.status-filter-btn.active {
+						background: #8d1a3f;
+						color: #fff;
+					}
+				}
+
+				@media (max-width: 480px) {
+					.club-header {
+						padding: 12px;
+					}
+					.club-title {
+						font-size: 24px;
+					}
+					.club-breadcrumb {
+						font-size: 11px;
+					}
+					.club-meta {
+						font-size: 11px;
+					}
+					.club-header-actions button {
+						font-size: 11px;
+						padding: 4px 8px !important;
+						height: 32px !important;
+					}
+					.club-tab {
+						padding: 10px 0;
+						font-size: 11px;
+						gap: 4px;
+					}
+					.club-tabs-nav {
+						padding: 0 12px;
+						gap: 8px;
+					}
+					.club-stat {
+						padding: 10px 8px;
+						font-size: 12px;
+					}
+					.club-stat-label {
+						font-size: 9px;
+					}
+					.club-stat-value {
+						font-size: 18px;
+					}
+					.club-rail {
+						padding: 12px;
+					}
+					.rail-section {
+						min-width: 100%;
 					}
 				}
 			`}</style>
@@ -527,7 +699,7 @@ export default function ClubDetailPage() {
 					<div>
 						<h1 className="club-title">{club.name}</h1>
 						<p className="club-meta">
-							{members.length} players · {club.sessions?.length ?? 0} session
+							{club.memberCount ?? 0} players · {club.sessions?.length ?? 0} session
 							{(club.sessions?.length ?? 0) !== 1 ? "s" : ""} run · created {formattedCreated}
 						</p>
 					</div>
@@ -601,7 +773,7 @@ export default function ClubDetailPage() {
 				<div className="club-stats-strip">
 					<div className="club-stat">
 						<span className="club-stat-label">Players</span>
-						<span className="club-stat-value">{members.length}</span>
+						<span className="club-stat-value">{club.memberCount ?? 0}</span>
 					</div>
 					<div className="club-stat">
 						<span className="club-stat-label">Games Logged</span>
@@ -621,10 +793,11 @@ export default function ClubDetailPage() {
 				{/* Main Column */}
 				<div className="club-main">
 					{/* Tab Components */}
-					<SessionsTab club={club} activeTab={activeTab} setActiveTab={setActiveTab} />
+					<SessionsTab club={club} activeTab={activeTab} setActiveTab={setActiveTab} onTabChange={refetch} />
 					<PlayersTab
 						activeTab={activeTab}
 						members={members}
+						membersLoading={membersLoading}
 						addMemberOpen={addMemberOpen}
 						setAddMemberOpen={setAddMemberOpen}
 						editingMember={editingMember}
@@ -634,6 +807,7 @@ export default function ClubDetailPage() {
 						onAddMember={handleAddMember}
 						onEditMember={handleEditMember}
 						onRemoveMember={handleRemoveMember}
+						refetchMembers={refetchMembers}
 					/>
 					<StandingsTab
 						activeTab={activeTab}

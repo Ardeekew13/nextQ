@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Button, Form, Input, Modal, Popconfirm, Select, Tag, Dropdown, Pagination } from "antd";
+import { useState, useEffect } from "react";
+import { Button, Form, Input, Modal, Select, Tag, Dropdown, Pagination } from "antd";
 import { MoreVertical } from "lucide-react";
 
 const SKILL_OPTIONS = [
@@ -17,6 +17,7 @@ const ROWS_PER_PAGE = 10;
 interface PlayersTabProps {
 	activeTab: string;
 	members: any[];
+	membersLoading?: boolean;
 	addMemberOpen: boolean;
 	setAddMemberOpen: (open: boolean) => void;
 	editingMember: any;
@@ -26,11 +27,13 @@ interface PlayersTabProps {
 	onAddMember: (values: any) => Promise<void>;
 	onEditMember: (values: any) => Promise<void>;
 	onRemoveMember: (id: string) => Promise<void>;
+	refetchMembers?: (variables?: { filter?: string }) => void;
 }
 
 export function PlayersTab({
 	activeTab,
 	members,
+	membersLoading,
 	addMemberOpen,
 	setAddMemberOpen,
 	editingMember,
@@ -40,6 +43,7 @@ export function PlayersTab({
 	onAddMember,
 	onEditMember,
 	onRemoveMember,
+	refetchMembers,
 }: PlayersTabProps) {
 	if (activeTab !== "roster") return null;
 
@@ -47,46 +51,132 @@ export function PlayersTab({
 	const [filterValue, setFilterValue] = useState<"all" | "played" | "never" | "unrated">("all");
 	const [currentPage, setCurrentPage] = useState(1);
 
+	useEffect(() => {
+		if (refetchMembers) {
+			const filterParam = filterValue === "all" ? undefined : filterValue;
+			refetchMembers({ filter: filterParam });
+		}
+	}, [filterValue, refetchMembers]);
+
 	const sorted = [...members].sort((a, b) => (b.totalGames ?? 0) - (a.totalGames ?? 0));
 
-	const filtered = sorted.filter((m) => {
+	const searched = sorted.filter((m) => {
 		if (searchValue && !m.name.toLowerCase().includes(searchValue.toLowerCase())) return false;
-		if (filterValue === "played" && (m.totalGames ?? 0) === 0) return false;
-		if (filterValue === "never" && (m.totalGames ?? 0) > 0) return false;
-		if (filterValue === "unrated" && m.skillLevel) return false;
 		return true;
 	});
 
-	const totalNeverPlayed = filtered.filter((m) => (m.totalGames ?? 0) === 0).length;
-	const totalPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
+	const totalNeverPlayed = searched.filter((m) => (m.totalGames ?? 0) === 0).length;
+	const totalPages = Math.ceil(searched.length / ROWS_PER_PAGE);
 	const startIdx = (currentPage - 1) * ROWS_PER_PAGE;
-	const paginatedMembers = filtered.slice(startIdx, startIdx + ROWS_PER_PAGE);
+	const paginatedMembers = searched.slice(startIdx, startIdx + ROWS_PER_PAGE);
 
 	return (
 		<>
+			<style>{`
+				@media (max-width: 768px) {
+					.players-toolbar {
+						flex-direction: column;
+						gap: 8px;
+						align-items: stretch;
+					}
+					.players-search {
+						max-width: 100% !important;
+					}
+					.players-filters {
+						display: flex !important;
+						flex-direction: row !important;
+						gap: 0 !important;
+						border: 1px solid #d4d7db !important;
+						flex-wrap: wrap;
+					}
+					.players-filters button {
+						border-right: 1px solid #d4d7db !important;
+						border-bottom: none !important;
+						white-space: nowrap;
+						padding: 6px 10px !important;
+						font-size: 11px !important;
+						flex: 1;
+						min-width: 70px;
+					}
+					.players-filters button:last-child {
+						border-right: none !important;
+					}
+					.players-table-header {
+						display: none;
+					}
+					.player-row {
+						grid-template-columns: 1fr !important;
+						border: 1px solid rgba(138,39,72,0.12);
+						border-radius: 8px;
+						margin-bottom: 12px;
+						gap: 0 !important;
+					}
+					.player-row-content {
+						display: flex;
+						justify-content: space-between;
+						align-items: center;
+						padding: 8px 12px;
+						border-bottom: 1px solid rgba(138,39,72,0.08);
+					}
+					.player-row-content:last-child {
+						border-bottom: none;
+					}
+					.player-row-label {
+						font-size: 11px;
+						font-weight: 700;
+						color: rgba(29,31,32,0.5);
+						text-transform: uppercase;
+						letter-spacing: 0.1em;
+					}
+					.players-pagination {
+						padding: 12px 8px !important;
+					}
+					.players-pagination .ant-pagination {
+						font-size: 11px !important;
+					}
+				}
+
+				@media (max-width: 480px) {
+					.player-row {
+						grid-template-columns: 1fr !important;
+						margin-bottom: 8px;
+					}
+					.player-row-content {
+						padding: 6px 8px;
+						font-size: 12px;
+					}
+					.player-row-label {
+						font-size: 10px;
+					}
+				}
+			`}</style>
+
 			{/* Toolbar */}
-			<div style={{ display: "flex", gap: 12, marginBottom: 24, alignItems: "center" }}>
+			<div style={{ display: "flex", gap: 12, marginBottom: 24, alignItems: "center" }} className="players-toolbar">
 				<Input
 					placeholder={`Search ${members.length} players…`}
 					value={searchValue}
 					onChange={(e) => setSearchValue(e.target.value)}
 					style={{ maxWidth: 260 }}
 					prefix={<span style={{ color: "rgba(29,31,32,0.3)" }}>🔍</span>}
+					className="players-search"
 				/>
-				<div style={{ display: "flex", gap: 0, border: "1px solid #d4d7db" }}>
+				<div style={{ display: "flex", gap: 0, border: "1px solid #d4d7db", opacity: membersLoading ? 0.6 : 1 }} className="players-filters">
 					{(["all", "played", "never", "unrated"] as const).map((f) => (
 						<button
 							key={f}
 							onClick={() => setFilterValue(f)}
+							disabled={membersLoading}
 							style={{
 								padding: "6px 12px",
 								border: "none",
 								background: filterValue === f ? "#8d1a3f" : "#fff",
 								borderRight: f !== "unrated" ? "1px solid #d4d7db" : "none",
 								fontSize: 12,
-								cursor: "pointer",
+								cursor: membersLoading ? "not-allowed" : "pointer",
 								color: filterValue === f ? "#fff" : "rgba(29,31,32,0.6)",
 								fontWeight: 600,
+								opacity: membersLoading ? 0.7 : 1,
 							}}
 						>
 							{f === "all" ? "All" : f === "played" ? "Has played" : f === "never" ? "Never played" : "Unrated"}
@@ -102,12 +192,11 @@ export function PlayersTab({
 					>
 						+ Add player
 					</Button>
-					<Button>Import</Button>
 				</div>
 			</div>
 
 			{/* Table */}
-			<div style={{ background: "#fff" }}>
+			<div style={{ background: "#fff", overflow: "visible" }}>
 				<div
 					style={{
 						display: "grid",
@@ -122,6 +211,7 @@ export function PlayersTab({
 						borderBottom: "1px solid rgba(138,39,72,0.12)",
 						gap: 16,
 					}}
+					className="players-table-header"
 				>
 					<div>Name</div>
 					<div>Games</div>
@@ -147,6 +237,7 @@ export function PlayersTab({
 								gap: 16,
 								alignItems: "center",
 							}}
+							className="player-row"
 						>
 							<div>
 								<div style={{ fontWeight: 600, color: textColor, fontSize: 13, marginBottom: 4 }}>{member.name}</div>
@@ -176,15 +267,9 @@ export function PlayersTab({
 									</Tag>
 								)}
 							</div>
-							<div style={{ fontSize: 13, color: numColor, textAlign: "right" }}>
-								{member.totalGames ?? 0}
-							</div>
-							<div style={{ fontSize: 13, color: numColor, textAlign: "right" }}>
-								{`${member.wins ?? 0}–${member.losses ?? 0}`}
-							</div>
-							<div style={{ fontSize: 13, color: numColor, textAlign: "right" }}>
-								{member.totalGames === 0 ? "–" : `${(((member.wins ?? 0) / (member.totalGames ?? 1)) * 100).toFixed(0)}%`}
-							</div>
+							<div style={{ fontSize: 13, color: numColor, textAlign: "right" }} className="player-row-content"><span className="player-row-label">Games</span>{member.totalGames ?? 0}</div>
+							<div style={{ fontSize: 13, color: numColor, textAlign: "right" }} className="player-row-content"><span className="player-row-label">W–L</span>{`${member.wins ?? 0}–${member.losses ?? 0}`}</div>
+							<div style={{ fontSize: 13, color: numColor, textAlign: "right" }} className="player-row-content"><span className="player-row-label">Win %</span>{member.totalGames === 0 ? "–" : `${(((member.wins ?? 0) / (member.totalGames ?? 1)) * 100).toFixed(0)}%`}</div>
 							<Dropdown
 								menu={{
 									items: [
@@ -258,6 +343,7 @@ export function PlayersTab({
 				)}
 				{totalPages > 1 && (
 					<div
+						className="players-pagination"
 						style={{
 							padding: "16px 14px",
 							background: "#fff",
@@ -268,7 +354,7 @@ export function PlayersTab({
 					>
 						<Pagination
 							current={currentPage}
-							total={filtered.length}
+							total={searched.length}
 							pageSize={ROWS_PER_PAGE}
 							onChange={(page) => setCurrentPage(page)}
 							simple
@@ -290,9 +376,6 @@ export function PlayersTab({
 					<Form.Item label="Name" name="name" rules={[{ required: true }]}>
 						<Input size="large" />
 					</Form.Item>
-					<Form.Item label="Nickname" name="nickname">
-						<Input size="large" />
-					</Form.Item>
 					<Form.Item label="Skill level" name="skillLevel">
 						<Select allowClear options={SKILL_OPTIONS} size="large" />
 					</Form.Item>
@@ -308,9 +391,6 @@ export function PlayersTab({
 			>
 				<Form form={editForm} layout="vertical" onFinish={onEditMember} requiredMark={false} style={{ marginTop: 12 }}>
 					<Form.Item label="Name" name="name" rules={[{ required: true }]}>
-						<Input size="large" />
-					</Form.Item>
-					<Form.Item label="Nickname" name="nickname">
 						<Input size="large" />
 					</Form.Item>
 					<Form.Item label="Skill level" name="skillLevel">

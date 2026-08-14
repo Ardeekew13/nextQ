@@ -70,6 +70,7 @@ interface CourtCardProps {
 	onRecordResult: (game: any, winner: "A" | "B") => void;
 	onCancelGame?: (gameId: string) => void;
 	onUpdateTeams?: (gameId: string, teamAPlayerIds: string[], teamBPlayerIds: string[]) => Promise<void>;
+	onRemove?: (courtId: string) => void;
 }
 
 export function CourtCard({
@@ -83,6 +84,7 @@ export function CourtCard({
 	onRecordResult,
 	onCancelGame,
 	onUpdateTeams,
+	onRemove,
 }: CourtCardProps) {
 	const [editing, setEditing] = useState(false);
 	const [editTeamA, setEditTeamA] = useState<string[]>([]);
@@ -132,6 +134,16 @@ export function CourtCard({
 								style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(29,31,32,0.35)", padding: "2px 4px", lineHeight: 1, display: "flex", alignItems: "center" }}
 							>
 								<EditOutlined style={{ fontSize: 13 }} />
+							</button>
+						</Tooltip>
+					)}
+					{onRemove && (
+						<Tooltip title="Remove court">
+							<button
+								onClick={() => onRemove(court.id)}
+								style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(29,31,32,0.35)", padding: "2px 4px", lineHeight: 1, display: "flex", alignItems: "center", fontSize: 18 }}
+							>
+								×
 							</button>
 						</Tooltip>
 					)}
@@ -244,10 +256,18 @@ export function CourtCard({
 			) : (
 				/* ── Empty court ── */
 				<div style={{ padding: "8px 18px 16px" }}>
-					<Button type="dashed" block loading={generating} onClick={() => onFill(court.id)}
-						style={{ borderRadius: 6, fontWeight: 600 }}>
-						Fill Court
-					</Button>
+					<Tooltip title={!sessionActive ? "Start the session to fill courts" : ""}>
+						<Button
+							type="dashed"
+							block
+							disabled={!sessionActive}
+							loading={generating && queuedPlayers.length > 0}
+							onClick={() => onFill(court.id)}
+							style={{ borderRadius: 6, fontWeight: 600 }}
+						>
+							Fill Court
+						</Button>
+					</Tooltip>
 				</div>
 			)}
 		</div>

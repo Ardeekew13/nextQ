@@ -1,14 +1,17 @@
 "use client";
 
 import {
+	ADD_COURT,
 	CANCEL_GAME,
 	CHECK_IN_PLAYER,
 	COMPLETE_GAME,
+	DELETE_COURT,
 	FILL_COURT_MANUALLY,
 	GENERATE_NEXT_GAME,
 	SESSION_DASHBOARD_QUERY,
 	UPDATE_GAME_RESULT,
 	UPDATE_GAME_TEAMS,
+	CLUB_DETAIL_QUERY,
 } from "@/graphql/documents/organiser";
 import { useMutation, useQuery } from "@apollo/client";
 import { App, Button, Empty, Input, Typography } from "antd";
@@ -43,10 +46,9 @@ export function OverviewTab({
 	sessionId: string;
 	onStats?: (s: SessionStats) => void;
 }) {
-	const { message } = App.useApp();
+	const { message, modal } = App.useApp();
 	const { data, loading, error, refetch } = useQuery(SESSION_DASHBOARD_QUERY, {
 		variables: { id: sessionId },
-		pollInterval: 6000,
 	});
 
 	const [generateNextGame, { loading: generating }] =
@@ -60,6 +62,15 @@ export function OverviewTab({
 		useMutation(UPDATE_GAME_RESULT);
 	const [cancelGame] = useMutation(CANCEL_GAME);
 	const [checkInPlayer] = useMutation(CHECK_IN_PLAYER);
+	const [addCourt, { loading: addingCourt }] = useMutation(ADD_COURT, {
+		refetchQueries: [{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } }],
+	});
+	const [deleteCourt] = useMutation(DELETE_COURT, {
+		refetchQueries: [
+			{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } },
+		],
+		awaitRefetchQueries: true,
+	});
 
 	const [scoreGame, setScoreGame] = useState<any>(null);
 	const [editResultGame, setEditResultGame] = useState<any>(null);
@@ -113,10 +124,6 @@ export function OverviewTab({
 	const showAlert = !alertDismissed && estimatedWaitMin >= 60;
 
 	// Scoring mode label
-	const scoringMode = session.settings?.scoring?.pointsTarget
-		? `TO ${session.settings.scoring.pointsTarget}`
-		: "WIN/LOSS ONLY · NO SCORE ENTRY";
-
 	// Filtered queue
 	const filteredQueue = queuedPlayers.filter((p: any) =>
 		p.name.toLowerCase().includes(queueSearch.toLowerCase()),
@@ -219,6 +226,73 @@ export function OverviewTab({
 		<div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
 			<style>{`
 				.queue-row:hover { background: #fdf2f8; }
+
+				.main-content-grid {
+					display: grid;
+					grid-template-columns: 1fr 420px;
+					flex: 1;
+				}
+
+				.courts-left {
+					border-right: 1px solid rgba(138,39,72,0.12);
+					min-width: 0;
+				}
+
+				.queue-right {
+					display: flex;
+					flex-direction: column;
+				}
+
+				@media (max-width: 900px) {
+					.main-content-grid {
+						grid-template-columns: 1fr;
+					}
+
+					.courts-left {
+						border-right: none;
+						border-bottom: 1px solid rgba(138,39,72,0.08);
+					}
+
+					.queue-right {
+						border-left: none;
+						border-top: 1px solid rgba(138,39,72,0.08);
+					}
+
+					.court-cards-grid {
+						grid-template-columns: 1fr !important;
+						padding: 12px !important;
+						gap: 12px !important;
+					}
+					.courts-header {
+						flex-direction: column;
+						align-items: flex-start !important;
+						gap: 12px !important;
+						padding: 12px 16px !important;
+					}
+					.courts-header-right {
+						width: 100%;
+					}
+					.add-court-btn {
+						width: 100% !important;
+						height: 36px !important;
+						font-size: 12px !important;
+					}
+				}
+
+				@media (max-width: 480px) {
+					.courts-header {
+						padding: 10px 12px !important;
+					}
+					.court-cards-grid {
+						padding: 8px !important;
+						gap: 8px !important;
+					}
+					.add-court-btn {
+						height: 32px !important;
+						font-size: 11px !important;
+						padding: 0 8px !important;
+					}
+				}
 			`}</style>
 
 			{/* ── Alert Banner ── */}
@@ -287,15 +361,12 @@ export function OverviewTab({
 			)}
 
 			{/* ── Main content: courts + queue ── */}
-			<div
-				style={{ display: "grid", gridTemplateColumns: "1fr 420px", flex: 1 }}
-			>
+			<div className="main-content-grid">
 				{/* Left: courts + on deck + last games */}
-				<div
-					style={{ borderRight: "1px solid rgba(138,39,72,0.12)", minWidth: 0 }}
-				>
+				<div className="courts-left">
 					{/* Courts header */}
 					<div
+						className="courts-header"
 						style={{
 							display: "flex",
 							alignItems: "center",
@@ -315,30 +386,58 @@ export function OverviewTab({
 						>
 							Courts
 						</span>
-						<span
-							style={{
-								fontSize: 10,
-								fontWeight: 600,
-								letterSpacing: "0.12em",
-								textTransform: "uppercase",
-								color: "rgba(29,31,32,0.4)",
-							}}
-						>
-							{scoringMode}
-						</span>
+						<div className="courts-header-right">
+							<Button
+								className="add-court-btn"
+								size="small"
+								onClick={() => {
+									const courtNumbers = new Set((session?.courts ?? []).map((c: any) => c.courtNumber));
+									let courtNumber = 1;
+									while (courtNumbers.has(courtNumber)) {
+										courtNumber++;
+									}
+									addCourt({
+										variables: {
+											sessionId,
+											input: { courtNumber },
+										},
+									})
+										.then(() => {
+											message.success("Court added!");
+											refetch();
+										})
+										.catch((err: any) => {
+											message.error(err.message || "Failed to add court");
+										});
+								}}
+								loading={addingCourt}
+								style={{
+									background: "#e11d74",
+									borderColor: "#e11d74",
+									color: "#fff",
+									fontWeight: 600,
+									fontSize: 11,
+									height: 28,
+									padding: "0 12px",
+								}}
+							>
+								+ Add Court
+							</Button>
+						</div>
 					</div>
 
 					{/* Court cards grid */}
 					<div
+						className="court-cards-grid"
 						style={{
 							display: "grid",
-							gridTemplateColumns: session.courts.length === 1
-								? "1fr"
-								: session.courts.length === 2
-								? "repeat(2, 1fr)"
-								: session.courts.length === 3
-								? "repeat(3, 1fr)"
-								: "repeat(auto-fill, minmax(240px, 1fr))",
+							gridTemplateColumns: (() => {
+								const courtCount = session.courts.length;
+								if (courtCount === 1) return "1fr";
+								if (courtCount === 2) return "repeat(2, 1fr)";
+								if (courtCount === 3) return "repeat(3, 1fr)";
+								return "repeat(auto-fill, minmax(240px, 1fr))";
+							})(),
 							gap: 16,
 							padding: 20,
 						}}
@@ -358,6 +457,28 @@ export function OverviewTab({
 								onRecordResult={handleRecordResult}
 								onCancelGame={handleCancelGame}
 								onUpdateTeams={handleUpdateTeams}
+								onRemove={(courtId) => {
+									modal.confirm({
+										title: "Remove this court?",
+										content: "This court will be permanently deleted.",
+										okText: "Remove",
+										okButtonProps: { danger: true },
+										onOk: async () => {
+											try {
+												await deleteCourt({
+													variables: { id: courtId },
+													refetchQueries: [
+														{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } },
+														{ query: CLUB_DETAIL_QUERY, variables: { id: data?.session?.clubId } },
+													],
+												});
+												message.success("Court removed!");
+											} catch (err) {
+												message.error(err instanceof Error ? err.message : "Failed to remove court");
+											}
+										},
+									});
+								}}
 							/>
 						))}
 					</div>
@@ -371,48 +492,43 @@ export function OverviewTab({
 								margin: "0 20px 20px",
 								padding: "16px 20px",
 								display: "flex",
-								alignItems: "center",
-								gap: 32,
+								flexDirection: "column",
+								gap: 20,
 							}}
 						>
-							<div style={{ flex: 1, minWidth: 0, display: "flex", gap: 32 }}>
-								{/* Group 1 — next 4 */}
-								{queuedPlayers.slice(0, 4).length > 0 && (
-									<div>
-										<div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>
-											ON DECK · NEXT OFF {nextOffCourt ? `COURT ${nextOffCourt.courtNumber}` : "COURT"}
+							<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 32 }}>
+								<div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+									{/* Group 1 — next 4 */}
+									{queuedPlayers.slice(0, 4).length > 0 && (
+										<div>
+											<div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>
+												ON DECK · NEXT OFF {nextOffCourt ? `COURT ${nextOffCourt.courtNumber}` : "COURT"}
+											</div>
+											<div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+												{queuedPlayers.slice(0, 4).map((p: any) => (
+													<span key={p.id} style={{ fontSize: 17, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+														{p.name}
+													</span>
+												))}
+											</div>
 										</div>
-										<div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-											{queuedPlayers.slice(0, 4).map((p: any) => (
-												<span key={p.id} style={{ fontSize: 17, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-													{p.name}
-												</span>
-											))}
+									)}
+									{/* Group 2 — players 5–8 */}
+									{queuedPlayers.slice(4, 8).length > 0 && (
+										<div>
+											<div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>
+												AFTER THAT
+											</div>
+											<div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+												{queuedPlayers.slice(4, 8).map((p: any) => (
+													<span key={p.id} style={{ fontSize: 17, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.65 }}>
+														{p.name}
+													</span>
+												))}
+											</div>
 										</div>
-									</div>
-								)}
-								{/* Group 2 — players 5–8 */}
-								{queuedPlayers.slice(4, 8).length > 0 && (
-									<div style={{ borderLeft: "1px solid rgba(255,255,255,0.15)", paddingLeft: 32 }}>
-										<div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>
-											AFTER THAT
-										</div>
-										<div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-											{queuedPlayers.slice(4, 8).map((p: any) => (
-												<span key={p.id} style={{ fontSize: 17, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.65 }}>
-													{p.name}
-												</span>
-											))}
-										</div>
-									</div>
-								)}
-							</div>
-							<div style={{ flexShrink: 0 }}>
-								<Button
-									style={{ background: "transparent", borderColor: "rgba(255,255,255,0.5)", color: "#fff", fontWeight: 600 }}
-								>
-									Redraw
-								</Button>
+									)}
+								</div>
 							</div>
 						</div>
 					)}
@@ -598,7 +714,7 @@ export function OverviewTab({
 				</div>
 
 				{/* Right: Waiting Queue */}
-				<div style={{ display: "flex", flexDirection: "column" }}>
+				<div className="queue-right">
 					<div
 						style={{
 							padding: "14px 16px 10px",

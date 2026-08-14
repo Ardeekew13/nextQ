@@ -81,6 +81,8 @@ export function GameLog({
 }) {
   const [courtFilter, setCourtFilter] = useState<string>("all");
   const [playerSearch, setPlayerSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const ROUNDS_PER_PAGE = 5;
 
   const courtOptions = useMemo(() => {
     const seen = new Map<string, { id: string; number: number; label: string }>();
@@ -131,6 +133,11 @@ export function GameLog({
 
   const totalRounds = groupIntoRounds([...games].filter(g => g.status !== "QUEUED" && g.status !== "IN_PROGRESS").sort((a, b) => b.gameNumber - a.gameNumber)).length;
 
+  // Pagination
+  const totalPages = Math.ceil(rounds.length / ROUNDS_PER_PAGE);
+  const startIdx = (currentPage - 1) * ROUNDS_PER_PAGE;
+  const paginatedRounds = rounds.slice(startIdx, startIdx + ROUNDS_PER_PAGE);
+
   const thStyle: React.CSSProperties = {
     fontSize: 11, fontWeight: 700, letterSpacing: "0.12em",
     textTransform: "uppercase", color: "#9ca3af",
@@ -144,12 +151,152 @@ export function GameLog({
       <style>{`
         .gl-row:hover { background: #fdf2f8 !important; }
         .gl-round-header { background: #fff0f5; }
+
+        @media (max-width: 1024px) {
+          .gl-toolbar {
+            flex-direction: column;
+            gap: 12px;
+            align-items: stretch;
+          }
+          .gl-search {
+            width: 100% !important;
+            max-width: none !important;
+          }
+          .gl-court-pills {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .gl-table-header {
+            display: none !important;
+          }
+          .gl-table-wrapper {
+            margin: 0;
+            padding: 0;
+            overflow: visible;
+          }
+          .gl-round-header {
+            grid-template-columns: 1fr !important;
+            padding: 8px 24px !important;
+            border-bottom: 1px solid rgba(138,39,72,0.12) !important;
+            margin-bottom: 0 !important;
+            min-height: 36px !important;
+            position: relative !important;
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+          }
+          .gl-round-header + .gl-row > div:nth-child(6) {
+            display: flex !important;
+            position: absolute !important;
+            top: 6px !important;
+            right: 20px !important;
+            z-index: 100 !important;
+            padding: 0 !important;
+            margin-top: -45px !important;
+            background: transparent !important;
+          }
+          .gl-round-header > div {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            justify-content: space-between;
+          }
+          .gl-round-header span:first-child {
+            font-size: 11px !important;
+            font-weight: 800 !important;
+            color: #e11d74 !important;
+          }
+          .gl-round-header span:last-child {
+            font-size: 10px !important;
+            color: rgba(29,31,32,0.45) !important;
+          }
+          .gl-row {
+            grid-template-columns: 1fr !important;
+            padding: 0 !important;
+            border: none !important;
+            border-bottom: 1px solid rgba(138,39,72,0.12) !important;
+            background: transparent !important;
+            min-height: auto !important;
+            gap: 0 !important;
+          }
+          .gl-row > div:nth-child(1),
+          .gl-row > div:nth-child(2) {
+            display: none !important;
+          }
+          .gl-row > div {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 24px !important;
+            border-bottom: none !important;
+            font-size: 12px !important;
+          }
+          .gl-row > div:nth-child(3) {
+            flex-direction: column !important;
+            align-items: center !important;
+            text-align: center !important;
+          }
+          .gl-row > div:nth-child(3) span {
+            font-size: 12px !important;
+            display: block !important;
+            margin: 2px 0 !important;
+          }
+          .gl-row > div:nth-child(3) span:nth-child(2) {
+            font-size: 11px !important;
+          }
+          .gl-row > div:nth-child(3) span::before {
+            display: none !important;
+          }
+          .gl-row > div:nth-child(3) > span:first-child {
+            font-size: 12px !important;
+          }
+          .gl-row > div:nth-child(3) > span:first-child::before {
+            content: "" !important;
+          }
+          .gl-row > div:nth-child(3) span span {
+            display: none !important;
+          }
+          .gl-row > div:nth-child(4) {
+            display: none !important;
+          }
+          .gl-round-header {
+            position: relative !important;
+          }
+          div > .gl-row:first-of-type > div:nth-child(6) {
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            padding: 0 !important;
+            position: absolute !important;
+            right: 20px !important;
+            top: -32px !important;
+            min-height: 32px !important;
+            z-index: 10 !important;
+          }
+          div > .gl-row:first-of-type > div:nth-child(6) button {
+            color: rgba(29,31,32,0.5) !important;
+            font-size: 18px !important;
+            padding: 4px 8px !important;
+          }
+          .gl-row > div:nth-child(6) {
+            display: none !important;
+          }
+          .gl-round-header > div:last-child {
+            display: flex !important;
+            justify-content: flex-end !important;
+            padding: 0 24px 0 0 !important;
+          }
+        }
       `}</style>
 
       {/* Toolbar */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0", borderBottom: "1px solid rgba(138,39,72,0.08)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0", borderBottom: "1px solid rgba(138,39,72,0.08)" }} className="gl-toolbar">
         {/* Search */}
-        <div style={{ position: "relative", width: 220, flexShrink: 0 }}>
+        <div style={{ position: "relative", width: 220, flexShrink: 0 }} className="gl-search">
           <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#e11d74", fontSize: 13, pointerEvents: "none" }}>&#128269;</span>
           <input
             value={playerSearch}
@@ -160,7 +307,7 @@ export function GameLog({
         </div>
 
         {/* Court filter pills */}
-        <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ display: "flex", gap: 6 }} className="gl-court-pills">
           {[{ id: "all", label: "All courts" }, ...courtOptions.map(c => ({ id: c.id, label: c.label }))].map(({ id, label }) => {
             const active = courtFilter === id;
             return (
@@ -172,23 +319,24 @@ export function GameLog({
         </div>
       </div>
 
-      {/* Table header */}
-      <div style={{ display: "grid", gridTemplateColumns: GRID, padding: "0", background: "#f9f0f4", borderTop: "1px solid rgba(138,39,72,0.12)", borderBottom: "2px solid rgba(225,29,116,0.18)" }}>
-        <div style={thStyle}>#</div>
-        <div style={thStyle}>Court</div>
-        <div style={thStyle}>Matchup · <span style={{ color: "#e11d74", fontWeight: 800 }}>Winner in pink</span></div>
-        <div style={thStyle}>Length</div>
-        <div style={thStyle}>Ended</div>
-        <div style={thStyle} />
-      </div>
+      <div className="gl-table-wrapper">
+        {/* Table header */}
+        <div style={{ display: "grid", gridTemplateColumns: GRID, padding: "0", background: "#f9f0f4", borderTop: "1px solid rgba(138,39,72,0.12)", borderBottom: "2px solid rgba(225,29,116,0.18)" }} className="gl-table-header">
+          <div style={thStyle}>#</div>
+          <div style={thStyle}>Court</div>
+          <div style={thStyle}>Matchup · <span style={{ color: "#e11d74", fontWeight: 800 }}>Winner in pink</span></div>
+          <div style={thStyle}>Length</div>
+          <div style={thStyle}>Ended</div>
+          <div style={thStyle} />
+        </div>
 
-      {/* Rounds */}
-      {rounds.length === 0 ? (
+        {/* Rounds */}
+        {rounds.length === 0 ? (
         <div style={{ padding: 48, textAlign: "center" }}>
           <Text type="secondary">No completed games yet</Text>
         </div>
       ) : (
-        rounds.map((round) => {
+        paginatedRounds.map((round) => {
           const roundTime = round.games[0]?.completedAt ? toTime(round.games[0].completedAt) : "";
           const voidedCount = round.games.filter(g => g.status === "CANCELLED").length;
           return (
@@ -219,13 +367,13 @@ export function GameLog({
                 return (
                   <div key={game.id} className="gl-row" style={{ display: "grid", gridTemplateColumns: GRID, padding: "0", minHeight: 52, alignItems: "center", borderBottom: "1px solid rgba(138,39,72,0.06)", background: "#fff" }}>
                     {/* # */}
-                    <div style={{ fontSize: 13, color: isVoided ? "rgba(29,31,32,0.3)" : "rgba(29,31,32,0.5)", padding: "0 14px" }}>{game.gameNumber}</div>
+                    <div style={{ fontSize: 13, color: isVoided ? "rgba(29,31,32,0.3)" : "rgba(29,31,32,0.5)", padding: "0 14px" }} className="gl-cell">{game.gameNumber}</div>
 
                     {/* Court */}
-                    <div style={{ fontSize: 13, color: isVoided ? "rgba(29,31,32,0.3)" : "#1d1f20", textDecoration: isVoided ? "line-through" : "none", padding: "0 14px" }}>{courtLabel}</div>
+                    <div style={{ fontSize: 13, color: isVoided ? "rgba(29,31,32,0.3)" : "#1d1f20", textDecoration: isVoided ? "line-through" : "none", padding: "0 14px" }} className="gl-cell">{courtLabel}</div>
 
                     {/* Matchup */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "0 14px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "0 14px" }} className="gl-cell">
                       {/* Team A */}
                       <span style={{ fontSize: 14, fontWeight: winnerIsA ? 700 : 400, color: isVoided ? "rgba(29,31,32,0.3)" : winnerIsA ? "#e11d74" : "#1d1f20", textDecoration: isVoided ? "line-through" : "none", display: "flex", alignItems: "center", gap: 4 }}>
                         {winnerIsA && !isVoided && <span style={{ fontSize: 12 }}>✓</span>}
@@ -245,12 +393,12 @@ export function GameLog({
                     </div>
 
                     {/* Length */}
-                    <div style={{ fontSize: 13, color: "rgba(29,31,32,0.5)", padding: "0 14px" }}>
+                    <div style={{ fontSize: 13, color: "rgba(29,31,32,0.5)", padding: "0 14px" }} className="gl-cell">
                       {dur !== null ? `${dur} min` : "—"}
                     </div>
 
                     {/* Ended */}
-                    <div style={{ fontSize: 13, color: "rgba(29,31,32,0.5)", padding: "0 14px" }}>
+                    <div style={{ fontSize: 13, color: "rgba(29,31,32,0.5)", padding: "0 14px" }} className="gl-cell">
                       {toTime(game.completedAt)}
                     </div>
 
@@ -276,13 +424,23 @@ export function GameLog({
           );
         })
       )}
+      </div>
 
       {/* Footer */}
       {rounds.length > 0 && (
         <div style={{ padding: "12px 0", borderTop: "1px solid rgba(138,39,72,0.08)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            Showing rounds {rounds[0]?.roundNum}–{rounds[rounds.length - 1]?.roundNum} of {totalRounds} · newest first · scroll for earlier rounds
-          </Text>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {paginatedRounds.length > 0 ? `Rounds ${paginatedRounds[0]?.roundNum}–${paginatedRounds[paginatedRounds.length - 1]?.roundNum} of ${totalRounds}` : "No rounds"}
+            </Text>
+            {totalPages > 1 && (
+              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} style={{ background: "none", border: "1px solid rgba(29,31,32,0.2)", borderRadius: 4, cursor: currentPage === 1 ? "default" : "pointer", color: currentPage === 1 ? "rgba(29,31,32,0.25)" : "#1d1f20", fontSize: 13, padding: "2px 10px" }}>‹</button>
+                <span style={{ fontSize: 12, color: "rgba(29,31,32,0.5)", padding: "0 6px" }}>{currentPage} / {totalPages}</span>
+                <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} style={{ background: "none", border: "1px solid rgba(29,31,32,0.2)", borderRadius: 4, cursor: currentPage === totalPages ? "default" : "pointer", color: currentPage === totalPages ? "rgba(29,31,32,0.25)" : "#1d1f20", fontSize: 13, padding: "2px 10px" }}>›</button>
+              </div>
+            )}
+          </div>
           {scoringLabel && (
             <Text type="secondary" style={{ fontSize: 12 }}>{scoringLabel}</Text>
           )}

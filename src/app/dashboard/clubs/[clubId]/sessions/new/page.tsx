@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "@apollo/client";
 import { App, Button } from "antd";
 import { CREATE_SESSION, CLUB_DETAIL_QUERY } from "@/graphql/documents/organiser";
@@ -48,6 +48,7 @@ function getModeHint(mode: QueueMode, courts: number, players: number): string |
 export default function NewSessionPage() {
 	const params = useParams<{ clubId: string }>();
 	const router = useRouter();
+	const searchParams = useSearchParams();
 	const { message } = App.useApp();
 	const [createSession, { loading }] = useMutation(CREATE_SESSION);
 	const { data: clubData } = useQuery(CLUB_DETAIL_QUERY, { variables: { id: params.clubId } });
@@ -65,6 +66,25 @@ export default function NewSessionPage() {
 	const estimatedPlayers = (lastSession?.players ?? []).length || 18;
 	const hint = getModeHint(queueMode, courts, estimatedPlayers);
 
+	// Pre-fill from template session if provided
+	useEffect(() => {
+		if (!club?.sessions) return;
+		const templateId = searchParams.get("template");
+		if (!templateId) return;
+
+		const templateSession = club.sessions.find((s: any) => s.id === templateId);
+		if (templateSession) {
+			setName(templateSession.name);
+			setCourts(templateSession.courts?.length ?? 2);
+			if (templateSession.settings?.queueMode) {
+				setQueueMode(templateSession.settings.queueMode as QueueMode);
+			}
+			if (templateSession.startTime) {
+				setStartTime(templateSession.startTime);
+			}
+		}
+	}, [club?.sessions, searchParams]);
+
 	useEffect(() => {
 		if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
 		autoSaveTimer.current = setTimeout(() => {
@@ -76,6 +96,7 @@ export default function NewSessionPage() {
 
 	async function handleSubmit() {
 		if (!name.trim()) { message.error("Enter a session name"); return; }
+		if (!courts || courts < 1) { message.error("Enter at least 1 court"); return; }
 		try {
 			const result = await createSession({
 				variables: {
@@ -217,10 +238,16 @@ export default function NewSessionPage() {
 						<label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "rgba(29,31,32,0.55)", marginBottom: 6 }}>Courts</label>
 						<input
 							type="number"
-							min={1}
 							max={20}
-							value={courts}
-							onChange={(e) => setCourts(Math.max(1, parseInt(e.target.value) || 1))}
+							value={courts === 0 ? "" : courts}
+							onChange={(e) => {
+								if (e.target.value === "") {
+									setCourts(0);
+								} else {
+									const num = parseInt(e.target.value);
+									if (!isNaN(num)) setCourts(Math.min(20, Math.max(0, num)));
+								}
+							}}
 							style={{ width: "100%", boxSizing: "border-box", fontSize: 15, fontWeight: 500, padding: "10px 14px", border: "1.5px solid rgba(225,29,116,0.3)", background: "#fff", color: "#1d1f20", outline: "none" }}
 						/>
 					</div>

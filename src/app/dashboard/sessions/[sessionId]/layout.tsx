@@ -9,7 +9,6 @@ import { FinishCelebrationModal } from "@/components/FinishCelebrationModal";
 import {
   SESSION_HEADER_QUERY,
   SESSION_DASHBOARD_QUERY,
-  START_SESSION,
   PAUSE_SESSION,
   RESUME_SESSION,
   FINISH_SESSION,
@@ -38,10 +37,9 @@ export default function SessionLayout({ children }: { children: ReactNode }) {
     podium: import("@/components/Podium").PodiumEntryView[];
   } | null>(null);
 
-  // Layout only needs header-level data (name, status, publicUrl) — poll lightly
+  // Layout only needs header-level data (name, status, publicUrl)
   const { data, loading, error, refetch } = useQuery(SESSION_HEADER_QUERY, {
     variables: { id: params.sessionId },
-    pollInterval: 8000,
   });
 
   // Used only after finishSession to grab podium for the celebration modal
@@ -50,7 +48,6 @@ export default function SessionLayout({ children }: { children: ReactNode }) {
     skip: true,
   });
 
-  const [startSession] = useMutation(START_SESSION);
   const [pauseSession] = useMutation(PAUSE_SESSION);
   const [resumeSession] = useMutation(RESUME_SESSION);
   const [finishSession] = useMutation(FINISH_SESSION);
@@ -92,11 +89,6 @@ export default function SessionLayout({ children }: { children: ReactNode }) {
     setActions(
       <Space wrap size={6}>
         <QrPopover url={session.publicUrl} />
-        {session.status === "DRAFT" && (
-          <Button size="small" type="primary" onClick={() => run(() => startSession({ variables: { id: session.id } }), "Session started")}>
-            Start session
-          </Button>
-        )}
         {session.status === "ACTIVE" && (
           <Button size="small" onClick={() => run(() => pauseSession({ variables: { id: session.id } }), "Session paused")}>
             Pause

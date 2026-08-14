@@ -108,7 +108,9 @@ function relativeTime(iso: string | null | undefined): string {
 
 function winPct(rate: number | null | undefined): string {
   if (rate == null) return "—";
-  return `.${String(Math.round(rate * 1000)).padStart(3, "0")}`;
+  // If rate is already > 1, it's in 0-100 format; otherwise multiply by 100
+  const pct = rate > 1 ? rate : rate * 100;
+  return `${pct.toFixed(2)}%`;
 }
 
 const thStyle: CSSProperties = {
@@ -143,7 +145,6 @@ export function PlayersTab({
   const { message } = App.useApp();
   const { data, refetch } = useQuery(PLAYERS_QUERY, {
     variables: { id: sessionId },
-    pollInterval: 5000,
   });
 
   const [addOpen, setAddOpen] = useState(false);
@@ -171,6 +172,7 @@ export function PlayersTab({
 
   const [selectedImportIds, setSelectedImportIds] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
+  const [importSearch, setImportSearch] = useState("");
   const [fetchClubMembers, { data: membersData, loading: membersLoading }] = useLazyQuery(CLUB_MEMBERS_QUERY);
   const [fetchAllTime, { data: allTimeData, loading: allTimeLoading }] = useLazyQuery(SESSION_PLAYERS_ALLTIME_QUERY);
 
@@ -336,14 +338,53 @@ export function PlayersTab({
         .pl-row:hover { background: #fdf2f8 !important; }
       `}</style>
 
+      <style>{`
+        @media (max-width: 768px) {
+          .players-alert {
+            padding: 10px 16px !important;
+            min-height: auto !important;
+            gap: 8px !important;
+          }
+          .players-alert-text {
+            font-size: 12px !important;
+            line-height: 1.3 !important;
+          }
+          .players-alert button {
+            padding: 4px 12px !important;
+            font-size: 11px !important;
+            height: auto !important;
+          }
+          .players-toolbar {
+            padding: 10px 16px !important;
+            flex-direction: column !important;
+            gap: 8px !important;
+          }
+          .players-search {
+            width: 100% !important;
+            max-width: none !important;
+          }
+          .players-table-wrapper {
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            padding: 0 16px !important;
+          }
+          .players-table-header {
+            min-width: 800px !important;
+          }
+          .pl-row {
+            min-width: 800px !important;
+          }
+        }
+      `}</style>
+
       {/* Alert banner */}
       {allUnrated && !alertDismissed && (
         <div style={{
           background: "#fff0f5", borderBottom: "1px solid #fbb6ce",
           padding: "14px 24px", display: "flex", alignItems: "center", gap: 12, minHeight: 56,
-        }}>
+        }} className="players-alert">
           <span style={{ fontSize: 15, color: "#e11d74", flexShrink: 0 }}>&#9432;</span>
-          <Text style={{ fontSize: 13, flex: 1, color: "#111827" }}>
+          <Text style={{ fontSize: 13, flex: 1, color: "#111827" }} className="players-alert-text">
             Every player is unrated, so hybrid mode is drawing at random rather than balancing skill.{" "}
             Rate them in bulk or switch the session to strict queue order.
           </Text>
@@ -368,9 +409,9 @@ export function PlayersTab({
       <div style={{
         display: "flex", alignItems: "center", gap: 12,
         padding: "14px 24px", borderBottom: "1px solid rgba(138,39,72,0.08)",
-      }}>
+      }} className="players-toolbar">
         {/* Pink search input */}
-        <div style={{ position: "relative", width: 300, flexShrink: 0 }}>
+        <div style={{ position: "relative", width: 300, flexShrink: 0 }} className="players-search">
           <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#e11d74", fontSize: 13, pointerEvents: "none" }}>
             &#128269;
           </span>
@@ -453,16 +494,17 @@ export function PlayersTab({
         </div>
       )}
 
+      <div className="players-table-wrapper">
       {/* Table header */}
       {view === "session" ? (
-        <div style={{ display: "grid", gridTemplateColumns: GRID, padding: "0 24px", background: "#fafafa", borderBottom: "1px solid rgba(138,39,72,0.08)", flexShrink: 0 }}>
+        <div style={{ display: "grid", gridTemplateColumns: GRID, padding: "0 24px", background: "#fafafa", borderBottom: "1px solid rgba(138,39,72,0.08)", flexShrink: 0 }} className="players-table-header">
           <div style={thStyle}>
             <Checkbox checked={allVisibleSelected} indeterminate={selectedKeys.length > 0 && !allVisibleSelected} onChange={(e) => setSelectedKeys(e.target.checked ? sortedPlayers.map((p: any) => p.id) : [])} />
           </div>
           {(["PLAYER", "STATUS", "SKILL", "TONIGHT GP", "W\u2013L", "WIN %", "LAST ON", ""] as const).map((h) => (<div key={h} style={thStyle}>{h}</div>))}
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 120px 80px 80px 80px 100px", padding: "0 24px", background: "#fafafa", borderBottom: "1px solid rgba(138,39,72,0.08)", flexShrink: 0 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 120px 80px 80px 80px 100px", padding: "0 24px", background: "#fafafa", borderBottom: "1px solid rgba(138,39,72,0.08)", flexShrink: 0 }} className="players-table-header">
           {(["PLAYER", "SKILL", "SESSIONS", "TOTAL GP", "W\u2013L", "WIN %"] as const).map((h) => (<div key={h} style={thStyle}>{h}</div>))}
         </div>
       )}
@@ -533,6 +575,7 @@ export function PlayersTab({
           ))}
         </>
       )}
+      </div>
 
       {/* Pagination footer */}
       {totalPages > 1 && (
@@ -590,15 +633,25 @@ export function PlayersTab({
                     <Empty description={clubMembers.length === 0 ? "No club roster yet." : "All club members are already in this session."} />
                   ) : (
                     <div>
-                      <div style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <Text type="secondary">{importableMembers.length} available · {selectedImportIds.length} selected</Text>
+                      <Input
+                        placeholder="Search players..."
+                        value={importSearch}
+                        onChange={(e) => setImportSearch(e.target.value)}
+                        style={{ marginBottom: 12 }}
+                        prefix={<span style={{ color: "rgba(29,31,32,0.3)" }}>🔍</span>}
+                      />
+                      <div style={{ marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <Text type="secondary">{importableMembers.filter((m: any) => m.name.toLowerCase().includes(importSearch.toLowerCase())).length} available · {selectedImportIds.length} selected</Text>
                         <Button size="small" type="link"
-                          onClick={() => setSelectedImportIds(selectedImportIds.length === importableMembers.length ? [] : importableMembers.map((m: any) => m.id))}>
-                          {selectedImportIds.length === importableMembers.length ? "Deselect all" : "Select all"}
+                          onClick={() => {
+                            const filtered = importableMembers.filter((m: any) => m.name.toLowerCase().includes(importSearch.toLowerCase()));
+                            setSelectedImportIds(selectedImportIds.length === filtered.length ? [] : filtered.map((m: any) => m.id));
+                          }}>
+                          {selectedImportIds.length === importableMembers.filter((m: any) => m.name.toLowerCase().includes(importSearch.toLowerCase())).length ? "Deselect all" : "Select all"}
                         </Button>
                       </div>
                       <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
-                        {importableMembers.map((m: any) => (
+                        {importableMembers.filter((m: any) => m.name.toLowerCase().includes(importSearch.toLowerCase())).map((m: any) => (
                           <div key={m.id}
                             onClick={() => setSelectedImportIds((prev) => prev.includes(m.id) ? prev.filter((id) => id !== m.id) : [...prev, m.id])}
                             style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, cursor: "pointer", background: selectedImportIds.includes(m.id) ? "#fff0f5" : "#fafafa", border: `1px solid ${selectedImportIds.includes(m.id) ? "#fbb6ce" : "#e5e7eb"}` }}>
