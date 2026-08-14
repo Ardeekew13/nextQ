@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics=""><meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/industry-7f8fafb8-df04-4f77-b3ef-e3bf349300d1/styles.css">
+<script src="_ds/industry-7f8fafb8-df04-4f77-b3ef-e3bf349300d1/_ds_bundle.js"></script>
+<style>
+:root{
+  --color-bg:#ffffff; --color-surface:#fef4f7; --color-text:#1d1f20;
+  --color-accent:#f43f75; --color-accent-2:#f43f75;
+  --color-divider:color-mix(in srgb,#8a2748 24%,transparent);
+  --color-accent-100:#fff1f5; --color-accent-200:#ffdde7; --color-accent-300:#ffb9cd;
+  --color-accent-400:#ff8dad; --color-accent-500:#f9598c; --color-accent-600:#e42f68;
+  --color-accent-700:#bd2153; --color-accent-800:#8d1a3f; --color-accent-900:#5c1029;
+  --color-accent-2-100:#fff1f5; --color-accent-2-200:#ffdde7; --color-accent-2-300:#ffb9cd;
+  --color-accent-2-400:#ff8dad; --color-accent-2-500:#f9598c; --color-accent-2-600:#e42f68;
+  --color-accent-2-700:#bd2153; --color-accent-2-800:#8d1a3f; --color-accent-2-900:#5c1029;
+}
+body{margin:0;background:#f7eef1;font-family:var(--font-body)}
+a{color:var(--color-accent-700)}a:hover{color:var(--color-accent)}
+.dv-turn{padding:44px 48px 36px;border-bottom:1px solid rgba(0,0,0,.08)}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 24px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1d1f20;color:#fff;border-radius:4px;text-decoration:none}
+.dv-tname{font:600 13px/1.2 var(--font-body);color:#1d1f20}
+.dv-opts{display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(244,63,117,.14);color:#8d1a3f;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 var(--font-body);color:rgba(0,0,0,.55)}
+.dv-card{background:var(--color-bg);border:1px solid rgba(0,0,0,.1);box-shadow:0 1px 3px rgba(0,0,0,.07);overflow:hidden}
+.dv-opt:target .dv-oid{background:#f43f75;color:#fff}
+.dv-next{margin:26px 0 0;font:12px/1.5 var(--font-body);color:rgba(0,0,0,.5)}
+@keyframes nq-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.blueprint > .corner{opacity:var(--nq-corner-opacity,0);display:var(--nq-corner-display,none)}
+</style></helmet>
+
+<section class="dv-turn" id="t3">
+<div class="dv-thd"><a class="dv-tid" href="#t3">3</a><span class="dv-tname">Organiser dashboard — rebuilt</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="3a"><div class="dv-olabel"><a class="dv-oid" href="#3a">3a</a>Dashboard — next-session hero, stat strip, real session table</div>
+<div class="dv-card" style="width:1280px;height:768px;display:grid;grid-template-columns:236px 1fr;background:var(--color-bg)">
+
+  <div style="display:flex;flex-direction:column;border-right:1px solid var(--color-divider);background:var(--color-surface)">
+    <div style="padding:20px 20px 18px;border-bottom:1px solid var(--color-divider)">
+      <img src="uploads/logov2.png" alt="NextQ" style="height:42px;width:auto">
+    </div>
+    <div style="padding:16px 20px;display:flex;align-items:center;gap:11px;border-bottom:1px solid var(--color-divider)">
+      <span style="width:34px;height:34px;flex:none;background:var(--color-accent);color:#fff;display:grid;place-items:center;font:600 15px/1 var(--font-heading)">RD</span>
+      <span style="min-width:0"><span style="display:block;font:600 14px/1.1 var(--font-heading);text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Ron D. Quilicot</span><span style="display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent-700)">Organiser</span></span>
+    </div>
+    <div style="display:flex;flex-direction:column;padding:10px 0">
+      <a href="#3a" style="display:flex;align-items:center;gap:11px;padding:11px 20px;font:600 14px/1 var(--font-heading);letter-spacing:.05em;text-transform:uppercase;background:var(--color-accent);color:#fff;text-decoration:none">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>Dashboard</a>
+      <a href="#2a" style="display:flex;align-items:center;gap:11px;padding:11px 20px;font:600 14px/1 var(--font-heading);letter-spacing:.05em;text-transform:uppercase;color:var(--color-text);text-decoration:none">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v8M8 12h8"></path></svg>Sessions</a>
+      <a href="#1d" style="display:flex;align-items:center;gap:11px;padding:11px 20px;font:600 14px/1 var(--font-heading);letter-spacing:.05em;text-transform:uppercase;color:var(--color-text);text-decoration:none">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h16M4 12h11M4 18h7"></path></svg>Queue</a>
+      <a href="#1g" style="display:flex;align-items:center;gap:11px;padding:11px 20px;font:600 14px/1 var(--font-heading);letter-spacing:.05em;text-transform:uppercase;color:var(--color-text);text-decoration:none">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 20V10M12 20V4M19 20v-7"></path></svg>Standings</a>
+      <a href="#1b" style="display:flex;align-items:center;gap:11px;padding:11px 20px;font:600 14px/1 var(--font-heading);letter-spacing:.05em;text-transform:uppercase;color:var(--color-text);text-decoration:none">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="8" r="3.2"></circle><path d="M3.5 20c0-3 2.5-5 5.5-5s5.5 2 5.5 5M17 11h4M19 9v4"></path></svg>Members</a>
+    </div>
+    <div style="margin-top:auto;padding:18px 20px;border-top:1px solid var(--color-divider);display:flex;flex-direction:column;gap:12px">
+      
+      <button class="btn btn-ghost btn-block" style="justify-content:flex-start;gap:9px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8M17 8l4 4-4 4M21 12H10"></path></svg>Log out</button>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;min-width:0">
+    <div style="padding:22px 32px 18px;border-bottom:1px solid var(--color-divider);display:flex;align-items:flex-end;gap:20px">
+      <div style="flex:1">
+        <div style="font:600 10px/1 var(--font-heading);letter-spacing:.2em;text-transform:uppercase;color:var(--color-accent-700)">Wednesday 29 July · {{ clock }}</div>
+        <h1 style="margin:6px 0 0;font-size:40px;line-height:.95;text-transform:uppercase">Good evening, Ron</h1>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost" style="height:42px;color:var(--color-accent-800)">Join club</button>
+        <button class="btn btn-secondary" style="height:42px;padding-inline:18px">Create club</button>
+        <button class="btn btn-primary" style="height:42px;padding-inline:22px;font-size:15px;letter-spacing:.06em;text-transform:uppercase">New session</button>
+      </div>
+    </div>
+
+    <div style="padding:22px 32px 0">
+      <div style="display:flex;align-items:stretch;gap:26px;padding:22px 26px;background:var(--color-accent-900);color:#fff">
+        <div style="flex:1;display:flex;flex-direction:column;gap:5px">
+          <span style="font:600 10px/1 var(--font-heading);letter-spacing:.2em;text-transform:uppercase;color:var(--color-accent-300)">Up next · starts in 48 min</span>
+          <span style="font:600 32px/1.02 var(--font-heading);text-transform:uppercase">Wednesday Open Play</span>
+          <span style="font-size:12.5px;color:rgba(255,255,255,.72)">BPC · 19:00 · 2 courts · strict queue · random 4</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:28px;padding-inline:28px;border-left:1px solid rgba(255,255,255,.22);border-right:1px solid rgba(255,255,255,.22)">
+          <div><div style="font:600 10px/1 var(--font-heading);letter-spacing:.16em;text-transform:uppercase;color:var(--color-accent-300)">RSVP'd</div><div style="font:600 30px/1 var(--font-heading);margin-top:5px">18</div></div>
+          <div><div style="font:600 10px/1 var(--font-heading);letter-spacing:.16em;text-transform:uppercase;color:var(--color-accent-300)">Checked in</div><div style="font:600 30px/1 var(--font-heading);margin-top:5px">0</div></div>
+          <div><div style="font:600 10px/1 var(--font-heading);letter-spacing:.16em;text-transform:uppercase;color:var(--color-accent-300)">Status</div><div style="font:600 19px/1 var(--font-heading);margin-top:9px;text-transform:uppercase">Draft</div></div>
+        </div>
+        <div style="display:flex;flex-direction:column;justify-content:center;gap:9px">
+          <button class="btn btn-primary" style="height:44px;padding-inline:26px;font-size:15px;letter-spacing:.06em;text-transform:uppercase;background:#fff;border-color:#fff;color:var(--color-accent-900)">Open the queue</button>
+          <button class="btn" style="height:36px;background:transparent;border:1px solid rgba(255,255,255,.4);color:#fff">Edit setup</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin:22px 32px 0;display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--color-divider)">
+      <div style="padding:15px 20px;border-right:1px solid var(--color-divider)"><div style="font:600 10px/1 var(--font-heading);letter-spacing:.16em;text-transform:uppercase;color:rgba(29,31,32,.5)">Sessions run</div><div style="font:600 27px/1 var(--font-heading);margin-top:6px">14<span style="font-size:12px;font-weight:400;color:rgba(29,31,32,.5);margin-left:6px">this month</span></div></div>
+      <div style="padding:15px 20px;border-right:1px solid var(--color-divider)"><div style="font:600 10px/1 var(--font-heading);letter-spacing:.16em;text-transform:uppercase;color:rgba(29,31,32,.5)">Games logged</div><div style="font:600 27px/1 var(--font-heading);margin-top:6px">312</div></div>
+      <div style="padding:15px 20px;border-right:1px solid var(--color-divider)"><div style="font:600 10px/1 var(--font-heading);letter-spacing:.16em;text-transform:uppercase;color:rgba(29,31,32,.5)">Avg turnout</div><div style="font:600 27px/1 var(--font-heading);margin-top:6px">17<span style="font-size:12px;font-weight:400;color:rgba(29,31,32,.5);margin-left:6px">players</span></div></div>
+      <div style="padding:15px 20px;background:var(--color-accent-100)"><div style="font:600 10px/1 var(--font-heading);letter-spacing:.16em;text-transform:uppercase;color:var(--color-accent-700)">Needs attention</div><div style="font:600 27px/1 var(--font-heading);margin-top:6px;color:var(--color-accent-800)">1<span style="font-size:12px;font-weight:400;margin-left:6px">draft unpublished</span></div></div>
+    </div>
+
+    <div style="flex:1;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:26px;padding:24px 32px 26px;min-height:0">
+      <div style="display:flex;flex-direction:column;gap:12px;min-height:0">
+        <div style="display:flex;align-items:baseline;gap:12px">
+          <h4 style="margin:0;text-transform:uppercase;letter-spacing:.05em">BPC sessions</h4>
+          <span style="flex:1;height:1px;background:var(--color-divider)"></span>
+          <div class="seg">
+            <label class="seg-opt"><input type="radio" name="d-filter" checked="">All</label>
+            <label class="seg-opt"><input type="radio" name="d-filter">Drafts</label>
+            <label class="seg-opt"><input type="radio" name="d-filter">Done</label>
+          </div>
+        </div>
+        <table class="table">
+          <thead><tr><th>Session</th><th style="width:120px">Date</th><th style="width:80px">Courts</th><th style="width:96px">Players</th><th style="width:90px">Games</th><th style="width:110px">Status</th></tr></thead>
+          <tbody>
+            <tr><td style="font-family:var(--font-heading);font-weight:600;font-size:16px">Wednesday Open Play</td><td>29 Jul · 19:00</td><td>2</td><td>18 RSVP</td><td>—</td><td><span class="tag tag-accent">Draft</span></td></tr>
+            <tr><td style="font-family:var(--font-heading);font-weight:600;font-size:16px">Tuesday Ladder</td><td>28 Jul · 19:00</td><td>2</td><td>16</td><td>38</td><td><span class="tag tag-neutral">Completed</span></td></tr>
+            <tr><td style="font-family:var(--font-heading);font-weight:600;font-size:16px">Friday Open Play</td><td>25 Jul · 18:30</td><td>2</td><td>20</td><td>44</td><td><span class="tag tag-neutral">Completed</span></td></tr>
+            <tr><td style="font-family:var(--font-heading);font-weight:600;font-size:16px">Friday Open Play</td><td>18 Jul · 18:30</td><td>2</td><td>19</td><td>41</td><td><span class="tag tag-neutral">Completed</span></td></tr>
+            <tr><td style="font-family:var(--font-heading);font-weight:600;font-size:16px">Sunday Doubles</td><td>13 Jul · 09:00</td><td>2</td><td>12</td><td>26</td><td><span class="tag tag-neutral">Completed</span></td></tr>
+          </tbody>
+        </table>
+        <a href="#3a" style="font-size:12px;align-self:flex-start">View all 14 sessions</a>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:16px;min-height:0">
+        <div>
+          <h4 style="margin:0 0 10px;text-transform:uppercase;letter-spacing:.05em">Club leaders</h4>
+          <div style="border:1px solid var(--color-divider)">
+            <sc-for list="{{ topFive }}" as="s" hint-placeholder-count="5">
+              <div style="display:flex;align-items:center;gap:10px;padding:9px 13px;border-bottom:1px solid color-mix(in srgb,#1d1f20 8%,transparent)">
+                <span style="font:600 13px/1 var(--font-heading);width:16px;color:var(--color-accent-700)">{{ s.rank }}</span>
+                <span style="flex:1;font:600 14px/1.1 var(--font-heading)">{{ s.name }}</span>
+                <span style="font-size:11.5px;color:rgba(29,31,32,.6)">{{ s.record }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div>
+          
+          
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+</div>
+<p class="dv-next">Fixes vs the screenshot: the dashboard leads with the session you're about to run (turnout, status, one-click open) instead of four near-empty stat boxes; sessions become a real table with date, courts, turnout and games rather than a stack of pink links; status tags stay in palette (no stray blue); the page fills its canvas with leaders and activity; and Log out sits in the sidebar footer as a normal control.</p>
+</section>
+
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">New session setup — rebuilt on Industry</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="2a"><div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>New session — three-band form, live summary, sticky commit bar</div>
+<div class="dv-card" style="width:1280px;height:600px;display:grid;grid-template-columns:236px 1fr;background:var(--color-bg)">
+
+  <div style="display:flex;flex-direction:column;border-right:1px solid var(--color-divider);background:var(--color-surface)">
+    <div style="padding:20px 20px 18px;border-bottom:1px solid var(--color-divider)">
+      <img src="uploads/logov2.png" alt="NextQ" style="height:42px;width:auto">
+    </div>
+    <div style="padding:16px 20px;display:flex;align-items:center;gap:11px;border-bottom:1px solid var(--color-divider)">
+      <span style="width:34px;height:34px;flex:none;background:var(--color-accent);color:#fff;display:grid;place-items:center;font:600 16px/1 var(--font-heading)">V</span>
+      <span><span style="display:block;font:600 15px/1.1 var(--font-heading);text-transform:uppercase">Val Aguirre</span><span style="display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent-700)">Organiser</span></span>
+    </div>
+    <div style="display:flex;flex-direction:column;padding:10px 0">
+      <a href="#1c" style="display:flex;align-items:center;gap:11px;padding:11px 20px;font:600 14px/1 var(--font-heading);letter-spacing:.05em;text-transform:uppercase;color:var(--color-text);text-decoration:none">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>Dashboard</a>
+      <a href="#2a" style="display:flex;align-items:center;gap:11px;padding:11px 20px;font:600 14px/1 var(--font-heading);letter-spacing:.05em;text-transform:uppercase;background:var(--color-accent);color:#fff;text-decoration:none">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v8M8 12h8"></path></svg>New session</a>
+      <a href="#1d" style="display:flex;align-items:center;gap:11px;padding:11px 20px;font:600 14px/1 var(--font-heading);letter-spacing:.05em;text-transform:uppercase;color:var(--color-text);text-decoration:none">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h16M4 12h11M4 18h7"></path></svg>Queue</a>
+      <a href="#1g" style="display:flex;align-items:center;gap:11px;padding:11px 20px;font:600 14px/1 var(--font-heading);letter-spacing:.05em;text-transform:uppercase;color:var(--color-text);text-decoration:none">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 20V10M12 20V4M19 20v-7"></path></svg>Standings</a>
+      <a href="#1b" style="display:flex;align-items:center;gap:11px;padding:11px 20px;font:600 14px/1 var(--font-heading);letter-spacing:.05em;text-transform:uppercase;color:var(--color-text);text-decoration:none">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="8" r="3.2"></circle><path d="M3.5 20c0-3 2.5-5 5.5-5s5.5 2 5.5 5M17 11h4M19 9v4"></path></svg>Roster</a>
+    </div>
+    <div style="margin-top:auto;padding:18px 20px;border-top:1px solid var(--color-divider)">
+      
+      <button class="btn btn-ghost btn-block" style="justify-content:flex-start;gap:9px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8M17 8l4 4-4 4M21 12H10"></path></svg>Log out</button>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;min-width:0">
+    <div style="padding:24px 34px 20px;border-bottom:1px solid var(--color-divider);display:flex;align-items:flex-end;gap:24px">
+      <div style="flex:1">
+        <div style="font:600 10px/1 var(--font-heading);letter-spacing:.2em;text-transform:uppercase;color:var(--color-accent-700)">Riverside Club · Step 1 of 2</div>
+        <h1 style="margin:6px 0 0;font-size:44px;line-height:.95;text-transform:uppercase">New session</h1>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <span class="tag tag-outline">Draft saved {{ clock }}</span>
+        <button class="btn btn-ghost">Use last week's setup</button>
+      </div>
+    </div>
+
+    <div style="flex:1;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);min-height:0">
+      <div style="padding:26px 34px 24px;display:flex;flex-direction:column;gap:26px;overflow:hidden;min-height:0">
+
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="font:600 11px/1 var(--font-heading);letter-spacing:.2em;text-transform:uppercase;color:rgba(29,31,32,.5)">01 — Basics</span>
+            <span style="flex:1;height:1px;background:var(--color-divider)"></span>
+          </div>
+          <div style="display:grid;grid-template-columns:1.6fr 1fr 88px 88px;gap:16px;align-items:end">
+            <div class="field"><label for="s-name">Session name</label><input class="input" id="s-name" value="Wednesday Open Play"></div>
+            <div class="field"><label for="s-date">Date</label><input class="input" id="s-date" type="date" value="2026-07-29"></div>
+            <div class="field"><label for="s-start">Start</label><input class="input" id="s-start" value="19:00"></div>
+            <div class="field"><label for="s-courts">Courts</label><input class="input" id="s-courts" value="2"></div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="font:600 11px/1 var(--font-heading);letter-spacing:.2em;text-transform:uppercase;color:rgba(29,31,32,.5)">02 — Queue mode</span>
+            <span style="flex:1;height:1px;background:var(--color-divider)"></span>
+            <a href="#2a" style="font-size:12px">How modes differ</a>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+            <label class="blueprint" style="padding:16px;display:flex;flex-direction:column;gap:8px;cursor:pointer">
+              <div style="display:flex;align-items:center;gap:9px">
+                <input type="radio" name="s-mode" style="accent-color:var(--color-accent);width:15px;height:15px;margin:0">
+                <span style="font:600 19px/1 var(--font-heading);text-transform:uppercase">Hybrid</span>
+              </div>
+              <p style="margin:0;font-size:12px;line-height:1.45;color:rgba(29,31,32,.62);text-wrap:pretty">Wait time first, then gentle catch-up for late arrivals.</p>
+              <span class="tag tag-neutral" style="align-self:flex-start;margin-top:auto">Recommended</span>
+              <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            </label>
+            <label class="blueprint" style="padding:16px;display:flex;flex-direction:column;gap:8px;cursor:pointer">
+              <div style="display:flex;align-items:center;gap:9px">
+                <input type="radio" name="s-mode" style="accent-color:var(--color-accent);width:15px;height:15px;margin:0">
+                <span style="font:600 19px/1 var(--font-heading);text-transform:uppercase">Balanced</span>
+              </div>
+              <p style="margin:0;font-size:12px;line-height:1.45;color:rgba(29,31,32,.62);text-wrap:pretty">Everyone ends on the same game count. Late arrivals get priority until they catch up.</p>
+              <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            </label>
+            <label class="blueprint" style="padding:16px;display:flex;flex-direction:column;gap:8px;cursor:pointer;background:var(--color-accent);color:#fff;border-color:var(--color-accent)">
+              <div style="display:flex;align-items:center;gap:9px">
+                <input type="radio" name="s-mode" checked="" style="accent-color:#fff;width:15px;height:15px;margin:0">
+                <span style="font:600 19px/1 var(--font-heading);text-transform:uppercase">Strict</span>
+              </div>
+              <p style="margin:0;font-size:12px;line-height:1.45;color:rgba(255,255,255,.85);text-wrap:pretty">Pure queue order by wait time. Late arrivals join the back — no catch-up.</p>
+              <span class="tag" style="align-self:flex-start;margin-top:auto;background:rgba(255,255,255,.2);color:#fff;border-color:rgba(255,255,255,.4)">Selected</span>
+              <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            </label>
+          </div>
+        </div>
+
+        <div class="blueprint" style="margin-top:auto;padding:14px 18px;display:flex;align-items:center;gap:14px;background:var(--color-accent-100)">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-700)" stroke-width="1.5" style="flex:none"><circle cx="12" cy="12" r="9"></circle><path d="M12 8h.01M11 12h1v4h1"></path></svg>
+          <p style="margin:0;font-size:12px;line-height:1.45;color:var(--color-accent-800)">Strict mode with 2 courts and 18 players means a ~13 minute wait between games. Balanced would shorten late-arrival waits by about 6 minutes.</p>
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        </div>
+      </div>
+
+    </div>
+
+    <div style="padding:16px 34px;border-top:1px solid var(--color-divider);display:flex;align-items:center;gap:14px;background:#fff">
+      <span style="font-size:12px;color:rgba(29,31,32,.55)">Next: invite the roster and set play rules.</span>
+      <div style="margin-left:auto;display:flex;gap:12px">
+        <button class="btn btn-ghost" style="height:44px">Discard</button>
+        <button class="btn btn-secondary" style="height:44px;padding-inline:20px">Save as draft</button>
+        <button class="btn btn-primary blueprint" style="height:44px;padding-inline:28px;font-size:15px;letter-spacing:.06em;text-transform:uppercase">Create session
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i></button>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+</div>
+<p class="dv-next">Fixes vs the screenshot: no dead canvas (two labeled bands, single column), queue modes side-by-side instead of a stacked scroll, selected state carries the pink fill rather than only a tint, redundant "No catch-up" echo removed, and the commit bar is always in reach.</p>
+</section>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">NextQ — Riverside Pickleball Club · 2 courts · random draw of 4</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Login — player, mobile</div>
+<div class="dv-card" style="width:390px;height:800px;display:flex;flex-direction:column;background:var(--color-bg)">
+  <div style="background:var(--color-accent-900);padding:36px 28px 30px;display:flex;flex-direction:column;align-items:center;gap:6px">
+    <img src="uploads/logov2.png" alt="NextQ" style="width:196px;filter:brightness(0) invert(1)">
+    <div style="font:600 11px/1 var(--font-heading);letter-spacing:.22em;text-transform:uppercase;color:var(--color-accent-300)">Riverside Pickleball Club</div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;gap:20px;padding:32px 28px">
+    <div>
+      <h2 style="margin:0 0 4px;font-size:34px;text-transform:uppercase;letter-spacing:.01em">Get in the queue</h2>
+      <p style="margin:0;font-size:13px;color:rgba(29,31,32,.6)">Sign in, check in, get drawn. Courts wait for nobody.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="field"><label for="nq-phone">Mobile number</label><input class="input" id="nq-phone" value="0917 442 8890"></div>
+      <div class="field"><label for="nq-pin">4-digit PIN</label><input class="input" id="nq-pin" type="password" value="1284"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <label class="radio"><input type="checkbox" checked=""><span class="dot"></span>Keep me checked in</label>
+        <a href="#1a" style="font-size:12px">Forgot PIN?</a>
+      </div>
+      <button class="btn btn-primary btn-block blueprint" style="height:48px;font-size:17px;letter-spacing:.06em;text-transform:uppercase">Sign in
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i></button>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;color:rgba(29,31,32,.35);font-size:11px;letter-spacing:.16em">
+      <span style="flex:1;height:1px;background:var(--color-divider)"></span>OR<span style="flex:1;height:1px;background:var(--color-divider)"></span>
+    </div>
+    <div class="blueprint" style="padding:18px;display:flex;gap:16px;align-items:center;background:var(--color-accent-100)">
+      <div style="width:62px;height:62px;flex:none;background:#fff;border:1px solid var(--color-divider);display:grid;grid-template:repeat(5,1fr)/repeat(5,1fr);padding:5px;gap:2px">
+        <span style="background:var(--color-accent-900)"></span><span></span><span style="background:var(--color-accent-900)"></span><span style="background:var(--color-accent-900)"></span><span></span>
+        <span></span><span style="background:var(--color-accent-900)"></span><span></span><span style="background:var(--color-accent-900)"></span><span style="background:var(--color-accent-900)"></span>
+        <span style="background:var(--color-accent-900)"></span><span style="background:var(--color-accent-900)"></span><span style="background:var(--color-accent-900)"></span><span></span><span></span>
+        <span></span><span style="background:var(--color-accent-900)"></span><span></span><span style="background:var(--color-accent-900)"></span><span></span>
+        <span style="background:var(--color-accent-900)"></span><span></span><span style="background:var(--color-accent-900)"></span><span></span><span style="background:var(--color-accent-900)"></span>
+      </div>
+      <div style="flex:1">
+        <div style="font:600 15px/1.15 var(--font-heading);text-transform:uppercase">Scan the court QR</div>
+        <p style="margin:2px 0 0;font-size:12px;color:rgba(29,31,32,.6)">Check in at the gate and skip the sign-in.</p>
+      </div>
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    </div>
+    <p style="margin:auto 0 0;font-size:11px;text-align:center;color:rgba(29,31,32,.45)">New here? Accounts are created by the club organizer at the desk.</p>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Registration — organizer-only, desktop</div>
+<div class="dv-card" style="width:1040px;height:800px;display:flex;flex-direction:column">
+  <div class="nav" style="border-bottom:1px solid var(--color-divider);padding:10px 26px;gap:26px">
+    <span class="nav-brand" style="display:flex;align-items:center;gap:10px;margin-right:auto"><img src="uploads/logov2.png" alt="NextQ" style="height:40px;width:auto"></span>
+    <a href="#1c">Dashboard</a><a href="#1d">Queue</a><a href="#1g">Standings</a><a href="#1b" aria-current="page">Roster</a>
+    <span class="tag tag-accent" style="margin-left:12px">Organizer · Mia R.</span>
+  </div>
+  <div style="flex:1;display:grid;grid-template-columns:1fr 380px;min-height:0">
+    <div style="padding:30px 32px;display:flex;flex-direction:column;gap:22px;border-right:1px solid var(--color-divider)">
+      <div>
+        <div style="font:600 10px/1 var(--font-heading);letter-spacing:.2em;text-transform:uppercase;color:var(--color-accent-700)">Roster · new entry</div>
+        <h1 style="margin:6px 0 4px;font-size:44px;text-transform:uppercase">Register a player</h1>
+        <p style="margin:0;font-size:13px;color:rgba(29,31,32,.6);max-width:52ch">Only organizers create accounts. The player gets an SMS with their PIN and can check in at the gate immediately.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="field"><label>First name</label><input class="input" value="Dana"></div>
+        <div class="field"><label>Last name</label><input class="input" value="Villanueva"></div>
+        <div class="field"><label>Mobile number</label><input class="input" value="0917 442 8890"></div>
+        <div class="field"><label>Member ID</label><input class="input" value="RVR-0184"></div>
+      </div>
+      <div class="field">
+        <label>Skill bracket</label>
+        <div class="seg" style="margin-top:2px">
+          <label class="seg-opt"><input type="radio" name="nq-skill">2.5</label>
+          <label class="seg-opt"><input type="radio" name="nq-skill">3.0</label>
+          <label class="seg-opt"><input type="radio" name="nq-skill" checked="">3.5</label>
+          <label class="seg-opt"><input type="radio" name="nq-skill">4.0</label>
+          <label class="seg-opt"><input type="radio" name="nq-skill">4.5+</label>
+        </div>
+      </div>
+      <div class="field">
+        <label>Membership</label>
+        <div style="display:flex;gap:22px;margin-top:4px">
+          <label class="radio"><input type="radio" name="nq-mem" checked=""><span class="dot"></span>Full member</label>
+          <label class="radio"><input type="radio" name="nq-mem"><span class="dot"></span>Drop-in</label>
+          <label class="radio"><input type="radio" name="nq-mem"><span class="dot"></span>Guest of member</label>
+        </div>
+      </div>
+      <div class="field"><label>Organizer note</label><textarea class="input" style="min-height:74px">Plays Tue/Thu evenings. Prefers doubles.</textarea></div>
+      <div style="display:flex;gap:12px;margin-top:auto">
+        <button class="btn btn-primary blueprint" style="height:44px;padding-inline:26px;font-size:15px;letter-spacing:.06em;text-transform:uppercase">Create &amp; send PIN
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i></button>
+        <button class="btn btn-secondary" style="height:44px;padding-inline:20px">Save without SMS</button>
+        <button class="btn btn-ghost" style="height:44px">Cancel</button>
+      </div>
+    </div>
+    <div style="padding:30px 26px;display:flex;flex-direction:column;gap:16px;background:var(--color-surface);min-height:0">
+      <div style="display:flex;align-items:baseline;justify-content:space-between">
+        <h4 style="margin:0;text-transform:uppercase;letter-spacing:.05em">Added today</h4>
+        <span style="font-size:11px;color:rgba(29,31,32,.5)">6 of 42 members</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;overflow:hidden">
+        <div class="card blueprint" style="gap:4px;background:#fff"><div class="card-kicker">RVR-0183 · 3.0</div><div class="card-title">Paolo Cruz</div><div class="card-meta">PIN sent · 14:02</div><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i></div>
+        <div class="card blueprint" style="gap:4px;background:#fff"><div class="card-kicker">RVR-0182 · 4.0</div><div class="card-title">Grace Tan</div><div class="card-meta">PIN sent · 13:48</div><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i></div>
+        <div class="card blueprint" style="gap:4px;background:#fff"><div class="card-kicker">RVR-0181 · 3.5</div><div class="card-title">Ivan Reyes</div><div class="card-meta">Awaiting PIN confirm</div><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i></div>
+      </div>
+      <div class="blueprint" style="margin-top:auto;padding:16px;background:#fff">
+        <div style="font:600 13px/1.2 var(--font-heading);text-transform:uppercase;letter-spacing:.06em">Bulk import</div>
+        <p style="margin:4px 0 10px;font-size:12px;color:rgba(29,31,32,.6)">CSV of name, mobile, bracket.</p>
+        <button class="btn btn-secondary btn-block" style="margin:0">Upload roster file</button>
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Dashboard — court manager, control desk</div>
+<div class="dv-card" style="width:1360px;height:860px;display:flex;flex-direction:column">
+  <div class="nav" style="border-bottom:1px solid var(--color-divider);padding:10px 26px;gap:26px">
+    <span class="nav-brand" style="display:flex;align-items:center;gap:10px;margin-right:auto"><img src="uploads/logov2.png" alt="NextQ" style="height:40px;width:auto"></span>
+    <a href="#1c" aria-current="page">Dashboard</a><a href="#1d">Queue</a><a href="#1g">Standings</a><a href="#1b">Roster</a>
+    <span style="display:flex;align-items:center;gap:7px;margin-left:12px;font-size:12px;color:var(--color-accent-700)"><span style="width:8px;height:8px;background:var(--color-accent);border-radius:50%;animation:nq-pulse 1.6s infinite"></span>Live · {{ clock }}</span>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--color-divider)">
+    <div style="padding:18px 26px;border-right:1px solid var(--color-divider)"><div style="font:600 10px/1 var(--font-heading);letter-spacing:.18em;text-transform:uppercase;color:rgba(29,31,32,.5)">Checked in</div><div style="font:600 40px/1 var(--font-heading);margin-top:6px">18</div></div>
+    <div style="padding:18px 26px;border-right:1px solid var(--color-divider)"><div style="font:600 10px/1 var(--font-heading);letter-spacing:.18em;text-transform:uppercase;color:rgba(29,31,32,.5)">On court</div><div style="font:600 40px/1 var(--font-heading);margin-top:6px">8<span style="font-size:20px;color:rgba(29,31,32,.4)">/8</span></div></div>
+    <div style="padding:18px 26px;border-right:1px solid var(--color-divider);background:var(--color-accent-100)"><div style="font:600 10px/1 var(--font-heading);letter-spacing:.18em;text-transform:uppercase;color:var(--color-accent-700)">Live wait estimate</div><div style="font:600 40px/1 var(--font-heading);margin-top:6px;color:var(--color-accent-800)">11<span style="font-size:20px"> min</span></div></div>
+    <div style="padding:18px 26px"><div style="font:600 10px/1 var(--font-heading);letter-spacing:.18em;text-transform:uppercase;color:rgba(29,31,32,.5)">Games today</div><div style="font:600 40px/1 var(--font-heading);margin-top:6px">41</div></div>
+  </div>
+  <div style="flex:1;display:grid;grid-template-columns:1fr 400px;min-height:0">
+    <div style="padding:24px 26px;display:flex;flex-direction:column;gap:20px;border-right:1px solid var(--color-divider);min-height:0">
+      <div style="display:flex;align-items:baseline;justify-content:space-between">
+        <h3 style="margin:0;text-transform:uppercase;letter-spacing:.04em">Courts in play</h3>
+        <span style="font-size:11px;color:rgba(29,31,32,.5)">Games to 11, win by 2 · cap 18 min</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px">
+        <div class="blueprint" style="padding:20px;display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between">
+            <span style="font:600 22px/1 var(--font-heading);text-transform:uppercase">Court 1</span>
+            <span class="tag tag-accent">In play · {{ court1 }}</span>
+          </div>
+          <div style="aspect-ratio:2/1;border:1px solid var(--color-divider);background:var(--color-accent-100);display:grid;grid-template-columns:1fr 1fr;position:relative">
+            <div style="border-right:2px solid var(--color-accent-400);display:flex;flex-direction:column;justify-content:center;gap:2px;padding:14px"><span style="font:600 15px/1.2 var(--font-heading)">M. Santos</span><span style="font:600 15px/1.2 var(--font-heading)">J. Lim</span></div>
+            <div style="display:flex;flex-direction:column;justify-content:center;align-items:flex-end;gap:2px;padding:14px"><span style="font:600 15px/1.2 var(--font-heading)">A. Dizon</span><span style="font:600 15px/1.2 var(--font-heading)">R. Ocampo</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px">
+            <div style="font:600 42px/1 var(--font-heading);color:var(--color-accent-800)">9<span style="color:rgba(29,31,32,.3)">–</span>7</div>
+            <div style="display:flex;gap:8px;margin-left:auto"><button class="btn btn-secondary">+1 Left</button><button class="btn btn-secondary">+1 Right</button><button class="btn btn-primary">End game</button></div>
+          </div>
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        </div>
+        <div class="blueprint" style="padding:20px;display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between">
+            <span style="font:600 22px/1 var(--font-heading);text-transform:uppercase">Court 2</span>
+            <span class="tag tag-accent">In play · {{ court2 }}</span>
+          </div>
+          <div style="aspect-ratio:2/1;border:1px solid var(--color-divider);background:var(--color-accent-100);display:grid;grid-template-columns:1fr 1fr">
+            <div style="border-right:2px solid var(--color-accent-400);display:flex;flex-direction:column;justify-content:center;gap:2px;padding:14px"><span style="font:600 15px/1.2 var(--font-heading)">K. Uy</span><span style="font:600 15px/1.2 var(--font-heading)">T. Bautista</span></div>
+            <div style="display:flex;flex-direction:column;justify-content:center;align-items:flex-end;gap:2px;padding:14px"><span style="font:600 15px/1.2 var(--font-heading)">L. Yap</span><span style="font:600 15px/1.2 var(--font-heading)">C. Mendoza</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px">
+            <div style="font:600 42px/1 var(--font-heading);color:var(--color-accent-800)">4<span style="color:rgba(29,31,32,.3)">–</span>5</div>
+            <div style="display:flex;gap:8px;margin-left:auto"><button class="btn btn-secondary">+1 Left</button><button class="btn btn-secondary">+1 Right</button><button class="btn btn-primary">End game</button></div>
+          </div>
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        </div>
+      </div>
+      <div class="blueprint" style="padding:18px 20px;display:flex;align-items:center;gap:20px;background:var(--color-accent-900);color:#fff">
+        <div style="flex:1">
+          <div style="font:600 10px/1 var(--font-heading);letter-spacing:.2em;text-transform:uppercase;color:var(--color-accent-300)">Next random draw</div>
+          <div style="font:600 27px/1.1 var(--font-heading);text-transform:uppercase;margin-top:6px">4 pulled from 10 waiting</div>
+          <p style="margin:4px 0 0;font-size:12px;color:rgba(255,255,255,.65)">Draw locks 30 seconds before a court frees. Sit-outs get weighted priority.</p>
+        </div>
+        <button class="btn btn-primary" onClick="{{ draw }}" style="height:46px;padding-inline:24px;font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-accent-900);background:#fff;border-color:#fff">Draw now</button>
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;min-height:0">
+      <div style="padding:20px 22px 14px;display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--color-divider)">
+        <h4 style="margin:0;text-transform:uppercase;letter-spacing:.05em">Up next</h4>
+        <a href="#1d" style="font-size:12px">Full queue</a>
+      </div>
+      <div style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+        <sc-for list="{{ drawn }}" as="p" hint-placeholder-count="4">
+          <div style="display:flex;align-items:center;gap:14px;padding:13px 22px;border-bottom:1px solid color-mix(in srgb,#1d1f20 8%,transparent);background:var(--color-accent-100)">
+            <span style="font:600 15px/1 var(--font-heading);width:26px;color:var(--color-accent-700)">{{ p.pos }}</span>
+            <span style="flex:1;font:600 16px/1.2 var(--font-heading)">{{ p.name }}</span>
+            <span class="tag tag-outline">{{ p.skill }}</span>
+            <span style="font-size:11px;color:rgba(29,31,32,.5);width:52px;text-align:right">{{ p.wait }}</span>
+          </div>
+        </sc-for>
+        <sc-for list="{{ waiting }}" as="p" hint-placeholder-count="6">
+          <div style="display:flex;align-items:center;gap:14px;padding:13px 22px;border-bottom:1px solid color-mix(in srgb,#1d1f20 8%,transparent)">
+            <span style="font:600 15px/1 var(--font-heading);width:26px;color:rgba(29,31,32,.4)">{{ p.pos }}</span>
+            <span style="flex:1;font:600 16px/1.2 var(--font-heading)">{{ p.name }}</span>
+            <span class="tag tag-neutral">{{ p.skill }}</span>
+            <span style="font-size:11px;color:rgba(29,31,32,.5);width:52px;text-align:right">{{ p.wait }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="padding:16px 22px;border-top:1px solid var(--color-divider);display:flex;gap:10px;background:var(--color-surface)">
+        <button class="btn btn-secondary" style="flex:1">Check in by QR</button>
+        <button class="btn btn-secondary" style="flex:1">Add walk-in</button>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Queueing A — draw board, desktop (press Draw)</div>
+<div class="dv-card" style="width:1360px;height:820px;display:flex;flex-direction:column">
+  <div class="nav" style="border-bottom:1px solid var(--color-divider);padding:10px 26px;gap:26px">
+    <span class="nav-brand" style="display:flex;align-items:center;gap:10px;margin-right:auto"><img src="uploads/logov2.png" alt="NextQ" style="height:40px;width:auto"></span>
+    <a href="#1c">Dashboard</a><a href="#1d" aria-current="page">Queue</a><a href="#1g">Standings</a><a href="#1b">Roster</a>
+  </div>
+  <div style="flex:1;display:grid;grid-template-columns:440px 1fr;min-height:0">
+    <div style="padding:26px;display:flex;flex-direction:column;gap:18px;border-right:1px solid var(--color-divider);background:var(--color-surface);min-height:0">
+      <div>
+        <div style="font:600 10px/1 var(--font-heading);letter-spacing:.2em;text-transform:uppercase;color:var(--color-accent-700)">Checked in · waiting</div>
+        <h2 style="margin:6px 0 0;font-size:34px;text-transform:uppercase">The pool</h2>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <sc-for list="{{ pool }}" as="p" hint-placeholder-count="10">
+          <span class="tag tag-accent" style="font-size:13px;padding:6px 12px;font-family:var(--font-heading);font-weight:600;letter-spacing:.03em">{{ p }}</span>
+        </sc-for>
+      </div>
+      <div class="blueprint" style="padding:16px;background:#fff">
+        <div style="font:600 13px/1.2 var(--font-heading);text-transform:uppercase;letter-spacing:.06em">Draw rules</div>
+        <p style="margin:6px 0 0;font-size:12px;color:rgba(29,31,32,.65)">Random 4 from the pool · players who sat out the last round are weighted 2× · nobody plays twice before everyone plays once.</p>
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      </div>
+      <button class="btn btn-primary blueprint" onClick="{{ draw }}" style="margin-top:auto;height:56px;font-size:19px;letter-spacing:.08em;text-transform:uppercase">Draw random 4
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i></button>
+      <div style="font-size:11px;text-align:center;color:rgba(29,31,32,.5)">Draw #{{ drawNo }} · {{ clock }}</div>
+    </div>
+    <div style="padding:26px 30px;display:flex;flex-direction:column;gap:22px;min-height:0">
+      <div style="display:flex;align-items:baseline;justify-content:space-between">
+        <h3 style="margin:0;text-transform:uppercase;letter-spacing:.04em">Drawn for Court 1</h3>
+        <span class="tag tag-accent">Court frees in {{ freeIn }}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px">
+        <sc-for list="{{ drawn }}" as="p" hint-placeholder-count="4">
+          <div class="blueprint" style="padding:18px 16px;display:flex;flex-direction:column;gap:10px;background:var(--color-accent-100)">
+            <div style="font:600 10px/1 var(--font-heading);letter-spacing:.18em;text-transform:uppercase;color:var(--color-accent-700)">{{ p.side }}</div>
+            <div style="font:600 25px/1.05 var(--font-heading);text-transform:uppercase">{{ p.name }}</div>
+            <div style="display:flex;align-items:center;gap:8px"><span class="tag tag-outline">{{ p.skill }}</span><span style="font-size:11px;color:rgba(29,31,32,.55)">{{ p.record }}</span></div>
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-primary" style="height:44px;padding-inline:24px;letter-spacing:.05em;text-transform:uppercase">Send to Court 1</button>
+        <button class="btn btn-secondary" style="height:44px;padding-inline:20px" onClick="{{ draw }}">Redraw</button>
+        <button class="btn btn-ghost" style="height:44px">Swap a player</button>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:12px;min-height:0">
+        <div style="display:flex;align-items:baseline;justify-content:space-between">
+          <h4 style="margin:0;text-transform:uppercase;letter-spacing:.05em">Waiting order &amp; estimates</h4>
+          <span style="font-size:11px;color:rgba(29,31,32,.5)">Estimate = avg game 13 min ÷ 2 courts</span>
+        </div>
+        <table class="table">
+          <thead><tr><th style="width:60px">Pos</th><th>Player</th><th style="width:90px">Bracket</th><th style="width:110px">Sat out</th><th style="width:120px">W–L</th><th style="width:120px">Est. wait</th></tr></thead>
+          <tbody>
+            <sc-for list="{{ waiting }}" as="p" hint-placeholder-count="6">
+              <tr><td style="font-family:var(--font-heading);font-weight:600">{{ p.pos }}</td><td style="font-family:var(--font-heading);font-weight:600;font-size:16px">{{ p.name }}</td><td>{{ p.skill }}</td><td>{{ p.sat }}</td><td>{{ p.record }}</td><td style="color:var(--color-accent-700);font-weight:500">{{ p.wait }}</td></tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1e"><div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>Queueing B — player's live wait, mobile</div>
+<div class="dv-card" style="width:390px;height:800px;display:flex;flex-direction:column;background:var(--color-bg)">
+  <div style="padding:14px 20px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--color-divider)">
+    <img src="uploads/logov2.png" alt="NextQ" style="height:34px;width:auto">
+    <span style="margin-left:auto;font-size:11px;color:var(--color-accent-700);display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;background:var(--color-accent);border-radius:50%;animation:nq-pulse 1.6s infinite"></span>Checked in</span>
+  </div>
+  <div style="background:var(--color-accent);color:#fff;padding:30px 24px 26px;display:flex;flex-direction:column;gap:4px">
+    <div style="font:600 10px/1 var(--font-heading);letter-spacing:.22em;text-transform:uppercase;opacity:.8">Your position</div>
+    <div style="display:flex;align-items:flex-end;gap:14px">
+      <span style="font:600 92px/.85 var(--font-heading)">3</span>
+      <span style="font:600 20px/1.1 var(--font-heading);text-transform:uppercase;padding-bottom:10px">in the pool<br>of 10</span>
+    </div>
+    <div style="margin-top:10px;display:flex;align-items:baseline;gap:8px">
+      <span style="font:600 30px/1 var(--font-heading)">~{{ freeIn }}</span>
+      <span style="font-size:12px;opacity:.85">estimated wait · Court 1 frees first</span>
+    </div>
+    <div style="margin-top:14px;height:8px;background:rgba(255,255,255,.28)"><div style="width:72%;height:100%;background:#fff"></div></div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;gap:16px;padding:22px 20px;min-height:0">
+    <div class="blueprint" style="padding:16px;display:flex;gap:14px;align-items:center;background:var(--color-accent-100)">
+      <span style="font:600 30px/1 var(--font-heading);color:var(--color-accent-700)">🔔</span>
+      <div style="flex:1"><div style="font:600 15px/1.15 var(--font-heading);text-transform:uppercase">Alert me when I'm drawn</div><p style="margin:2px 0 0;font-size:12px;color:rgba(29,31,32,.6)">SMS + buzz, 90 seconds ahead.</p></div>
+      <label class="radio"><input type="checkbox" checked=""><span class="dot"></span></label>
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    </div>
+    <div>
+      <h4 style="margin:0 0 10px;text-transform:uppercase;letter-spacing:.05em">On court now</h4>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="blueprint" style="padding:14px;display:flex;align-items:center;gap:12px">
+          <span style="font:600 16px/1 var(--font-heading);text-transform:uppercase;width:64px">Court 1</span>
+          <span style="flex:1;font-size:12px;color:rgba(29,31,32,.65)">Santos/Lim vs Dizon/Ocampo</span>
+          <span style="font:600 18px/1 var(--font-heading);color:var(--color-accent-800)">9–7</span>
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        </div>
+        <div class="blueprint" style="padding:14px;display:flex;align-items:center;gap:12px">
+          <span style="font:600 16px/1 var(--font-heading);text-transform:uppercase;width:64px">Court 2</span>
+          <span style="flex:1;font-size:12px;color:rgba(29,31,32,.65)">Uy/Bautista vs Yap/Mendoza</span>
+          <span style="font:600 18px/1 var(--font-heading);color:var(--color-accent-800)">4–5</span>
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        </div>
+      </div>
+    </div>
+    <div>
+      <h4 style="margin:0 0 10px;text-transform:uppercase;letter-spacing:.05em">Pool ahead of you</h4>
+      <div style="display:flex;flex-wrap:wrap;gap:7px">
+        <sc-for list="{{ pool }}" as="p" hint-placeholder-count="10">
+          <span class="tag tag-neutral" style="font-family:var(--font-heading);font-weight:600;font-size:12px;padding:5px 10px">{{ p }}</span>
+        </sc-for>
+      </div>
+    </div>
+    <div style="margin-top:auto;display:flex;gap:10px">
+      <button class="btn btn-secondary" style="flex:1;height:44px">Sit out a round</button>
+      <button class="btn btn-primary" style="flex:1;height:44px;letter-spacing:.05em;text-transform:uppercase">I'm ready</button>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1f"><div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>Dashboard B — courtside display, 16:9 wall screen</div>
+<div class="dv-card" style="width:1280px;height:720px;background:var(--color-accent-900);color:#fff;display:flex;flex-direction:column">
+  <div style="display:flex;align-items:center;gap:16px;padding:20px 34px;border-bottom:1px solid rgba(255,255,255,.18)">
+    <img src="uploads/logov2.png" alt="NextQ" style="height:52px;width:auto;filter:brightness(0) invert(1)">
+    <span style="font:600 13px/1 var(--font-heading);letter-spacing:.24em;text-transform:uppercase;color:var(--color-accent-300)">Riverside Club · Open Play</span>
+    <span style="margin-left:auto;font:600 30px/1 var(--font-heading)">{{ clock }}</span>
+  </div>
+  <div style="flex:1;display:grid;grid-template-columns:1fr 1fr 360px;min-height:0">
+    <div style="padding:30px 34px;border-right:1px solid rgba(255,255,255,.18);display:flex;flex-direction:column;gap:18px">
+      <div style="font:600 12px/1 var(--font-heading);letter-spacing:.24em;text-transform:uppercase;color:var(--color-accent-300)">Court 1 · {{ court1 }}</div>
+      <div style="font:600 34px/1.05 var(--font-heading);text-transform:uppercase">Santos<br>Lim</div>
+      <div style="font:600 76px/1 var(--font-heading);color:var(--color-accent-400)">9 – 7</div>
+      <div style="font:600 34px/1.05 var(--font-heading);text-transform:uppercase;color:rgba(255,255,255,.72)">Dizon<br>Ocampo</div>
+    </div>
+    <div style="padding:30px 34px;border-right:1px solid rgba(255,255,255,.18);display:flex;flex-direction:column;gap:18px">
+      <div style="font:600 12px/1 var(--font-heading);letter-spacing:.24em;text-transform:uppercase;color:var(--color-accent-300)">Court 2 · {{ court2 }}</div>
+      <div style="font:600 34px/1.05 var(--font-heading);text-transform:uppercase">Uy<br>Bautista</div>
+      <div style="font:600 76px/1 var(--font-heading);color:var(--color-accent-400)">4 – 5</div>
+      <div style="font:600 34px/1.05 var(--font-heading);text-transform:uppercase;color:rgba(255,255,255,.72)">Yap<br>Mendoza</div>
+    </div>
+    <div style="padding:30px 28px;display:flex;flex-direction:column;gap:14px;background:rgba(255,255,255,.06)">
+      <div style="font:600 12px/1 var(--font-heading);letter-spacing:.24em;text-transform:uppercase;color:var(--color-accent-300)">Up next — random draw</div>
+      <sc-for list="{{ drawn }}" as="p" hint-placeholder-count="4">
+        <div style="display:flex;align-items:baseline;gap:12px;padding-bottom:9px;border-bottom:1px solid rgba(255,255,255,.14)">
+          <span style="font:600 15px/1 var(--font-heading);color:var(--color-accent-400);width:22px">{{ p.pos }}</span>
+          <span style="font:600 25px/1 var(--font-heading);text-transform:uppercase">{{ p.name }}</span>
+        </div>
+      </sc-for>
+      <div style="margin-top:auto;display:flex;gap:14px;align-items:center;padding:14px;border:1px solid rgba(255,255,255,.22)">
+        <div style="width:66px;height:66px;flex:none;background:#fff;display:grid;grid-template:repeat(5,1fr)/repeat(5,1fr);padding:5px;gap:2px">
+          <span style="background:var(--color-accent-900)"></span><span></span><span style="background:var(--color-accent-900)"></span><span style="background:var(--color-accent-900)"></span><span></span>
+          <span></span><span style="background:var(--color-accent-900)"></span><span></span><span style="background:var(--color-accent-900)"></span><span style="background:var(--color-accent-900)"></span>
+          <span style="background:var(--color-accent-900)"></span><span style="background:var(--color-accent-900)"></span><span style="background:var(--color-accent-900)"></span><span></span><span></span>
+          <span></span><span style="background:var(--color-accent-900)"></span><span></span><span style="background:var(--color-accent-900)"></span><span></span>
+          <span style="background:var(--color-accent-900)"></span><span></span><span style="background:var(--color-accent-900)"></span><span></span><span style="background:var(--color-accent-900)"></span>
+        </div>
+        <div><div style="font:600 17px/1.1 var(--font-heading);text-transform:uppercase">Scan to join</div><p style="margin:3px 0 0;font-size:12px;color:rgba(255,255,255,.7)">10 waiting · ~11 min</p></div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1g"><div class="dv-olabel"><a class="dv-oid" href="#1g">1g</a>Standings — win/loss, desktop</div>
+<div class="dv-card" style="width:1200px;height:820px;display:flex;flex-direction:column">
+  <div class="nav" style="border-bottom:1px solid var(--color-divider);padding:10px 26px;gap:26px">
+    <span class="nav-brand" style="display:flex;align-items:center;gap:10px;margin-right:auto"><img src="uploads/logov2.png" alt="NextQ" style="height:40px;width:auto"></span>
+    <a href="#1c">Dashboard</a><a href="#1d">Queue</a><a href="#1g" aria-current="page">Standings</a><a href="#1b">Roster</a>
+  </div>
+  <div style="padding:28px 32px 20px;display:flex;align-items:flex-end;justify-content:space-between;border-bottom:1px solid var(--color-divider)">
+    <div>
+      <div style="font:600 10px/1 var(--font-heading);letter-spacing:.2em;text-transform:uppercase;color:var(--color-accent-700)">July open play · 41 games</div>
+      <h1 style="margin:6px 0 0;font-size:46px;text-transform:uppercase">Standings</h1>
+    </div>
+    <div class="seg">
+      <label class="seg-opt"><input type="radio" name="nq-range" checked="">This month</label>
+      <label class="seg-opt"><input type="radio" name="nq-range">Tonight</label>
+      <label class="seg-opt"><input type="radio" name="nq-range">All time</label>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--color-divider)">
+    <div class="blueprint" style="border:0;border-right:1px solid var(--color-divider);padding:20px 32px"><div style="font:600 10px/1 var(--font-heading);letter-spacing:.18em;text-transform:uppercase;color:rgba(29,31,32,.5)">Leader</div><div style="font:600 30px/1.1 var(--font-heading);text-transform:uppercase;margin-top:6px">M. Santos</div><div style="font-size:12px;color:rgba(29,31,32,.55)">14–3 · .824</div></div>
+    <div style="border-right:1px solid var(--color-divider);padding:20px 32px"><div style="font:600 10px/1 var(--font-heading);letter-spacing:.18em;text-transform:uppercase;color:rgba(29,31,32,.5)">Hottest streak</div><div style="font:600 30px/1.1 var(--font-heading);text-transform:uppercase;margin-top:6px">L. Yap · W6</div><div style="font-size:12px;color:rgba(29,31,32,.55)">Six straight since Tuesday</div></div>
+    <div style="padding:20px 32px"><div style="font:600 10px/1 var(--font-heading);letter-spacing:.18em;text-transform:uppercase;color:rgba(29,31,32,.5)">Most games</div><div style="font:600 30px/1.1 var(--font-heading);text-transform:uppercase;margin-top:6px">J. Lim · 19</div><div style="font-size:12px;color:rgba(29,31,32,.55)">Never sits out a draw</div></div>
+  </div>
+  <div style="flex:1;padding:22px 32px 28px;min-height:0;overflow:hidden">
+    <table class="table">
+      <thead><tr><th style="width:70px">Rank</th><th>Player</th><th style="width:100px">Bracket</th><th style="width:110px">W–L</th><th style="width:110px">Win %</th><th style="width:180px">Form</th><th style="width:110px">Streak</th></tr></thead>
+      <tbody>
+        <sc-for list="{{ standings }}" as="s" hint-placeholder-count="10">
+          <tr>
+            <td style="font-family:var(--font-heading);font-weight:600;font-size:17px;color:var(--color-accent-700)">{{ s.rank }}</td>
+            <td style="font-family:var(--font-heading);font-weight:600;font-size:18px">{{ s.name }}</td>
+            <td>{{ s.skill }}</td>
+            <td style="font-family:var(--font-heading);font-weight:600">{{ s.record }}</td>
+            <td>{{ s.pct }}</td>
+            <td>{{ s.formBar }}</td>
+            <td><span class="tag tag-accent">{{ s.streak }}</span></td>
+          </tr>
+        </sc-for>
+      </tbody>
+    </table>
+  </div>
+</div></div>
+
+</div>
+<p class="dv-next">Try next: "make <a class="dv-oid" href="#1c">1c</a> the default and fold <a class="dv-oid" href="#1d">1d</a> into a side drawer" · "give <a class="dv-oid" href="#1e">1e</a> a bolder pink hero" · "add a game-history screen"</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#f43f75&quot;,&quot;options&quot;:[&quot;#f43f75&quot;,&quot;#e91e63&quot;,&quot;#ff6f9c&quot;,&quot;#c2185b&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Theme&quot;},&quot;deepField&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#5c1029&quot;,&quot;options&quot;:[&quot;#5c1029&quot;,&quot;#1d1f20&quot;,&quot;#8d1a3f&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Theme&quot;},&quot;showCornerMarks&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Style&quot;},&quot;drawSize&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:4,&quot;min&quot;:2,&quot;max&quot;:8,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Queue rules&quot;}}">
+const POOL = [
+  ["D. Villanueva","3.5","6–4"],["P. Cruz","3.0","4–5"],["G. Tan","4.0","11–4"],
+  ["I. Reyes","3.5","7–7"],["N. Abad","3.0","3–6"],["S. Garcia","4.0","9–5"],
+  ["B. Torres","2.5","2–8"],["F. Navarro","3.5","8–6"],["E. Ramos","4.5","12–5"],
+  ["V. Salas","3.0","5–7"]
+];
+const STANDINGS = [
+  ["M. Santos","4.0","14–3",".824","W3"],["E. Ramos","4.5","12–5",".706","W1"],
+  ["G. Tan","4.0","11–4",".733","L1"],["S. Garcia","4.0","9–5",".643","W2"],
+  ["L. Yap","3.5","9–6",".600","W6"],["J. Lim","3.5","10–9",".526","L2"],
+  ["F. Navarro","3.5","8–6",".571","W1"],["A. Dizon","3.5","7–8",".467","L1"],
+  ["I. Reyes","3.5","7–7",".500","W1"],["D. Villanueva","3.5","6–4",".600","L1"]
+];
+const SIDES = ["Team A · left","Team A · right","Team B · left","Team B · right"];
+
+class Component extends DCLogic {
+  state = { drawn: [0,2,5,8], drawNo: 12, t: 0 };
+  componentDidMount() {
+    this.iv = setInterval(() => this.setState(s => ({ t: s.t + 1 })), 1000);
+    this.applyTheme();
+  }
+  componentDidUpdate() { this.applyTheme(); }
+  componentWillUnmount() { clearInterval(this.iv); }
+  applyTheme() {
+    const r = document.documentElement.style;
+    if (this.props.accent) r.setProperty("--color-accent", this.props.accent);
+    if (this.props.deepField) r.setProperty("--color-accent-900", this.props.deepField);
+    const on = !!this.props.showCornerMarks;
+    r.setProperty("--nq-corner-opacity", on ? "1" : "0");
+    r.setProperty("--nq-corner-display", on ? "block" : "none");
+  }
+  draw = () => {
+    const n = this.props.drawSize ?? 4;
+    const idx = [...POOL.keys()].sort(() => Math.random() - 0.5).slice(0, n);
+    this.setState(s => ({ drawn: idx, drawNo: s.drawNo + 1 }));
+  };
+  mmss(sec) { const m = Math.floor(sec / 60), s = sec % 60; return m + ":" + String(s).padStart(2, "0"); }
+  bar(pct) {
+    const filled = Math.round(pct * 10);
+    return React.createElement("span", { style: { display: "flex", gap: 3 } },
+      Array.from({ length: 10 }, (_, i) => React.createElement("span", {
+        key: i,
+        style: { width: 9, height: 14, background: i < filled ? "var(--color-accent)" : "color-mix(in srgb,#1d1f20 12%,transparent)" }
+      })));
+  }
+  renderVals() {
+    const t = this.state.t;
+    const now = new Date(2026, 6, 29, 19, 12, 0);
+    now.setSeconds(now.getSeconds() + t);
+    const drawnSet = new Set(this.state.drawn);
+    const drawn = this.state.drawn.map((i, n) => ({
+      pos: n + 1, name: POOL[i][0], skill: POOL[i][1], record: POOL[i][2],
+      side: SIDES[n], wait: "next"
+    }));
+    const waiting = POOL.map((p, i) => i).filter(i => !drawnSet.has(i)).map((i, n) => ({
+      pos: n + 5, name: POOL[i][0], skill: POOL[i][1], record: POOL[i][2],
+      sat: (n % 3) + 1 === 1 ? "1 round" : (n % 3) + 1 + " rounds", wait: (11 + n * 6) + " min"
+    }));
+    return {
+      drawn, waiting,
+      pool: POOL.map(p => p[0]),
+      drawNo: this.state.drawNo,
+      draw: this.draw,
+      clock: now.toTimeString().slice(0, 8),
+      court1: this.mmss(494 + t),
+      court2: this.mmss(212 + t),
+      freeIn: this.mmss(Math.max(0, 306 - t)),
+      topFive: STANDINGS.slice(0, 5).map((s, i) => ({ rank: i + 1, name: s[0], record: s[2] })),
+      standings: STANDINGS.map((s, i) => ({
+        rank: i + 1, name: s[0], skill: s[1], record: s[2], pct: s[3], streak: s[4],
+        formBar: this.bar(parseFloat(s[3]))
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit -m 'Prevent same 4-player groups from being drawn consecutively *)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(grep -E \"^/Users.*\\\\.\\(tsx|ts\\)$\")",
+      "Bash(curl -v http://localhost:3000/login)",
+      "Bash(pkill -f \"npm run dev\")",
+      "Bash(node -c /Users/hisd3dev3/pickleq-app/src/app/login/page.tsx)",
+      "Bash(git -C /Users/hisd3dev3/pickleq-app log --oneline -5)",
+      "Bash(git checkout *)",
+      "Bash(pkill -9 node)",
+      "Bash(curl -s http://localhost:3007/dashboard)",
+      "Bash(git diff *)",
+      "Bash(curl -s http://localhost:3000/api/graphql)",
+      "Bash(curl -s http://localhost:3000/dashboard/clubs/test-club)",
+      "Bash(sed -i '646,949d' /Users/hisd3dev3/pickleq-app/src/app/dashboard/clubs/\\\\[clubId\\\\]/page.tsx && echo \"Old inline code removed\")",
+      "Bash(grep -E \"\\\\.tsx?$\")",
+      "Bash(grep -E \"\\\\.\\(ts|js\\)$\")",
+      "Bash(npm test *)",
+      "Bash(yarn test *)",
+      "Bash(yarn dev *)",
+      "Bash(sed -i '532s/gap: 8/gap: 4/' /Users/hisd3dev3/pickleq-app/src/components/session/OverviewTab.tsx)",
+      "Bash(sed -i '517s/gap: 8/gap: 20/' /Users/hisd3dev3/pickleq-app/src/components/session/OverviewTab.tsx)",
+      "Bash(sed -i '' '532s/gap: 8/gap: 4/' /Users/hisd3dev3/pickleq-app/src/components/session/OverviewTab.tsx)",
+      "Bash(sed -i '' '517s/gap: 8/gap: 20/' /Users/hisd3dev3/pickleq-app/src/components/session/OverviewTab.tsx)",
+      "Bash(python3)",
+      "Bash(grep -n \"useQuery.*CLUB_DETAIL_QUERY\\\\|const { data, loading\" /Users/hisd3dev3/pickleq-app/src/app/dashboard/clubs/\\\\[clubId\\\\]/page.tsx)"
+    ],
+    "additionalDirectories": [
+      "/Users/hisd3dev3/pickleq-app/src/app/dashboard/clubs/[clubId]"
+    ]
+  }
+}

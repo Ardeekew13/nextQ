@@ -202,6 +202,7 @@ export const sessionResolvers = {
       const session = await requireSessionOwner(context, args.id);
       assertTransition(session.status, [SessionStatus.DRAFT], "start");
       session.status = SessionStatus.ACTIVE;
+      session.startTime = new Date().toISOString();
       session.publicPublished = true;
       await session.save();
       return session;
@@ -238,6 +239,7 @@ export const sessionResolvers = {
         winRate: entry.winRate,
       })) as typeof session.finalStandings;
       session.status = SessionStatus.COMPLETED;
+      session.endTime = new Date().toISOString();
       session.finalisedAt = new Date();
       session.publicPublished = true;
       await session.save();
@@ -259,6 +261,10 @@ export const sessionResolvers = {
 
   Session: {
     id: (parent: { _id: unknown }) => String(parent._id),
+    clubSlug: async (parent: { clubId: unknown }) => {
+      const club = await Club.findById(parent.clubId).select("slug").lean();
+      return club?.slug ?? "";
+    },
     players: async (parent: { _id: unknown }) => SessionPlayer.find({ sessionId: parent._id }),
     courts: async (parent: { _id: unknown }) => Court.find({ sessionId: parent._id }).sort({ courtNumber: 1 }),
     activeGames: async (parent: { _id: unknown }) =>

@@ -1,28 +1,16 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useMutation } from "@apollo/client";
-import { Layout, Menu, Button, Typography, Avatar, App, Tooltip } from "antd";
-import {
-	LogoutOutlined,
-	TeamOutlined,
-	DashboardOutlined,
-	LeftOutlined,
-	RightOutlined,
-} from "@ant-design/icons";
-import { LOGOUT_ORGANISER } from "@/graphql/documents/organiser";
-import { BURGUNDY } from "@/theme/themeConfig";
+import { type ReactNode, useState } from "react";
+import { usePathname } from "next/navigation";
+import { Layout } from "antd";
+import { Sidebar } from "./Layout/Sidebar";
 import { Navbar } from "./Navbar";
-import { AppLogo } from "./AppLogo";
 import {
 	NavbarActionsProvider,
 	useNavbarActions,
 } from "./NavbarActionsContext";
 
-const { Sider, Content } = Layout;
-const { Text, Title } = Typography;
+const { Content } = Layout;
 
 function initials(name: string) {
 	return name
@@ -56,189 +44,186 @@ function DashboardShellInner({
 	organiserName: string;
 	children: ReactNode;
 }) {
+	const [sidebarOpen, setSidebarOpen] = useState(true);
 	const pathname = usePathname();
-	const router = useRouter();
-	const { message } = App.useApp();
-	const [logout] = useMutation(LOGOUT_ORGANISER);
-	const [collapsed, setCollapsed] = useState(false);
+	const { actions, title } = useNavbarActions();
 
 	const isSessionPage = /\/dashboard\/sessions\/[^/]+/.test(pathname ?? "");
+	const isNewSessionPage = /\/(dashboard\/)?clubs\/[^/]+\/sessions\/new/.test(pathname ?? "");
+	const isClubPage = /\/dashboard\/clubs\/[^/]+(?!\/sessions\/new)/.test(pathname ?? "");
+	const isFullHeight = isSessionPage || isNewSessionPage;
+	const hideSidebar = isSessionPage || isClubPage;
 
-	const selectedKey = pathname?.startsWith("/dashboard/clubs")
+	const selectedKey = pathname?.startsWith("/clubs")
 		? "clubs"
 		: "dashboard";
 
-	async function handleLogout() {
-		await logout();
-		message.success("Logged out");
-		router.push("/login");
-		router.refresh();
-	}
-
-	const { actions, title } = useNavbarActions();
-
 	return (
-		<Layout style={{ minHeight: "100vh", display: "flex" }}>
-			{!isSessionPage && (
-			<Sider
-				breakpoint="lg"
-				collapsedWidth={72}
-				width={260}
-				collapsed={collapsed}
-				onCollapse={setCollapsed}
-				style={{
-					borderRight: `1px solid ${BURGUNDY.border}`,
-					position: "fixed",
-					left: 0,
-					top: 0,
-					bottom: 0,
-					overflow: "auto",
-					zIndex: 100,
-					height: "100vh",
-				}}
-			>
-				<div
-					style={{
-						display: "flex",
-						flexDirection: "column",
-						height: "100%",
-						padding: collapsed ? "12px 6px" : "14px 12px",
-					}}
-				>
-					{/* Logo */}
-					<div
-						style={{
-							display: "flex",
-							alignItems: "center",
-							justifyContent: collapsed ? "center" : "flex-start",
-							padding: collapsed ? "4px 0 12px" : "2px 8px 14px",
-							borderBottom: `1px solid ${BURGUNDY.border}`,
-							marginBottom: 14,
-						}}
-					>
-						{collapsed ? (
-							<AppLogo size="sm" />
-						) : (
-							<AppLogo size="md" />
-						)}
-					</div>
-					<div
-						style={{
-							display: "flex",
-							alignItems: "center",
-							gap: 8,
-							justifyContent: collapsed ? "center" : "flex-start",
-							padding: collapsed ? "6px 0" : "6px 8px",
-							marginBottom: 14,
-							background: BURGUNDY.soft,
-							borderRadius: 12,
-						}}
-					>
-						<Avatar
+		<>
+			<style>{`
+				.dashboard-layout {
+					transition: margin-left 0.3s ease;
+				}
+				.dashboard-layout.is-session-page {
+					margin-left: 0 !important;
+				}
+				/* Mobile sidebar - default hidden */
+				.sidebar {
+					transform: translateX(-100%) !important;
+				}
+				/* Desktop sidebar - hidden by default on mobile */
+				.desktop-sidebar {
+					width: 0 !important;
+					height: 0 !important;
+					overflow: hidden !important;
+					position: absolute !important;
+					visibility: hidden !important;
+				}
+				.sidebar-toggle-btn {
+					display: none !important;
+				}
+				@media (min-width: 1024px) {
+					/* Desktop: show sidebar and button */
+					.desktop-sidebar {
+						width: 236px !important;
+						height: 100vh !important;
+						overflow: visible !important;
+						visibility: visible !important;
+					}
+					.sidebar-toggle-btn {
+						display: inline-flex !important;
+					}
+					.dashboard-layout {
+						margin-left: 236px !important;
+					}
+					/* Hide mobile sidebar on desktop */
+					.sidebar {
+						display: none !important;
+					}
+				}
+				@media (max-width: 1023px) {
+					.dashboard-layout {
+						margin-left: 0 !important;
+					}
+					/* Show mobile sidebar overlay on mobile */
+					.sidebar {
+						display: block !important;
+					}
+				}
+			`}</style>
+			<Layout style={{ minHeight: "100vh", display: "flex", position: "relative" }}>
+			{!hideSidebar && (
+				<>
+					{/* Mobile sidebar overlay */}
+					{sidebarOpen && (
+						<div
 							style={{
-								backgroundColor: BURGUNDY.primary,
-								fontWeight: 700,
-								flexShrink: 0,
-								fontSize: 12,
-								width: 32,
-								height: 32,
+								position: "fixed",
+								inset: 0,
+								background: "rgba(0,0,0,0.5)",
+								zIndex: 998,
+								display: "none",
 							}}
-						>
-							{initials(organiserName)}
-						</Avatar>
-						{!collapsed && (
-							<div style={{ overflow: "hidden" }}>
-								<Text
-									strong
-									style={{
-										display: "block",
-										lineHeight: 1.2,
-										whiteSpace: "nowrap",
-										overflow: "hidden",
-										textOverflow: "ellipsis",
-										fontSize: 13,
-									}}
-								>
-									{organiserName}
-								</Text>
-								<Text type="secondary" style={{ fontSize: 11 }}>
-									Organiser
-								</Text>
-							</div>
-						)}
-					</div>
-
-					<Menu
-						mode="inline"
-						selectedKeys={[selectedKey]}
-						style={{ border: "none", background: "transparent", flex: 1 }}
-						items={[
-							{
-								key: "dashboard",
-								icon: <DashboardOutlined />,
-								label: <Link href="/dashboard">Dashboard</Link>,
-							},
-							{
-								key: "clubs",
-								icon: <TeamOutlined />,
-								label: <Link href="/dashboard/clubs">Clubs</Link>,
-							},
-						]}
-					/>
-
-					<Button
-						icon={<LogoutOutlined />}
-						onClick={handleLogout}
-						block={!collapsed}
-						style={{ marginTop: 12 }}
-					>
-						{!collapsed && "Log out"}
-					</Button>
-
-					{/* Collapse toggle at the bottom */}
-					<Tooltip
-						title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-						placement="right"
-					>
-						<Button
-							type="text"
-							icon={collapsed ? <RightOutlined /> : <LeftOutlined />}
-							onClick={() => setCollapsed(!collapsed)}
-							style={{
-								marginTop: 8,
-								width: "100%",
-								color: "#999",
-								display: "flex",
-								alignItems: "center",
-								justifyContent: "center",
-							}}
+							className="hidden-tablet"
+							onClick={() => setSidebarOpen(false)}
 						/>
-					</Tooltip>
-				</div>
-			</Sider>
+					)}
+					{/* Sidebar - responsive positioning */}
+					<div
+						style={{
+							position: "fixed",
+							left: 0,
+							top: 0,
+							bottom: 0,
+							width: 236,
+							zIndex: 999,
+							height: "100vh",
+							transform: sidebarOpen ? "translateX(0)" : "translateX(-100%)",
+							transition: "transform 0.3s ease",
+							display: isSessionPage ? "none" : undefined,
+						}}
+						className="sidebar"
+					>
+						<Sidebar
+							selectedKey={selectedKey}
+							onSelect={(key) => {
+								setSidebarOpen(false);
+								if (key === "dashboard") {
+									window.location.href = "/dashboard";
+								} else if (key === "clubs") {
+									window.location.href = "/clubs";
+								}
+							}}
+							userInitials={initials(organiserName)}
+							userName={organiserName}
+							clubCode="BPC"
+						/>
+					</div>
+					{/* Desktop sidebar - toggleable */}
+					<div
+						className="desktop-sidebar"
+						style={{
+							position: "absolute",
+							left: 0,
+							top: 0,
+							bottom: 0,
+							width: 236,
+							zIndex: 10,
+							height: "100vh",
+							opacity: sidebarOpen ? 1 : 0,
+							pointerEvents: sidebarOpen ? "auto" : "none",
+							transition: "opacity 0.3s ease",
+						}}
+					>
+						<Sidebar
+							selectedKey={selectedKey}
+							onSelect={(key) => {
+								if (key === "dashboard") {
+									window.location.href = "/dashboard";
+								} else if (key === "clubs") {
+									window.location.href = "/clubs";
+								}
+							}}
+							userInitials={initials(organiserName)}
+							userName={organiserName}
+							clubCode="BPC"
+						/>
+					</div>
+				</>
 			)}
 			<Layout
+				className={`dashboard-layout${hideSidebar ? " is-session-page" : ""}`}
 				style={{
-					marginLeft: isSessionPage ? 0 : collapsed ? 72 : 260,
-					transition: "margin-left 0.2s",
+					marginLeft: isSessionPage ? 0 : (sidebarOpen ? 236 : 0),
 					flex: 1,
 					display: "flex",
 					flexDirection: "column",
-				}}
+				} as React.CSSProperties & { '--sidebar-margin'?: string }}
 			>
-				<Navbar collapsed={collapsed} actions={actions} title={title} hasSidebar={!isSessionPage} />
+				{!hideSidebar && (
+					<Navbar
+						actions={actions}
+						title={title}
+						hasSidebar={!hideSidebar}
+					/>
+				)}
 				<Content
 					style={{
-						padding: "24px 28px",
+						padding: isFullHeight ? 0 : "16px",
 						maxWidth: "100%",
 						width: "100%",
 						flex: 1,
-						overflow: "auto",
+						overflow: isFullHeight ? "hidden" : "auto",
+						background: isSessionPage || isClubPage ? "#fff" : "#f7eef1",
+						display: isFullHeight ? "flex" : undefined,
+						flexDirection: isFullHeight ? "column" : undefined,
 					}}
+					className="md:p-6 lg:p-8"
 				>
 					{children}
 				</Content>
 			</Layout>
-		</Layout>
+			</Layout>
+		</>
 	);
 }

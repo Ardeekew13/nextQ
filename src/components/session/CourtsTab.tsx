@@ -2,13 +2,13 @@
 
 import { useState, useEffect, type ReactNode } from "react";
 import { useMutation, useQuery } from "@apollo/client";
-import { Table, Button, Modal, Form, Input, InputNumber, Switch, Tag, Space, App, Card } from "antd";
+import { Table, Button, Modal, Form, Input, InputNumber, Tag, Space, App, Card } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import {
   SESSION_COURTS_QUERY,
   ADD_COURT,
   UPDATE_COURT,
-  DISABLE_COURT,
+  DELETE_COURT,
 } from "@/graphql/documents/organiser";
 import { humanizeStatus } from "@/lib/format";
 import { PageHeader } from "@/components/PageHeader";
@@ -16,12 +16,10 @@ import { PageHeader } from "@/components/PageHeader";
 const STATUS_COLORS: Record<string, string> = {
   AVAILABLE: "green",
   IN_USE: "blue",
-  DISABLED: "default",
 };
 
 export function CourtsTab({ sessionId, onHeader }: { sessionId: string; onHeader?: (node: ReactNode) => void }) {
   const { message } = App.useApp();
-  const { data, refetch } = useQuery(SESSION_COURTS_QUERY, { variables: { id: sessionId }, pollInterval: 4000 });
 
   const [addOpen, setAddOpen] = useState(false);
   const [editingCourt, setEditingCourt] = useState<any>(null);
@@ -30,7 +28,7 @@ export function CourtsTab({ sessionId, onHeader }: { sessionId: string; onHeader
 
   const [addCourt, { loading: adding }] = useMutation(ADD_COURT);
   const [updateCourt] = useMutation(UPDATE_COURT);
-  const [disableCourt] = useMutation(DISABLE_COURT);
+  const [deleteCourt] = useMutation(DELETE_COURT);
 
   const courts = data?.session?.courts ?? [];
   const nextCourtNumber = (courts.reduce((max: number, c: any) => Math.max(max, c.courtNumber), 0) || 0) + 1;
@@ -76,13 +74,13 @@ export function CourtsTab({ sessionId, onHeader }: { sessionId: string; onHeader
     }
   }
 
-  async function handleToggleDisabled(court: any, disabled: boolean) {
+  async function handleDeleteCourt(court: any) {
     try {
-      await disableCourt({ variables: { id: court.id, disabled } });
-      message.success(disabled ? "Court disabled" : "Court enabled");
+      await deleteCourt({ variables: { id: court.id } });
+      message.success("Court deleted");
       refetch();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "Could not update court");
+      message.error(err instanceof Error ? err.message : "Could not delete court");
     }
   }
 
@@ -115,13 +113,22 @@ export function CourtsTab({ sessionId, onHeader }: { sessionId: string; onHeader
                   <Button size="small" onClick={() => { setEditingCourt(court); editForm.setFieldsValue(court); }}>
                     Edit
                   </Button>
-                  <Switch
-                    checkedChildren="Enabled"
-                    unCheckedChildren="Disabled"
-                    checked={court.status !== "DISABLED"}
+                  <Button
+                    size="small"
+                    danger
                     disabled={!!court.currentGame}
-                    onChange={(checked) => handleToggleDisabled(court, !checked)}
-                  />
+                    onClick={() => {
+                      Modal.confirm({
+                        title: "Delete court?",
+                        content: "This court will be permanently deleted.",
+                        okText: "Delete",
+                        okButtonProps: { danger: true },
+                        onOk: () => handleDeleteCourt(court),
+                      });
+                    }}
+                  >
+                    Delete
+                  </Button>
                 </Space>
               ),
             },

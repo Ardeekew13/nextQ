@@ -1,6 +1,9 @@
 import { GraphQLError } from "graphql";
 import { Club } from "@/models/Club";
 import { Session } from "@/models/Session";
+import { ClubMember } from "@/models/ClubMember";
+import { SessionPlayer } from "@/models/SessionPlayer";
+import { User } from "@/models/User";
 import { slugify, withRandomSuffix } from "@/lib/slug";
 import { SessionStatus } from "@/types/enums";
 import { requireOrganiser, requireClubOwner, requireClubAccess } from "../guards";
@@ -36,6 +39,48 @@ export const clubResolvers = {
     },
     publicClub: async (_parent: unknown, args: { slug: string }) => {
       return Club.findOne({ slug: args.slug.toLowerCase() });
+    },
+    clubStandings: async (_parent: unknown, args: { slug: string }) => {
+      const club = await Club.findOne({ slug: args.slug.toLowerCase() });
+      if (!club) return [];
+      // Get all completed sessions for this club
+      const sessions = await Session.find({ clubId: club._id, status: "COMPLETED" }).select("_id").lean();
+      const sessionIds = sessions.map((s) => s._id);
+      if (!sessionIds.length) return [];
+
+      // Aggregate SessionPlayer across all sessions, group by normalised name
+      const pipeline = [
+        { $match: { sessionId: { $in: sessionIds } } },
+        {
+          $group: {
+            _id: { $toLower: { $trim: { input: "$name" } } },
+            name: { $first: "$name" },
+            nickname: { $first: "$nickname" },
+            totalGames: { $sum: "$gamesPlayed" },
+            wins: { $sum: "$wins" },
+            losses: { $sum: "$losses" },
+            sessionsPlayed: { $sum: 1 },
+            longestWinStreak: { $max: "$longestWinStreak" },
+          },
+        },
+        { $match: { totalGames: { $gt: 0 } } },
+        { $sort: { wins: -1 as const, totalGames: -1 as const } },
+      ];
+
+      const rows = await SessionPlayer.aggregate(pipeline);
+
+      return rows.map((r, i) => ({
+        rank: i + 1,
+        name: r.name,
+        nickname: r.nickname ?? null,
+        totalGames: r.totalGames,
+        wins: r.wins,
+        losses: r.losses,
+        winRate: r.totalGames > 0 ? r.wins / r.totalGames : 0,
+        sessionsPlayed: r.sessionsPlayed,
+        currentStreak: 0, // not tracked cross-session
+        longestWinStreak: r.longestWinStreak ?? 0,
+      }));
     },
   },
   Mutation: {
@@ -125,6 +170,18 @@ export const clubResolvers = {
     id: (parent: { _id: unknown }) => String(parent._id),
     sessions: async (parent: { _id: unknown }) => {
       return Session.find({ clubId: parent._id }).sort({ sessionDate: -1 });
+    },
+    memberCount: async (parent: { _id: unknown }) => {
+      return ClubMember.countDocuments({ clubId: parent._id });
+    },
+    organisers: async (parent: { _id: unknown; organiserId: unknown; coOrganiserIds: unknown[] }) => {
+      const ids = [parent.organiserId, ...(parent.coOrganiserIds ?? [])];
+      const users = await User.find({ _id: { $in: ids } });
+      return users.map((u) => ({
+        id: String(u._id),
+        name: u.name,
+        role: String(u._id) === String(parent.organiserId) ? "Organizer" : "Co-organizer",
+      }));
     },
   },
   PublicClub: {

@@ -6,7 +6,6 @@ import { useQuery, useMutation } from "@apollo/client";
 import { List, Button, Typography, Empty, Skeleton, Modal, Form, Input, App, Card, Avatar, Space } from "antd";
 import { PlusOutlined, TeamOutlined, EnvironmentOutlined } from "@ant-design/icons";
 import { MY_CLUBS_QUERY, CREATE_CLUB } from "@/graphql/documents/organiser";
-import { BURGUNDY } from "@/theme/themeConfig";
 
 const { Title, Text } = Typography;
 
@@ -58,7 +57,7 @@ export default function ClubsPage() {
             <Link href={`/dashboard/clubs/${club.id}`}>
               <Card hoverable styles={{ body: { padding: 18 } }}>
                 <Space align="start" size={12}>
-                  <Avatar shape="square" size={40} style={{ backgroundColor: BURGUNDY.soft, color: BURGUNDY.primary, flexShrink: 0 }} icon={<TeamOutlined />} />
+                  <Avatar shape="square" size={40} style={{ backgroundColor: "#fff1f5", color: "#f43f75", flexShrink: 0 }} icon={<TeamOutlined />} />
                   <div>
                     <Text strong style={{ fontSize: 16, display: "block" }}>
                       {club.name}

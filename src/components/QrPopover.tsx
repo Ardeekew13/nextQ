@@ -53,8 +53,8 @@ export function QrPopover({ url }: { url: string }) {
         </div>
       }
     >
-      <Button size="small" icon={<QrcodeOutlined />}>
-        <span className="hide-xs">QR Code</span>
+      <Button type="text" icon={<QrcodeOutlined />} style={{ color: "#e11d74", fontWeight: 600 }}>
+        Gate QR
       </Button>
     </Popover>
   );

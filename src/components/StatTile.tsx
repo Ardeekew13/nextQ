@@ -3,7 +3,6 @@
 import { Card, Typography, type MenuProps, Dropdown, Button } from "antd";
 import { MoreOutlined } from "@ant-design/icons";
 import type { ReactNode } from "react";
-import { BURGUNDY } from "@/theme/themeConfig";
 
 const { Text, Title } = Typography;
 
@@ -17,7 +16,7 @@ export interface StatTileProps {
   menu?: MenuProps["items"];
 }
 
-export function StatTile({ icon, iconColor = BURGUNDY.primary, iconBg = BURGUNDY.soft, label, value, suffix, menu }: StatTileProps) {
+export function StatTile({ icon, iconColor = "#f43f75", iconBg = "#fff1f5", label, value, suffix, menu }: StatTileProps) {
   return (
     <Card styles={{ body: { padding: "12px 14px" } }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>

@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode } from "react";
+import Link from "next/link";
 import { Layout } from "antd";
 import { AppLogo } from "./AppLogo";
 
@@ -120,14 +121,14 @@ export function Navbar({
           backgroundColor: "#ffffff",
           borderBottom: "1px solid #f3e8f0",
           boxShadow: "0 2px 16px rgba(236,72,153,0.07), 0 1px 3px rgba(0,0,0,0.05)",
-          paddingTop: 10,
-          paddingBottom: 10,
+          paddingTop: 12,
+          paddingBottom: 12,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           flexWrap: "wrap",
-          gap: 10,
-          minHeight: 58,
+          gap: 20,
+          minHeight: "auto",
           height: "auto",
           lineHeight: "normal",
           margin: 0,
@@ -137,12 +138,49 @@ export function Navbar({
           zIndex: 50,
         }}
       >
+        <style>{`
+          @media (max-width: 740px) {
+            .pickleq-navbar {
+              flex-direction: column !important;
+              align-items: stretch !important;
+              gap: 8px !important;
+              padding-top: 8px !important;
+              padding-bottom: 8px !important;
+            }
+            .pickleq-navbar-logo-section {
+              width: 100% !important;
+              display: flex !important;
+              align-items: center !important;
+            }
+            .pickleq-navbar-actions {
+              width: 100% !important;
+              gap: 6px !important;
+            }
+            .pickleq-navbar-actions .ant-btn {
+              flex: 1 !important;
+              min-width: 0 !important;
+              padding: 6px 12px !important;
+              font-size: 13px !important;
+              height: 32px !important;
+            }
+          }
+          @media (max-width: 480px) {
+            .pickleq-navbar-actions .ant-btn {
+              padding: 4px 8px !important;
+              font-size: 12px !important;
+              height: 28px !important;
+            }
+          }
+        `}</style>
+
         {/* Logo (only when no sidebar) + optional page title */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+        <div className="pickleq-navbar-logo-section" style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flex: 1 }}>
           {!hasSidebar && (
-            <div className={`pickleq-navbar-logo${title ? " has-title" : ""}`}>
-              <AppLogo size="sm" />
-            </div>
+            <Link href="/dashboard" style={{ display: "flex", alignItems: "center" }}>
+              <div className={`pickleq-navbar-logo${title ? " has-title" : ""}`}>
+                <AppLogo size="lg" />
+              </div>
+            </Link>
           )}
           {title && !hasSidebar && (
             <div style={{ width: 1, height: 20, background: "#e5e7eb", flexShrink: 0 }} />

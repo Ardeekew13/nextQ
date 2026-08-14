@@ -143,6 +143,9 @@ export const DASHBOARD_QUERY = gql`
       id
       name
       slug
+      location
+      createdAt
+      memberCount
       sessions {
         id
         name
@@ -150,6 +153,12 @@ export const DASHBOARD_QUERY = gql`
         status
         sessionDate
         publicUrl
+        settings {
+          queueMode
+        }
+        courts {
+          id
+        }
       }
     }
   }
@@ -165,6 +174,8 @@ export const CLUB_QUERY = gql`
       location
       description
       joinCode
+      memberCount
+      createdAt
       sessions {
         id
         name
@@ -172,6 +183,55 @@ export const CLUB_QUERY = gql`
         status
         sessionDate
         publicUrl
+        createdAt
+        courts {
+          id
+        }
+        settings {
+          queueMode
+        }
+      }
+    }
+  }
+`;
+
+export const CLUB_DETAIL_QUERY = gql`
+  query ClubDetail($id: ID!) {
+    club(id: $id) {
+      id
+      name
+      slug
+      location
+      memberCount
+      organisers {
+        id
+        name
+        role
+      }
+      sessions {
+        id
+        name
+        status
+        sessionDate
+        startTime
+        publicUrl
+        settings {
+          queueMode
+        }
+        courts {
+          id
+        }
+        players {
+          id
+          checkedIn
+          wins
+          losses
+          gamesPlayed
+          name
+        }
+        completedGames {
+          id
+        }
       }
     }
   }
@@ -459,6 +519,7 @@ export const SESSION_STANDINGS_QUERY = gql`
     session(id: $id) {
       id
       status
+      clubSlug
       standings {
         ...StandingFields
       }
@@ -563,6 +624,12 @@ export const DISABLE_COURT = gql`
   }
 `;
 
+export const DELETE_COURT = gql`
+  mutation DeleteCourt($id: ID!) {
+    deleteCourt(id: $id)
+  }
+`;
+
 export const GENERATE_NEXT_GAME = gql`
   ${GAME_FIELDS}
   mutation GenerateNextGame($sessionId: ID!, $courtId: ID!) {
@@ -644,6 +711,9 @@ export const CLUB_MEMBER_FIELDS = gql`
     nickname
     skillLevel
     totalGames
+    wins
+    losses
+    winRate
     sessionsPlayed
     active
   }
@@ -651,8 +721,8 @@ export const CLUB_MEMBER_FIELDS = gql`
 
 export const CLUB_MEMBERS_QUERY = gql`
   ${CLUB_MEMBER_FIELDS}
-  query ClubMembers($clubId: ID!) {
-    clubMembers(clubId: $clubId) {
+  query ClubMembers($clubId: ID!, $filter: String) {
+    clubMembers(clubId: $clubId, filter: $filter) {
       ...ClubMemberFields
     }
   }
@@ -699,3 +769,17 @@ export const IMPORT_CLUB_MEMBERS_TO_SESSION = gql`
   }
 `;
 
+export const SESSION_PLAYERS_ALLTIME_QUERY = gql`
+  query SessionPlayersAllTime($sessionId: ID!) {
+    sessionPlayersAllTime(sessionId: $sessionId) {
+      name
+      nickname
+      skillLevel
+      totalGames
+      totalWins
+      totalLosses
+      winRate
+      sessionsPlayed
+    }
+  }
+`;
