@@ -28,7 +28,8 @@
       "Bash(sed -i '' '517s/gap: 8/gap: 20/' /Users/hisd3dev3/pickleq-app/src/components/session/OverviewTab.tsx)",
       "Bash(python3)",
       "Bash(grep -n \"useQuery.*CLUB_DETAIL_QUERY\\\\|const { data, loading\" /Users/hisd3dev3/pickleq-app/src/app/dashboard/clubs/\\\\[clubId\\\\]/page.tsx)",
-      "Bash(yarn build *)"
+      "Bash(yarn build *)",
+      "Bash(yarn install *)"
     ],
     "additionalDirectories": [
       "/Users/hisd3dev3/pickleq-app/src/app/dashboard/clubs/[clubId]"

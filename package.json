@@ -28,6 +28,7 @@
     "graphql": "^16.9.0",
     "graphql-tag": "^2.12.6",
     "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^0.408.0",
     "mongoose": "^8.7.1",
     "next": "^16.2.12",
     "nprogress": "^0.2.0",
