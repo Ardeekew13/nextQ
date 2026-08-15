@@ -1,14 +1,14 @@
 import { useRouter } from "next/navigation";
-import { App, Modal } from "antd";
+import { App } from "antd";
 import { useApolloClient } from "@apollo/client";
 
 export function useLogout() {
   const router = useRouter();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const apolloClient = useApolloClient();
 
   const logout = () => {
-    Modal.confirm({
+    modal.confirm({
       title: "Log out of NextQ?",
       content: "Any unsaved session draft is kept.",
       okText: "Log out",

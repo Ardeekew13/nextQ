@@ -30,7 +30,13 @@
       "Bash(grep -n \"useQuery.*CLUB_DETAIL_QUERY\\\\|const { data, loading\" /Users/hisd3dev3/pickleq-app/src/app/dashboard/clubs/\\\\[clubId\\\\]/page.tsx)",
       "Bash(yarn build *)",
       "Bash(yarn install *)",
-      "Bash(MONGODB_URI=\"mongodb+srv://rdquilicotwork_db_user:LstifQBztcrs0Zqp@cluster0.hist5fh.mongodb.net/pickleq?retryWrites=true&w=majority&appName=Cluster0\" yarn tsx scripts/make-admin.ts rdquilicot14@gmail.com)"
+      "Bash(MONGODB_URI=\"mongodb+srv://rdquilicotwork_db_user:LstifQBztcrs0Zqp@cluster0.hist5fh.mongodb.net/pickleq?retryWrites=true&w=majority&appName=Cluster0\" yarn tsx scripts/make-admin.ts rdquilicot14@gmail.com)",
+      "Bash(awk 'NR==328,NR==334{print NR\": \"$0}' /Users/hisd3dev3/pickleq-app/src/app/login/page.tsx)",
+      "Bash(python3 -c ' *)",
+      "Bash(grep -n \"^html\\\\|^body\\\\|html,\\\\|body,\\\\|html {\" /Users/hisd3dev3/pickleq-app/src/styles/globals.css)",
+      "Bash(lsof -nP -iTCP -sTCP:LISTEN)",
+      "Bash(tee /tmp/tsc_out.txt)",
+      "Bash(yarn tsx *)"
     ],
     "additionalDirectories": [
       "/Users/hisd3dev3/pickleq-app/src/app/dashboard/clubs/[clubId]"

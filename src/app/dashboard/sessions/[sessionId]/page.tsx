@@ -63,7 +63,7 @@ export default function SessionPage() {
 
 	const courtsCount = session?.courts?.length ?? 0;
 	const queueMode = session?.settings?.queueMode ?? "";
-	const queueModeLabel = queueMode === "STRICT" ? "strict queue" : queueMode === "OPEN" ? "open queue" : queueMode.toLowerCase().replace(/_/g, " ");
+	const queueModeLabel = queueMode === "SMART" ? "strict queue" : queueMode === "OPEN" ? "open queue" : queueMode.toLowerCase().replace(/_/g, " ");
 	const isDraft = session?.status === "DRAFT";
 	const isActive = session?.status === "ACTIVE";
 	const isPaused = session?.status === "PAUSED";

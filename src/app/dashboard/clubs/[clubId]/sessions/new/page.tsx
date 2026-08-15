@@ -6,7 +6,7 @@ import { useMutation, useQuery } from "@apollo/client";
 import { App, Button } from "antd";
 import { CREATE_SESSION, CLUB_DETAIL_QUERY } from "@/graphql/documents/organiser";
 
-type QueueMode = "HYBRID" | "BALANCED" | "STRICT";
+type QueueMode = "HYBRID" | "BALANCED" | "SMART";
 
 const QUEUE_MODES: {
 	key: QueueMode;
@@ -26,7 +26,7 @@ const QUEUE_MODES: {
 		description: "Everyone ends on the same game count. Late arrivals get priority until they catch up.",
 	},
 	{
-		key: "STRICT",
+		key: "SMART",
 		label: "Strict",
 		description: "Pure queue order by wait time. Late arrivals join the back — no catch-up.",
 	},
@@ -38,7 +38,7 @@ function getModeHint(mode: QueueMode, courts: number, players: number): string |
 	const playersInQueue = Math.max(0, players - gamesAtOnce * 4);
 	if (playersInQueue <= 0) return null;
 	const waitMins = Math.round((playersInQueue / (gamesAtOnce * 4)) * 15);
-	if (mode === "STRICT" && waitMins > 0) {
+	if (mode === "SMART" && waitMins > 0) {
 		const saving = Math.round(waitMins * 0.4);
 		return `Strict mode with ${courts} court${courts !== 1 ? "s" : ""} and ${players} players means a ~${waitMins} minute wait between games. Balanced would shorten late-arrival waits by about ${saving} minutes.`;
 	}
@@ -56,7 +56,6 @@ export default function NewSessionPage() {
 
 	const [name, setName] = useState("Wednesday Open Play");
 	const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-	const [startTime, setStartTime] = useState("19:00");
 	const [courts, setCourts] = useState(2);
 	const [queueMode, setQueueMode] = useState<QueueMode>("HYBRID");
 	const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -79,9 +78,6 @@ export default function NewSessionPage() {
 			if (templateSession.settings?.queueMode) {
 				setQueueMode(templateSession.settings.queueMode as QueueMode);
 			}
-			if (templateSession.startTime) {
-				setStartTime(templateSession.startTime);
-			}
 		}
 	}, [club?.sessions, searchParams]);
 
@@ -92,7 +88,7 @@ export default function NewSessionPage() {
 			setSavedAt(now.toTimeString().slice(0, 8));
 		}, 800);
 		return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
-	}, [name, date, startTime, courts, queueMode]);
+	}, [name, date, courts, queueMode]);
 
 	async function handleSubmit() {
 		if (!name.trim()) { message.error("Enter a session name"); return; }
@@ -104,7 +100,6 @@ export default function NewSessionPage() {
 						clubId: params.clubId,
 						name: name.trim(),
 						sessionDate: new Date(date).toISOString(),
-						startTime,
 						numberOfCourts: courts,
 						settings: { queueMode, maxConsecutiveGames: 2 },
 					},
@@ -207,7 +202,7 @@ export default function NewSessionPage() {
 					<div style={{ flex: 1, height: 1, background: "rgba(29,31,32,0.12)" }} />
 				</div>
 
-				<div className="form-basics-grid" style={{ display: "grid", gridTemplateColumns: "1fr 200px 140px 120px", gap: 16, marginBottom: 36 }}>
+				<div className="form-basics-grid" style={{ display: "grid", gridTemplateColumns: "1fr 200px 120px", gap: 16, marginBottom: 36 }}>
 					<div>
 						<label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "rgba(29,31,32,0.55)", marginBottom: 6 }}>Session name</label>
 						<input
@@ -222,15 +217,6 @@ export default function NewSessionPage() {
 							type="date"
 							value={date}
 							onChange={(e) => setDate(e.target.value)}
-							style={{ width: "100%", boxSizing: "border-box", fontSize: 15, fontWeight: 500, padding: "10px 14px", border: "1.5px solid rgba(225,29,116,0.3)", background: "#fff", color: "#1d1f20", outline: "none" }}
-						/>
-					</div>
-					<div>
-						<label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "rgba(29,31,32,0.55)", marginBottom: 6 }}>Start</label>
-						<input
-							type="time"
-							value={startTime}
-							onChange={(e) => setStartTime(e.target.value)}
 							style={{ width: "100%", boxSizing: "border-box", fontSize: 15, fontWeight: 500, padding: "10px 14px", border: "1.5px solid rgba(225,29,116,0.3)", background: "#fff", color: "#1d1f20", outline: "none" }}
 						/>
 					</div>
