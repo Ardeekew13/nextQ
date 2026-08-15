@@ -18,6 +18,7 @@ import {
   CLUB_MEMBERS_QUERY,
   IMPORT_CLUB_MEMBERS_TO_SESSION,
   SESSION_PLAYERS_ALLTIME_QUERY,
+  SESSION_DASHBOARD_QUERY,
 } from "@/graphql/documents/organiser";
 
 const { Text } = Typography;
@@ -165,7 +166,9 @@ export function PlayersTab({
   const [addSessionPlayer, { loading: addingSingle }] = useMutation(ADD_SESSION_PLAYER);
   const [addSessionPlayers, { loading: addingBulk }] = useMutation(ADD_SESSION_PLAYERS);
   const [updateSessionPlayer] = useMutation(UPDATE_SESSION_PLAYER);
-  const [removeSessionPlayer] = useMutation(REMOVE_SESSION_PLAYER);
+  const [removeSessionPlayer] = useMutation(REMOVE_SESSION_PLAYER, {
+    refetchQueries: [{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } }],
+  });
   const [checkInPlayer] = useMutation(CHECK_IN_PLAYER);
   const [setPlayerActiveStatus] = useMutation(SET_PLAYER_ACTIVE_STATUS);
   const [importMembers] = useMutation(IMPORT_CLUB_MEMBERS_TO_SESSION);
@@ -278,10 +281,8 @@ export function PlayersTab({
       return;
     }
     try {
-      const result = await addSessionPlayer({ variables: { sessionId, input: { ...values, name } } });
-      const newId = result.data?.addSessionPlayer?.id;
-      if (newId) await checkInPlayer({ variables: { id: newId, checkedIn: true } });
-      message.success("Player added and checked in");
+      await addSessionPlayer({ variables: { sessionId, input: { ...values, name } } });
+      message.success("Player added — sitting out until checked in");
       singleForm.resetFields();
       refetch();
     } catch { message.error("Could not add player"); }
@@ -295,10 +296,8 @@ export function PlayersTab({
     if (dupes.length > 0) message.warning(`Skipped ${dupes.length} duplicate${dupes.length > 1 ? "s" : ""}`);
     if (inputs.length === 0) return;
     try {
-      const result = await addSessionPlayers({ variables: { sessionId, inputs } });
-      const newIds: string[] = result.data?.addSessionPlayers?.map((p: any) => p.id) ?? [];
-      if (newIds.length > 0) await Promise.all(newIds.map((id) => checkInPlayer({ variables: { id, checkedIn: true } })));
-      message.success(`${inputs.length} player${inputs.length > 1 ? "s" : ""} added`);
+      await addSessionPlayers({ variables: { sessionId, inputs } });
+      message.success(`${inputs.length} player${inputs.length > 1 ? "s" : ""} added — sitting out until checked in`);
       bulkForm.resetFields();
       setAddOpen(false);
       refetch();
@@ -320,9 +319,7 @@ export function PlayersTab({
     try {
       const result = await importMembers({ variables: { sessionId, memberIds: selectedImportIds } });
       const imported: any[] = result.data?.importClubMembersToSession ?? [];
-      if (imported.length > 0)
-        await Promise.all(imported.map((p: any) => checkInPlayer({ variables: { id: p.id, checkedIn: true } })));
-      message.success(`${imported.length} player${imported.length !== 1 ? "s" : ""} imported`);
+      message.success(`${imported.length} player${imported.length !== 1 ? "s" : ""} imported — sitting out until checked in`);
       setSelectedImportIds([]);
       setAddOpen(false);
       refetch();
@@ -336,6 +333,7 @@ export function PlayersTab({
     <div style={{ display: "flex", flexDirection: "column" }}>
       <style>{`
         .pl-row:hover { background: #fdf2f8 !important; }
+        .pl-cell-label { display: none; }
       `}</style>
 
       <style>{`
@@ -364,15 +362,74 @@ export function PlayersTab({
             max-width: none !important;
           }
           .players-table-wrapper {
-            overflow-x: auto !important;
-            -webkit-overflow-scrolling: touch !important;
+            overflow-x: visible !important;
             padding: 0 16px !important;
           }
           .players-table-header {
-            min-width: 800px !important;
+            display: none !important;
           }
           .pl-row {
-            min-width: 800px !important;
+            display: grid !important;
+            grid-template-columns: 28px 1fr 1fr auto !important;
+            grid-template-areas:
+              "check name name action"
+              "status status status action"
+              "skill skill skill skill"
+              "gp wl winpct laston" !important;
+            column-gap: 8px !important;
+            row-gap: 6px !important;
+            min-width: 0 !important;
+            padding: 12px 16px !important;
+            margin-bottom: 8px !important;
+            border: 1px solid rgba(138,39,72,0.1) !important;
+            border-radius: 8px !important;
+          }
+          .pl-cell-check { grid-area: check; }
+          .pl-cell-name { grid-area: name; }
+          .pl-cell-action { grid-area: action; justify-self: end; }
+          .pl-cell-status { grid-area: status; }
+          .pl-cell-skill { grid-area: skill; }
+          .pl-cell-gp { grid-area: gp; }
+          .pl-cell-wl { grid-area: wl; }
+          .pl-cell-winpct { grid-area: winpct; }
+          .pl-cell-laston { grid-area: laston; }
+          .pl-cell-label {
+            display: inline;
+            font-size: 10px;
+            font-weight: 700;
+            color: rgba(29,31,32,0.45);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+          }
+          .pl-row-alltime {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            column-gap: 8px !important;
+            row-gap: 6px !important;
+            min-width: 0 !important;
+            padding: 12px 16px !important;
+            margin-bottom: 8px !important;
+            border: 1px solid rgba(138,39,72,0.1) !important;
+            border-radius: 8px !important;
+          }
+          .pl-row-alltime .pl-cell-name {
+            grid-column: 1 / -1 !important;
+          }
+          .players-selection-bar {
+            padding: 0 12px !important;
+            gap: 6px !important;
+            height: auto !important;
+            min-height: 52px !important;
+            flex-wrap: wrap !important;
+            padding-top: 8px !important;
+            padding-bottom: 8px !important;
+          }
+          .players-selection-bar .selection-count {
+            font-size: 11px !important;
+          }
+          .players-selection-action {
+            padding: 4px 10px !important;
+            font-size: 11px !important;
           }
         }
       `}</style>
@@ -461,27 +518,27 @@ export function PlayersTab({
 
       {/* Selection action bar */}
       {selectedKeys.length > 0 && (
-        <div style={{
+        <div className="players-selection-bar" style={{
           background: "#3d0a1e", color: "#fff",
           padding: "0 24px", height: 52,
           display: "flex", alignItems: "center", gap: 12, flexShrink: 0,
         }}>
-          <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", whiteSpace: "nowrap", marginRight: 4 }}>
+          <span className="selection-count" style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", whiteSpace: "nowrap", marginRight: 4 }}>
             {selectedKeys.length} Selected
           </span>
           <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.2)", marginRight: 4 }} />
           {!allSelectedCheckedIn && (
-            <button onClick={() => handleBulkCheckIn(true)} style={actionBtnStyle}>Check in</button>
+            <button className="players-selection-action" onClick={() => handleBulkCheckIn(true)} style={actionBtnStyle}>Check in</button>
           )}
-          <button onClick={handleBulkSitOut} style={actionBtnStyle}>Sit out</button>
-          <button onClick={() => setSetSkillOpen(true)} style={actionBtnStyle}>Set skill</button>
+          <button className="players-selection-action" onClick={handleBulkSitOut} style={actionBtnStyle}>Sit out</button>
+          <button className="players-selection-action" onClick={() => setSetSkillOpen(true)} style={actionBtnStyle}>Set skill</button>
           {isDraft && (
             <Popconfirm
               title={`Remove ${selectedKeys.length} player${selectedKeys.length > 1 ? "s" : ""}?`}
               onConfirm={handleBulkRemove}
               okButtonProps={{ danger: true }}
             >
-              <button style={actionBtnStyle}>Remove</button>
+              <button className="players-selection-action" style={actionBtnStyle}>Remove</button>
             </Popconfirm>
           )}
           <div style={{ flex: 1 }} />
@@ -523,23 +580,23 @@ export function PlayersTab({
               return (
                 <div key={player.id} className="pl-row" onClick={() => setSelectedKeys((prev) => prev.includes(player.id) ? prev.filter((k) => k !== player.id) : [...prev, player.id])}
                   style={{ display: "grid", gridTemplateColumns: GRID, padding: "0 24px", borderBottom: "1px solid rgba(138,39,72,0.06)", minHeight: 52, alignItems: "center", background: isSelected ? "#fff0f5" : "#fff", cursor: "default" }}>
-                  <div onClick={(e) => e.stopPropagation()}>
+                  <div className="pl-cell-check" onClick={(e) => e.stopPropagation()}>
                     <Checkbox checked={isSelected} onChange={(e) => setSelectedKeys((prev) => e.target.checked ? [...prev, player.id] : prev.filter((k) => k !== player.id))} />
                   </div>
-                  <div>
+                  <div className="pl-cell-name">
                     <div style={{ fontSize: 14, fontWeight: 600, color: "#1d1f20" }}>{player.name}</div>
                     {player.nickname && <div style={{ fontSize: 11, color: "rgba(29,31,32,0.4)" }}>{player.nickname}</div>}
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                  <div className="pl-cell-status" style={{ display: "flex", alignItems: "center", gap: 7 }}>
                     <span style={{ width: 7, height: 7, borderRadius: "50%", background: sc.dot, flexShrink: 0, display: "inline-block" }} />
                     <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: sc.color, fontFamily: "'Barlow Condensed', sans-serif" }}>{sc.label}</span>
                   </div>
-                  <div><span style={{ display: "inline-block", border: "1px solid #e5e7eb", borderRadius: 4, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: "#1d1f20", padding: "2px 8px", textTransform: "uppercase" }}>{player.skillLevel ? (SKILL_LABEL[player.skillLevel] ?? player.skillLevel) : "Unrated"}</span></div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "#1d1f20" }}>{player.gamesPlayed}</div>
-                  <div style={{ fontSize: 13, color: "#1d1f20" }}>{player.wins}–{player.losses}</div>
-                  <div style={{ fontSize: 13, color: "#1d1f20" }}>{winPct(player.winRate)}</div>
-                  <div style={{ fontSize: 12, color: "rgba(29,31,32,0.45)" }}>{lastOn}</div>
-                  <div onClick={(e) => e.stopPropagation()}>
+                  <div className="pl-cell-skill"><span style={{ display: "inline-block", border: "1px solid #e5e7eb", borderRadius: 4, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: "#1d1f20", padding: "2px 8px", textTransform: "uppercase" }}>{player.skillLevel ? (SKILL_LABEL[player.skillLevel] ?? player.skillLevel) : "Unrated"}</span></div>
+                  <div className="pl-cell-gp" style={{ fontSize: 14, fontWeight: 600, color: "#1d1f20" }}><span className="pl-cell-label">GP </span>{player.gamesPlayed}</div>
+                  <div className="pl-cell-wl" style={{ fontSize: 13, color: "#1d1f20" }}><span className="pl-cell-label">W–L </span>{player.wins}–{player.losses}</div>
+                  <div className="pl-cell-winpct" style={{ fontSize: 13, color: "#1d1f20" }}><span className="pl-cell-label">Win % </span>{winPct(player.winRate)}</div>
+                  <div className="pl-cell-laston" style={{ fontSize: 12, color: "rgba(29,31,32,0.45)" }}><span className="pl-cell-label">Last on </span>{lastOn}</div>
+                  <div className="pl-cell-action" onClick={(e) => e.stopPropagation()}>
                     <Dropdown trigger={["click"]} menu={{ items: [
                       { key: "edit", label: "Edit player", onClick: () => { setEditingPlayer(player); editForm.setFieldsValue(player); } },
                       player.checkedIn ? { key: "checkout", label: "Check out", onClick: () => checkInPlayer({ variables: { id: player.id, checkedIn: false } }).then(() => refetch()) } : { key: "checkin", label: "Check in", onClick: () => checkInPlayer({ variables: { id: player.id, checkedIn: true } }).then(() => refetch()) },
@@ -561,16 +618,16 @@ export function PlayersTab({
       ) : (
         <>
           {(pagedList as any[]).map((player: any) => (
-            <div key={player.name} className="pl-row" style={{ display: "grid", gridTemplateColumns: "1fr 120px 80px 80px 80px 100px", padding: "0 24px", borderBottom: "1px solid rgba(138,39,72,0.06)", minHeight: 52, alignItems: "center", background: "#fff" }}>
-              <div>
+            <div key={player.name} className="pl-row-alltime" style={{ display: "grid", gridTemplateColumns: "1fr 120px 80px 80px 80px 100px", padding: "0 24px", borderBottom: "1px solid rgba(138,39,72,0.06)", minHeight: 52, alignItems: "center", background: "#fff" }}>
+              <div className="pl-cell-name">
                 <div style={{ fontSize: 14, fontWeight: 600, color: "#1d1f20" }}>{player.name}</div>
                 {player.nickname && <div style={{ fontSize: 11, color: "rgba(29,31,32,0.4)" }}>{player.nickname}</div>}
               </div>
-              <div><span style={{ display: "inline-block", border: "1px solid #e5e7eb", borderRadius: 4, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: "#1d1f20", padding: "2px 8px", textTransform: "uppercase" }}>{player.skillLevel ? (SKILL_LABEL[player.skillLevel] ?? player.skillLevel) : "Unrated"}</span></div>
-              <div style={{ fontSize: 13, color: "#1d1f20" }}>{player.sessionsPlayed}</div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#1d1f20" }}>{player.totalGames}</div>
-              <div style={{ fontSize: 13, color: "#1d1f20" }}>{player.totalWins}–{player.totalLosses}</div>
-              <div style={{ fontSize: 13, color: "#1d1f20" }}>{winPct(player.winRate)}</div>
+              <div className="pl-cell-skill"><span style={{ display: "inline-block", border: "1px solid #e5e7eb", borderRadius: 4, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: "#1d1f20", padding: "2px 8px", textTransform: "uppercase" }}>{player.skillLevel ? (SKILL_LABEL[player.skillLevel] ?? player.skillLevel) : "Unrated"}</span></div>
+              <div><span className="pl-cell-label">Sessions </span>{player.sessionsPlayed}</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#1d1f20" }}><span className="pl-cell-label">GP </span>{player.totalGames}</div>
+              <div style={{ fontSize: 13, color: "#1d1f20" }}><span className="pl-cell-label">W–L </span>{player.totalWins}–{player.totalLosses}</div>
+              <div style={{ fontSize: 13, color: "#1d1f20" }}><span className="pl-cell-label">Win % </span>{winPct(player.winRate)}</div>
             </div>
           ))}
         </>

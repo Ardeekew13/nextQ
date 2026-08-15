@@ -73,6 +73,9 @@ export function PlayersTab({
 	return (
 		<>
 			<style>{`
+				.player-row-label {
+					display: none;
+				}
 				@media (max-width: 768px) {
 					.players-toolbar {
 						flex-direction: column;
@@ -122,6 +125,7 @@ export function PlayersTab({
 						border-bottom: none;
 					}
 					.player-row-label {
+						display: inline;
 						font-size: 11px;
 						font-weight: 700;
 						color: rgba(29,31,32,0.5);

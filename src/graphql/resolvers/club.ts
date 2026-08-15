@@ -74,7 +74,15 @@ export const clubResolvers = {
 
       const rows = await SessionPlayer.aggregate(pipeline);
 
-      return rows.map((r, i) => ({
+      // Only include players still on the club's active roster - a removed
+      // member's historical games stay recorded, but they drop off standings.
+      const activeMembers = await ClubMember.find({ clubId: club._id, active: { $ne: false } })
+        .select("name")
+        .lean();
+      const activeNames = new Set(activeMembers.map((m) => m.name.trim().toLowerCase()));
+      const activeRows = rows.filter((r) => activeNames.has(r._id));
+
+      return activeRows.map((r, i) => ({
         rank: i + 1,
         name: r.name,
         nickname: r.nickname ?? null,

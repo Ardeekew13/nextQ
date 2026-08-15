@@ -264,7 +264,7 @@ export default function HomeContent() {
 							<span className="nav-link nav-link-login">Log in</span>
 						</Link>
 
-						<Link href="/register" style={{ textDecoration: "none" }}>
+						<Link href="/login" style={{ textDecoration: "none" }}>
 							<Button
 								style={{
 									height: "38px",
@@ -364,7 +364,7 @@ export default function HomeContent() {
 								marginTop: "6px",
 							}}
 						>
-							<Link href="/register" style={{ textDecoration: "none" }}>
+							<Link href="/login" style={{ textDecoration: "none" }}>
 								<Button
 									style={{
 										height: "50px",
@@ -984,7 +984,7 @@ export default function HomeContent() {
 					</div>
 
 					<div className="cta-buttons" style={{ display: "flex", gap: "12px" }}>
-						<Link href="/register" style={{ textDecoration: "none" }}>
+						<Link href="/login" style={{ textDecoration: "none" }}>
 							<Button
 								style={{
 									height: "52px",

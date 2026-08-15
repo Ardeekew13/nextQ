@@ -39,6 +39,22 @@ function waitMinutes(queueEnteredAt: string) {
 	);
 }
 
+function announceMatchup(
+	teamA: { players: { name: string }[] },
+	teamB: { players: { name: string }[] },
+	courtName?: string,
+) {
+	if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+	const teamAName = teamA.players.map((p) => p.name).join(" and ");
+	const teamBName = teamB.players.map((p) => p.name).join(" and ");
+	const courtPart = courtName ? `${courtName}: ` : "";
+	const text = `${courtPart}Team A, ${teamAName}, versus Team B, ${teamBName}`;
+	const utterance = new SpeechSynthesisUtterance(text);
+	utterance.rate = 0.8;
+	window.speechSynthesis.cancel();
+	window.speechSynthesis.speak(utterance);
+}
+
 export function OverviewTab({
 	sessionId,
 	onStats,
@@ -144,7 +160,11 @@ export function OverviewTab({
 
 	async function handleGenerate(courtId: string) {
 		try {
-			await generateNextGame({ variables: { sessionId: session.id, courtId } });
+			const result = await generateNextGame({ variables: { sessionId: session.id, courtId } });
+			const game = result.data?.generateNextGame;
+			if (game?.teamA && game?.teamB) {
+				announceMatchup(game.teamA, game.teamB, game.court?.name ?? `Court ${game.court?.courtNumber}`);
+			}
 			refetch();
 		} catch (err) {
 			message.error(
@@ -457,6 +477,9 @@ export function OverviewTab({
 								onRecordResult={handleRecordResult}
 								onCancelGame={handleCancelGame}
 								onUpdateTeams={handleUpdateTeams}
+								onCallOut={(game) =>
+									announceMatchup(game.teamA, game.teamB, court.name ?? `Court ${court.courtNumber}`)
+								}
 								onRemove={(courtId) => {
 									modal.confirm({
 										title: "Remove this court?",

@@ -466,6 +466,7 @@ export const typeDefs = gql`
     resumeSession(id: ID!): Session!
     finishSession(id: ID!): Session!
     cancelSession(id: ID!): Session!
+    deleteSession(id: ID!): Boolean!
 
     addSessionPlayer(sessionId: ID!, input: AddPlayerInput!): SessionPlayer!
     addSessionPlayers(sessionId: ID!, inputs: [AddPlayerInput!]!): [SessionPlayer!]!

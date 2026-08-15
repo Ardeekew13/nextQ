@@ -37,7 +37,8 @@ export async function requireClubOwner(context: GraphQLContext, clubId: string) 
   if (!club) {
     throw new GraphQLError("Club not found.", { extensions: { code: "NOT_FOUND" } });
   }
-  if (String(club.organiserId) !== organiser.sub) {
+  const isAdmin = organiser.role === "ADMIN";
+  if (!isAdmin && String(club.organiserId) !== organiser.sub) {
     throw new GraphQLError("You do not have access to this club.", {
       extensions: { code: "FORBIDDEN" },
     });
@@ -51,7 +52,8 @@ export async function requireSessionOwner(context: GraphQLContext, sessionId: st
   if (!session) {
     throw new GraphQLError("Session not found.", { extensions: { code: "NOT_FOUND" } });
   }
-  if (String(session.organiserId) !== organiser.sub) {
+  const isAdmin = organiser.role === "ADMIN";
+  if (!isAdmin && String(session.organiserId) !== organiser.sub) {
     throw new GraphQLError("You do not have access to this session.", {
       extensions: { code: "FORBIDDEN" },
     });

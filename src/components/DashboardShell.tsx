@@ -76,7 +76,7 @@ function DashboardShellInner({
 					width: 0 !important;
 					height: 0 !important;
 					overflow: hidden !important;
-					position: absolute !important;
+					position: fixed !important;
 					visibility: hidden !important;
 				}
 				.sidebar-toggle-btn {
@@ -163,7 +163,7 @@ function DashboardShellInner({
 					<div
 						className="desktop-sidebar"
 						style={{
-							position: "absolute",
+							position: "fixed",
 							left: 0,
 							top: 0,
 							bottom: 0,

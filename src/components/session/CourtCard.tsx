@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Button, Select, Typography, Tooltip } from "antd";
-import { ClockCircleOutlined, SwapOutlined, CheckOutlined, CloseOutlined, EditOutlined } from "@ant-design/icons";
+import { ClockCircleOutlined, SwapOutlined, CheckOutlined, CloseOutlined, EditOutlined, SoundOutlined } from "@ant-design/icons";
 
 const { Text } = Typography;
 
@@ -71,6 +71,7 @@ interface CourtCardProps {
 	onCancelGame?: (gameId: string) => void;
 	onUpdateTeams?: (gameId: string, teamAPlayerIds: string[], teamBPlayerIds: string[]) => Promise<void>;
 	onRemove?: (courtId: string) => void;
+	onCallOut?: (game: any) => void;
 }
 
 export function CourtCard({
@@ -85,6 +86,7 @@ export function CourtCard({
 	onCancelGame,
 	onUpdateTeams,
 	onRemove,
+	onCallOut,
 }: CourtCardProps) {
 	const [editing, setEditing] = useState(false);
 	const [editTeamA, setEditTeamA] = useState<string[]>([]);
@@ -127,6 +129,16 @@ export function CourtCard({
 				</span>
 				<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
 					{game?.startedAt && <GameClock startedAt={game.startedAt} />}
+					{game && onCallOut && (
+						<Tooltip title="Call out matchup">
+							<button
+								onClick={() => onCallOut(game)}
+								style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(29,31,32,0.35)", padding: "2px 4px", lineHeight: 1, display: "flex", alignItems: "center" }}
+							>
+								<SoundOutlined style={{ fontSize: 14 }} />
+							</button>
+						</Tooltip>
+					)}
 					{game && !editing && onUpdateTeams && (
 						<Tooltip title="Edit lineup">
 							<button

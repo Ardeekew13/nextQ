@@ -1,22 +1,45 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, Input, Tag } from "antd";
+import { Button, Input, Tag, Dropdown, App } from "antd";
+import { useMutation } from "@apollo/client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { humanizeStatus } from "@/lib/format";
+import { DELETE_SESSION } from "@/graphql/documents/organiser";
 
 interface SessionsTabProps {
 	club: any;
 	activeTab: string;
 	setActiveTab: (tab: string) => void;
 	onTabChange?: () => void;
+	isAdmin?: boolean;
 }
 
-export function SessionsTab({ club, activeTab, setActiveTab, onTabChange }: SessionsTabProps) {
+export function SessionsTab({ club, activeTab, setActiveTab, onTabChange, isAdmin }: SessionsTabProps) {
 	const router = useRouter();
+	const { message, modal } = App.useApp();
 	const [searchValue, setSearchValue] = useState("");
 	const [filterStatus, setFilterStatus] = useState("all");
+	const [deleteSession] = useMutation(DELETE_SESSION);
+
+	function handleDeleteSession(sessionId: string, sessionName: string) {
+		modal.confirm({
+			title: `Delete "${sessionName}"?`,
+			content: "This permanently deletes the session, its courts, players, and game history. This cannot be undone.",
+			okText: "Delete",
+			okButtonProps: { danger: true },
+			onOk: async () => {
+				try {
+					await deleteSession({ variables: { id: sessionId } });
+					message.success("Session deleted");
+					onTabChange?.();
+				} catch (err) {
+					message.error(err instanceof Error ? err.message : "Could not delete session");
+				}
+			},
+		});
+	}
 
 	useEffect(() => {
 		if (activeTab === "sessions" && onTabChange) {
@@ -225,7 +248,30 @@ export function SessionsTab({ club, activeTab, setActiveTab, onTabChange }: Sess
 									{humanizeStatus(session.status)}
 								</Tag>
 							</div>
-							<div style={{ textAlign: "center" }}>⋯</div>
+							<div style={{ textAlign: "center" }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+								{isAdmin ? (
+									<Dropdown
+										trigger={["click"]}
+										menu={{
+											items: [
+												{
+													key: "delete",
+													label: <span style={{ color: "#e11d74" }}>Delete session</span>,
+													onClick: () => handleDeleteSession(session.id, session.name),
+												},
+											],
+										}}
+									>
+										<button
+											style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "rgba(29,31,32,0.5)" }}
+										>
+											⋯
+										</button>
+									</Dropdown>
+								) : (
+									"⋯"
+								)}
+							</div>
 						</div>
 					</Link>
 				))}
@@ -233,6 +279,11 @@ export function SessionsTab({ club, activeTab, setActiveTab, onTabChange }: Sess
 
 			{/* Repeat Prompt */}
 			{(() => {
+				const hasOngoingSession = (club.sessions ?? []).some(
+					(s: any) => s.status === "ACTIVE" || s.status === "PAUSED"
+				);
+				if (hasOngoingSession) return null;
+
 				const completedSessions = (club.sessions ?? [])
 					.filter((s: any) => s.status === "COMPLETED")
 					.sort((a: any, b: any) => new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime());

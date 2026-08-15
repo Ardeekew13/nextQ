@@ -56,7 +56,7 @@ export default function NewSessionPage() {
 
 	const [name, setName] = useState("Wednesday Open Play");
 	const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-	const [courts, setCourts] = useState(2);
+	const [courts, setCourts] = useState(1);
 	const [queueMode, setQueueMode] = useState<QueueMode>("HYBRID");
 	const [savedAt, setSavedAt] = useState<string | null>(null);
 	const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -158,6 +158,21 @@ export default function NewSessionPage() {
 					}
 					.session-footer > span {
 						display: none !important;
+					}
+					.session-footer-actions {
+						width: 100% !important;
+						flex-direction: column !important;
+						gap: 8px !important;
+					}
+					.session-footer-actions button,
+					.session-footer-actions .ant-btn {
+						width: 100% !important;
+						min-width: 0 !important;
+						padding: 0 12px !important;
+						font-size: 13px !important;
+						letter-spacing: 0.02em !important;
+						white-space: nowrap !important;
+						height: 40px !important;
 					}
 				}
 			`}</style>
@@ -339,7 +354,7 @@ export default function NewSessionPage() {
 				justifyContent: "space-between",
 			}}>
 				<span style={{ fontSize: 13, color: "rgba(29,31,32,0.4)" }}>Next: invite the roster and set play rules.</span>
-				<div style={{ display: "flex", gap: 12 }}>
+				<div className="session-footer-actions" style={{ display: "flex", gap: 12 }}>
 					<button
 						onClick={() => router.back()}
 						style={{ background: "none", border: "none", fontSize: 13, fontWeight: 600, color: "#e11d74", cursor: "pointer", padding: "8px 4px" }}

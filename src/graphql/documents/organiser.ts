@@ -90,6 +90,7 @@ export const ME_QUERY = gql`
       id
       email
       name
+      role
     }
   }
 `;
@@ -359,6 +360,12 @@ export const CANCEL_SESSION = gql`
       id
       status
     }
+  }
+`;
+
+export const DELETE_SESSION = gql`
+  mutation DeleteSession($id: ID!) {
+    deleteSession(id: $id)
   }
 `;
 

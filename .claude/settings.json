@@ -36,7 +36,24 @@
       "Bash(grep -n \"^html\\\\|^body\\\\|html,\\\\|body,\\\\|html {\" /Users/hisd3dev3/pickleq-app/src/styles/globals.css)",
       "Bash(lsof -nP -iTCP -sTCP:LISTEN)",
       "Bash(tee /tmp/tsc_out.txt)",
-      "Bash(yarn tsx *)"
+      "Bash(yarn tsx *)",
+      "Read(//dev/**)",
+      "Bash(curl -s -b \"auth_token=$\\(grep -o 'MONGODB' /dev/null\\)\" http://localhost:3000/dashboard)",
+      "Bash(curl -s -o /tmp/dash.html -w \"%{http_code} %{url_effective}\\\\n\" http://localhost:3000/dashboard)",
+      "Bash(curl -sf http://localhost:3000)",
+      "Bash(node -e \"require.resolve\\('playwright'\\)\")",
+      "Bash(npx --no-install playwright --version)",
+      "Bash(mkdir -p /private/tmp/claude-501/-Users-hisd3dev3-pickleq-app/dbc06c98-6042-4c7b-b843-5dedb383904c/scratchpad/pw)",
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "Read(//Applications/Google Chrome.app/Contents/MacOS/**)",
+      "Read(//Applications/**)",
+      "Bash(node check.js)",
+      "Bash(~/.nvm/versions/node/v20.19.6/bin/node check.js)",
+      "Bash(curl -sI http://localhost:3000/login)",
+      "Bash(grep -rln \"Content-Security-Policy\" /Users/hisd3dev3/pickleq-app -not -path \"*/node_modules/*\")",
+      "Bash(~/.nvm/versions/node/v20.19.6/bin/node check-scroll.js)",
+      "Bash(echo \"exit: $?\")"
     ],
     "additionalDirectories": [
       "/Users/hisd3dev3/pickleq-app/src/app/dashboard/clubs/[clubId]"

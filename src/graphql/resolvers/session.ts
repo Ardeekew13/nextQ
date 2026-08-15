@@ -139,6 +139,17 @@ export const sessionResolvers = {
         throw new GraphQLError("Session name is required.", { extensions: { code: "BAD_USER_INPUT" } });
       }
 
+      const ongoingSession = await Session.findOne({
+        clubId: club._id,
+        status: { $in: [SessionStatus.ACTIVE, SessionStatus.PAUSED] },
+      });
+      if (ongoingSession) {
+        throw new GraphQLError(
+          `Finish "${ongoingSession.name}" before starting a new session.`,
+          { extensions: { code: "BAD_USER_INPUT" } }
+        );
+      }
+
       const slug = await uniqueSessionSlug(club._id, args.input.slug || args.input.name);
       const settings = mergeSettings(DEFAULT_SESSION_SETTINGS, args.input.settings);
 
@@ -256,6 +267,21 @@ export const sessionResolvers = {
       session.status = SessionStatus.CANCELLED;
       await session.save();
       return session;
+    },
+
+    deleteSession: async (_p: unknown, args: { id: string }, context: GraphQLContext) => {
+      const session = await requireSessionOwner(context, args.id);
+      if (session.status === SessionStatus.ACTIVE || session.status === SessionStatus.PAUSED) {
+        throw new GraphQLError(
+          "Cannot delete an active or paused session. Finish or cancel it first.",
+          { extensions: { code: "BAD_USER_INPUT" } }
+        );
+      }
+      await Game.deleteMany({ sessionId: session._id });
+      await Court.deleteMany({ sessionId: session._id });
+      await SessionPlayer.deleteMany({ sessionId: session._id });
+      await session.deleteOne();
+      return true;
     },
   },
 

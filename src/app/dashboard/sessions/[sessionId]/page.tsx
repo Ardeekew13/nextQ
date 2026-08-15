@@ -9,6 +9,7 @@ import {
 	SESSION_DASHBOARD_QUERY,
 	START_SESSION,
 	PAUSE_SESSION,
+	RESUME_SESSION,
 	FINISH_SESSION,
 	LOGOUT_ORGANISER,
 } from "@/graphql/documents/organiser";
@@ -55,6 +56,7 @@ export default function SessionPage() {
 	});
 	const [startSession, { loading: starting }] = useMutation(START_SESSION);
 	const [pauseSession, { loading: pausing }] = useMutation(PAUSE_SESSION);
+	const [resumeSession, { loading: resuming }] = useMutation(RESUME_SESSION);
 	const [finishSession, { loading: finishing }] = useMutation(FINISH_SESSION);
 	const [logoutOrganiser, { loading: loggingOut }] = useMutation(LOGOUT_ORGANISER);
 
@@ -85,6 +87,16 @@ export default function SessionPage() {
 			message.success("Session paused");
 		} catch (err) {
 			message.error(err instanceof Error ? err.message : "Could not pause session");
+		}
+	}
+
+	async function handleResume() {
+		try {
+			await resumeSession({ variables: { id: params.sessionId } });
+			refetch();
+			message.success("Session resumed");
+		} catch (err) {
+			message.error(err instanceof Error ? err.message : "Could not resume session");
 		}
 	}
 
@@ -161,10 +173,11 @@ export default function SessionPage() {
 						display: flex !important;
 						gap: 6px !important;
 					}
-					.session-actions button:not(.session-end-btn) {
+					.session-actions button:not(.session-end-btn):not(.session-start-btn) {
 						display: none !important;
 					}
-					.session-actions .session-end-btn {
+					.session-actions .session-end-btn,
+					.session-actions .session-start-btn {
 						padding: 4px 8px !important;
 						font-size: 12px !important;
 						height: 32px !important;
@@ -335,6 +348,7 @@ export default function SessionPage() {
 					{/* DRAFT — show Start Session */}
 					{isDraft && (
 						<Button
+							className="session-start-btn"
 							type="primary"
 							style={{ background: "#e11d74", borderColor: "#e11d74", fontWeight: 700, letterSpacing: "0.05em" }}
 							loading={starting}
@@ -362,16 +376,27 @@ export default function SessionPage() {
 						</>
 					)}
 
-					{/* PAUSED — show End Session */}
+					{/* PAUSED — show Resume + End Session */}
 					{isPaused && (
-						<Button
-							type="primary"
-							style={{ background: "#e11d74", borderColor: "#e11d74", fontWeight: 700, letterSpacing: "0.05em" }}
-							loading={finishing}
-							onClick={handleEnd}
-						>
-							END SESSION
-						</Button>
+						<>
+							<Button
+								className="session-start-btn"
+								onClick={handleResume}
+								loading={resuming}
+								style={{ fontWeight: 600 }}
+							>
+								Resume session
+							</Button>
+							<Button
+								className="session-end-btn"
+								type="primary"
+								style={{ background: "#e11d74", borderColor: "#e11d74", fontWeight: 700, letterSpacing: "0.05em" }}
+								loading={finishing}
+								onClick={handleEnd}
+							>
+								END SESSION
+							</Button>
+						</>
 					)}
 				</div>
 
@@ -398,6 +423,18 @@ export default function SessionPage() {
 									Gate QR
 								</div>
 							)}
+							{isDraft && (
+								<div
+									className="session-mobile-menu-item"
+									onClick={() => {
+										handleStart();
+										setMobileMenuOpen(false);
+									}}
+									style={{ color: "#e11d74", fontWeight: 700 }}
+								>
+									Start Session
+								</div>
+							)}
 							{isActive && (
 								<>
 									<div
@@ -422,16 +459,27 @@ export default function SessionPage() {
 								</>
 							)}
 							{isPaused && (
-								<div
-									className="session-mobile-menu-item"
-									onClick={() => {
-										handleEnd();
-										setMobileMenuOpen(false);
-									}}
-									style={{ color: "#e11d74", fontWeight: 700 }}
-								>
-									End Session
-								</div>
+								<>
+									<div
+										className="session-mobile-menu-item"
+										onClick={() => {
+											handleResume();
+											setMobileMenuOpen(false);
+										}}
+									>
+										Resume Session
+									</div>
+									<div
+										className="session-mobile-menu-item"
+										onClick={() => {
+											handleEnd();
+											setMobileMenuOpen(false);
+										}}
+										style={{ color: "#e11d74", fontWeight: 700 }}
+									>
+										End Session
+									</div>
+								</>
 							)}
 							<div style={{ borderTop: "1px solid #f0f0f0" }} />
 							<div

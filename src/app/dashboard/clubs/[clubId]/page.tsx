@@ -8,6 +8,7 @@ import {
 	ADD_CLUB_MEMBER,
 	UPDATE_CLUB_MEMBER,
 	REMOVE_CLUB_MEMBER,
+	ME_QUERY,
 } from "@/graphql/documents/organiser";
 import { CLUB_STANDINGS_QUERY } from "@/graphql/documents/public";
 import { humanizeStatus } from "@/lib/format";
@@ -77,7 +78,11 @@ export default function ClubDetailPage() {
 	} = useQuery(CLUB_MEMBERS_QUERY, {
 		variables: { clubId: params.clubId },
 	});
-	const { data: standingsData, loading: standingsLoading } = useQuery(
+	const {
+		data: standingsData,
+		loading: standingsLoading,
+		refetch: refetchStandings,
+	} = useQuery(
 		CLUB_STANDINGS_QUERY,
 		{
 			variables: { slug: data?.club?.slug ?? "" },
@@ -85,6 +90,8 @@ export default function ClubDetailPage() {
 			pollInterval: 30000,
 		},
 	);
+	const { data: meData } = useQuery(ME_QUERY);
+	const isAdmin = meData?.me?.role === "ADMIN";
 	const [deleteClub] = useMutation(DELETE_CLUB);
 	const [addClubMember] = useMutation(ADD_CLUB_MEMBER);
 	const [updateClubMember] = useMutation(UPDATE_CLUB_MEMBER);
@@ -104,6 +111,7 @@ export default function ClubDetailPage() {
 
 	// 1. Use first session's creation date if available, otherwise use club creation date
 	const sessions = club.sessions ?? [];
+	const ongoingSession = sessions.find((s: any) => s.status === "ACTIVE" || s.status === "PAUSED");
 	let createdDate = sessions.length > 0 ? sessions[0].createdAt : club.createdAt;
 	if (createdDate && typeof createdDate === "object" && "toDate" in createdDate) {
 		createdDate = (createdDate as any).toDate();
@@ -180,6 +188,7 @@ export default function ClubDetailPage() {
 			await removeClubMember({ variables: { id } });
 			message.success("Player removed from roster");
 			refetchMembers();
+			refetchStandings();
 		} catch (err) {
 			message.error(
 				err instanceof Error ? err.message : "Could not remove player",
@@ -724,11 +733,13 @@ export default function ClubDetailPage() {
 
 						<Button
 							type="primary"
+							disabled={!!ongoingSession}
+							title={ongoingSession ? `Finish "${ongoingSession.name}" before starting a new session.` : undefined}
 							onClick={() =>
 								router.push(`/dashboard/clubs/${club.id}/sessions/new`)
 							}
 							style={{
-								background: "linear-gradient(135deg, #ec4899 0%, #db2777 100%)",
+								background: ongoingSession ? undefined : "linear-gradient(135deg, #ec4899 0%, #db2777 100%)",
 								border: "none",
 								fontWeight: 700,
 								fontSize: 13,
@@ -793,7 +804,7 @@ export default function ClubDetailPage() {
 				{/* Main Column */}
 				<div className="club-main">
 					{/* Tab Components */}
-					<SessionsTab club={club} activeTab={activeTab} setActiveTab={setActiveTab} onTabChange={refetch} />
+					<SessionsTab club={club} activeTab={activeTab} setActiveTab={setActiveTab} onTabChange={refetch} isAdmin={isAdmin} />
 					<PlayersTab
 						activeTab={activeTab}
 						members={members}

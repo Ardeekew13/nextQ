@@ -1,26 +1,12 @@
 import { GraphQLError } from "graphql";
 import { ClubMember } from "@/models/ClubMember";
-import { Club } from "@/models/Club";
 import { Session } from "@/models/Session";
 import { SessionPlayer } from "@/models/SessionPlayer";
-import { requireOrganiser } from "../guards";
+import { SessionStatus } from "@/types/enums";
+import { requireOrganiser, requireClubAccess } from "../guards";
 import type { GraphQLContext } from "../context";
 
-/** Ensure the calling organiser has access to the club (owner or co-organiser) */
-async function requireClubAccess(context: GraphQLContext, clubId: string) {
-  requireOrganiser(context);
-  const club = await Club.findById(clubId);
-  if (!club) throw new GraphQLError("Club not found.", { extensions: { code: "NOT_FOUND" } });
-  const isOwner = String(club.organiserId) === String(context.organiser!.sub);
-  const coOrganiserIds = (club.coOrganiserIds ?? []) as unknown[];
-  const isCoOrg = coOrganiserIds.some((id) => String(id) === String(context.organiser!.sub));
-  if (!isOwner && !isCoOrg) {
-    throw new GraphQLError("Not authorised.", { extensions: { code: "FORBIDDEN" } });
-  }
-  return club;
-}
-
-/** Ensure the calling organiser owns the member's club */
+/** Ensure the calling organiser owns (or, as ADMIN, has access to) the member's club */
 async function requireMemberOwner(context: GraphQLContext, memberId: string) {
   requireOrganiser(context);
   const member = await ClubMember.findById(memberId);
@@ -203,8 +189,20 @@ export const clubMemberResolvers = {
     },
 
     removeClubMember: async (_p: unknown, args: { id: string }, context: GraphQLContext) => {
-      await requireMemberOwner(context, args.id);
+      const member = await requireMemberOwner(context, args.id);
       await ClubMember.findByIdAndDelete(args.id);
+
+      // Also drop them from any not-yet-started session in this club — a
+      // session that's already active/completed keeps its player history.
+      const draftSessions = await Session.find({ clubId: member.clubId, status: SessionStatus.DRAFT })
+        .select("_id")
+        .lean();
+      const normalizedName = member.name.trim().toLowerCase();
+      await SessionPlayer.deleteMany({
+        sessionId: { $in: draftSessions.map((s) => s._id) },
+        $expr: { $eq: [{ $toLower: { $trim: { input: "$name" } } }, normalizedName] },
+      });
+
       return true;
     },
 
