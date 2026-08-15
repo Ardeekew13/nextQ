@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Button, Form, Input, Modal, Select, Tag, Dropdown, Pagination } from "antd";
+import { Button, Form, Input, Modal, Select, Tag, Dropdown, Pagination, Checkbox } from "antd";
 import { MoreVertical } from "lucide-react";
 
 const SKILL_OPTIONS = [
@@ -50,6 +50,8 @@ export function PlayersTab({
 	const [searchValue, setSearchValue] = useState("");
 	const [filterValue, setFilterValue] = useState<"all" | "played" | "never" | "unrated">("all");
 	const [currentPage, setCurrentPage] = useState(1);
+	const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+	const [removing, setRemoving] = useState(false);
 
 	useEffect(() => {
 		if (refetchMembers) {
@@ -69,6 +71,18 @@ export function PlayersTab({
 	const totalPages = Math.ceil(searched.length / ROWS_PER_PAGE);
 	const startIdx = (currentPage - 1) * ROWS_PER_PAGE;
 	const paginatedMembers = searched.slice(startIdx, startIdx + ROWS_PER_PAGE);
+	const allVisibleSelected =
+		paginatedMembers.length > 0 && paginatedMembers.every((m) => selectedKeys.includes(m.id));
+
+	async function handleBulkRemove() {
+		setRemoving(true);
+		try {
+			await Promise.all(selectedKeys.map((id) => onRemoveMember(id)));
+			setSelectedKeys([]);
+		} finally {
+			setRemoving(false);
+		}
+	}
 
 	return (
 		<>
@@ -108,13 +122,19 @@ export function PlayersTab({
 						display: none;
 					}
 					.player-row {
-						grid-template-columns: 1fr !important;
+						grid-template-columns: 28px 1fr !important;
 						border: 1px solid rgba(138,39,72,0.12);
 						border-radius: 8px;
 						margin-bottom: 12px;
 						gap: 0 !important;
+						padding: 10px 12px !important;
+					}
+					.player-row > .ant-checkbox-wrapper {
+						align-self: flex-start;
+						margin-top: 3px;
 					}
 					.player-row-content {
+						grid-column: 1 / -1;
 						display: flex;
 						justify-content: space-between;
 						align-items: center;
@@ -123,6 +143,12 @@ export function PlayersTab({
 					}
 					.player-row-content:last-child {
 						border-bottom: none;
+					}
+					.player-row-actions {
+						grid-column: 1 / -1;
+						display: flex;
+						justify-content: flex-end;
+						padding: 4px 12px 0;
 					}
 					.player-row-label {
 						display: inline;
@@ -199,12 +225,54 @@ export function PlayersTab({
 				</div>
 			</div>
 
+			{/* Selection action bar */}
+			{selectedKeys.length > 0 && (
+				<div
+					style={{
+						background: "#3d0a1e",
+						color: "#fff",
+						padding: "0 14px",
+						height: 48,
+						display: "flex",
+						alignItems: "center",
+						gap: 12,
+					}}
+				>
+					<span style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+						{selectedKeys.length} Selected
+					</span>
+					<div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.2)" }} />
+					<Button
+						size="small"
+						danger
+						loading={removing}
+						onClick={() => {
+							Modal.confirm({
+								title: `Remove ${selectedKeys.length} player${selectedKeys.length > 1 ? "s" : ""} from the club?`,
+								okText: "Remove",
+								okButtonProps: { danger: true },
+								onOk: handleBulkRemove,
+							});
+						}}
+					>
+						Remove from club
+					</Button>
+					<div style={{ flex: 1 }} />
+					<button
+						onClick={() => setSelectedKeys([])}
+						style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.65)", fontSize: 12, fontWeight: 500, textDecoration: "underline" }}
+					>
+						Clear selection
+					</button>
+				</div>
+			)}
+
 			{/* Table */}
 			<div style={{ background: "#fff", overflow: "visible" }}>
 				<div
 					style={{
 						display: "grid",
-						gridTemplateColumns: "1fr 80px 80px 80px 26px",
+						gridTemplateColumns: "28px 1fr 80px 80px 80px 26px",
 						padding: "12px 14px",
 						background: "#fff1f5",
 						fontSize: 10,
@@ -214,9 +282,17 @@ export function PlayersTab({
 						color: "#8d1a3f",
 						borderBottom: "1px solid rgba(138,39,72,0.12)",
 						gap: 16,
+						alignItems: "center",
 					}}
 					className="players-table-header"
 				>
+					<Checkbox
+						checked={allVisibleSelected}
+						indeterminate={selectedKeys.length > 0 && !allVisibleSelected}
+						onChange={(e) =>
+							setSelectedKeys(e.target.checked ? paginatedMembers.map((m: any) => m.id) : [])
+						}
+					/>
 					<div>Name</div>
 					<div>Games</div>
 					<div>W–L</div>
@@ -229,20 +305,29 @@ export function PlayersTab({
 					const textColor = isNeverPlayed ? "rgba(29,31,32,0.55)" : "#1d1f20";
 					const numColor = isNeverPlayed ? "rgba(29,31,32,0.35)" : "rgba(29,31,32,0.6)";
 
+					const isSelected = selectedKeys.includes(member.id);
 					return (
 						<div
 							key={member.id}
 							style={{
 								display: "grid",
-								gridTemplateColumns: "1fr 80px 80px 80px 26px",
+								gridTemplateColumns: "28px 1fr 80px 80px 80px 26px",
 								padding: "10px 14px",
 								borderBottom: "1px solid rgba(29,31,32,0.08)",
-								background: "#fff",
+								background: isSelected ? "#fff0f5" : "#fff",
 								gap: 16,
 								alignItems: "center",
 							}}
 							className="player-row"
 						>
+							<Checkbox
+								checked={isSelected}
+								onChange={(e) =>
+									setSelectedKeys((prev) =>
+										e.target.checked ? [...prev, member.id] : prev.filter((k) => k !== member.id)
+									)
+								}
+							/>
 							<div>
 								<div style={{ fontWeight: 600, color: textColor, fontSize: 13, marginBottom: 4 }}>{member.name}</div>
 								{member.skillLevel ? (
@@ -274,6 +359,7 @@ export function PlayersTab({
 							<div style={{ fontSize: 13, color: numColor, textAlign: "right" }} className="player-row-content"><span className="player-row-label">Games</span>{member.totalGames ?? 0}</div>
 							<div style={{ fontSize: 13, color: numColor, textAlign: "right" }} className="player-row-content"><span className="player-row-label">W–L</span>{`${member.wins ?? 0}–${member.losses ?? 0}`}</div>
 							<div style={{ fontSize: 13, color: numColor, textAlign: "right" }} className="player-row-content"><span className="player-row-label">Win %</span>{member.totalGames === 0 ? "–" : `${(((member.wins ?? 0) / (member.totalGames ?? 1)) * 100).toFixed(0)}%`}</div>
+							<div className="player-row-actions">
 							<Dropdown
 								menu={{
 									items: [
@@ -327,6 +413,7 @@ export function PlayersTab({
 									<MoreVertical size={16} color="rgba(29,31,32,0.45)" />
 								</button>
 							</Dropdown>
+							</div>
 						</div>
 					);
 				})}
