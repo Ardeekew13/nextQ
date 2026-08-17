@@ -53,7 +53,12 @@
       "Bash(curl -sI http://localhost:3000/login)",
       "Bash(grep -rln \"Content-Security-Policy\" /Users/hisd3dev3/pickleq-app -not -path \"*/node_modules/*\")",
       "Bash(~/.nvm/versions/node/v20.19.6/bin/node check-scroll.js)",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(mkdir -p /private/tmp/claude-501/-Users-hisd3dev3-pickleq-app/dbc06c98-6042-4c7b-b843-5dedb383904c/scratchpad/pw2)",
+      "Bash(~/.nvm/versions/node/v20.19.6/bin/node ux-test.js)",
+      "Bash(~/.nvm/versions/node/v20.19.6/bin/node inspect-dropdown.js)",
+      "Bash(mkdir -p /private/tmp/claude-501/-Users-hisd3dev3-pickleq-app/dbc06c98-6042-4c7b-b843-5dedb383904c/scratchpad/pw3)",
+      "Bash(~/.nvm/versions/node/v20.19.6/bin/node verify.js)"
     ],
     "additionalDirectories": [
       "/Users/hisd3dev3/pickleq-app/src/app/dashboard/clubs/[clubId]"

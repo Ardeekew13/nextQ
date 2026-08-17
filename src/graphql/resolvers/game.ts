@@ -244,6 +244,17 @@ export const gameResolvers = {
           extensions: { code: "BAD_USER_INPUT" },
         });
       }
+      // Reconstruct the eligible pool at generation time (old teams + old sat-out),
+      // then recompute who sat out against the NEW team composition - otherwise a
+      // swapped-in player keeps their stale "sat out" credit for this round (and a
+      // swapped-out player loses theirs), corrupting gamesSatOut and, in turn, the
+      // queue engine's future scoring for both players.
+      const priorEligiblePool = new Set(
+        [...game.teamAPlayerIds, ...game.teamBPlayerIds, ...(game.playersSatOutIds ?? [])].map(String)
+      );
+      const newTeamIds = new Set(allIds.map(String));
+      game.playersSatOutIds = [...priorEligiblePool].filter((id) => !newTeamIds.has(id)) as never[];
+
       game.teamAPlayerIds = args.teamAPlayerIds as never[];
       game.teamBPlayerIds = args.teamBPlayerIds as never[];
       await game.save();

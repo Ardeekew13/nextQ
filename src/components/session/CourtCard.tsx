@@ -117,7 +117,13 @@ export function CourtCard({
 		setEditing(false);
 	}
 
+	function swapTeams() {
+		setEditTeamA(editTeamB);
+		setEditTeamB(editTeamA);
+	}
+
 	const game = court.currentGame;
+	const teamsValid = editTeamA.length === 2 && editTeamB.length === 2;
 
 	return (
 		<div style={{ border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff", overflow: "hidden" }}>
@@ -127,15 +133,15 @@ export function CourtCard({
 				<span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: "0.12em", textTransform: "uppercase", color: "#1d1f20" }}>
 					{court.name || `Court ${court.courtNumber}`}
 				</span>
-				<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+				<div style={{ display: "flex", alignItems: "center", gap: 2 }}>
 					{game?.startedAt && <GameClock startedAt={game.startedAt} />}
 					{game && onCallOut && (
 						<Tooltip title="Call out matchup">
 							<button
 								onClick={() => onCallOut(game)}
-								style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(29,31,32,0.35)", padding: "2px 4px", lineHeight: 1, display: "flex", alignItems: "center" }}
+								style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(29,31,32,0.35)", width: 36, height: 36, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}
 							>
-								<SoundOutlined style={{ fontSize: 14 }} />
+								<SoundOutlined style={{ fontSize: 15 }} />
 							</button>
 						</Tooltip>
 					)}
@@ -143,9 +149,9 @@ export function CourtCard({
 						<Tooltip title="Edit lineup">
 							<button
 								onClick={startEditing}
-								style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(29,31,32,0.35)", padding: "2px 4px", lineHeight: 1, display: "flex", alignItems: "center" }}
+								style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(29,31,32,0.35)", width: 36, height: 36, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}
 							>
-								<EditOutlined style={{ fontSize: 13 }} />
+								<EditOutlined style={{ fontSize: 14 }} />
 							</button>
 						</Tooltip>
 					)}
@@ -153,7 +159,7 @@ export function CourtCard({
 						<Tooltip title="Remove court">
 							<button
 								onClick={() => onRemove(court.id)}
-								style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(29,31,32,0.35)", padding: "2px 4px", lineHeight: 1, display: "flex", alignItems: "center", fontSize: 18 }}
+								style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(29,31,32,0.35)", width: 36, height: 36, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}
 							>
 								×
 							</button>
@@ -170,6 +176,7 @@ export function CourtCard({
 							<div style={{ fontSize: 10, fontWeight: 700, color: "#e11d74", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Team A</div>
 							<Select mode="multiple" size="small" style={{ width: "100%" }} value={editTeamA} onChange={setEditTeamA}
 								placeholder="Search players…" showSearch
+								status={editTeamA.length !== 2 ? "error" : undefined}
 								filterOption={(input, opt: any) => opt?.label?.toLowerCase().includes(input.toLowerCase())}
 								options={teamAOptions}
 								optionRender={(opt) => (
@@ -177,20 +184,31 @@ export function CourtCard({
 										<span style={{ fontWeight: opt.data.inQueue ? 600 : 400 }}>
 											{opt.label}{opt.data.inQueue && <ClockCircleOutlined style={{ color: "#e11d74", fontSize: 10, marginLeft: 4 }} />}
 										</span>
-										<Text type="secondary" style={{ fontSize: 11 }}>{opt.data.inQueue ? `#${opt.data.queuePos}` : `${opt.data.gamesPlayed}g`}</Text>
+										<Text type="secondary" style={{ fontSize: 11 }}>{opt.data.inQueue ? `Queue #${opt.data.queuePos}` : `${opt.data.gamesPlayed} games`}</Text>
 									</div>
 								)}
 							/>
+							{editTeamA.length !== 2 && (
+								<div style={{ fontSize: 11, color: "#e11d74", marginTop: 3 }}>Needs exactly 2 players ({editTeamA.length} selected)</div>
+							)}
 						</div>
 						<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
 							<div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
-							<SwapOutlined style={{ color: "#9ca3af", fontSize: 11 }} />
+							<Tooltip title="Swap Team A and Team B">
+								<button
+									onClick={swapTeams}
+									style={{ background: "none", border: "1px solid #e5e7eb", borderRadius: 4, cursor: "pointer", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}
+								>
+									<SwapOutlined style={{ color: "#8d1a3f", fontSize: 12 }} />
+								</button>
+							</Tooltip>
 							<div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
 						</div>
 						<div>
 							<div style={{ fontSize: 10, fontWeight: 700, color: "#e11d74", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Team B</div>
 							<Select mode="multiple" size="small" style={{ width: "100%" }} value={editTeamB} onChange={setEditTeamB}
 								placeholder="Search players…" showSearch
+								status={editTeamB.length !== 2 ? "error" : undefined}
 								filterOption={(input, opt: any) => opt?.label?.toLowerCase().includes(input.toLowerCase())}
 								options={teamBOptions}
 								optionRender={(opt) => (
@@ -198,15 +216,22 @@ export function CourtCard({
 										<span style={{ fontWeight: opt.data.inQueue ? 600 : 400 }}>
 											{opt.label}{opt.data.inQueue && <ClockCircleOutlined style={{ color: "#e11d74", fontSize: 10, marginLeft: 4 }} />}
 										</span>
-										<Text type="secondary" style={{ fontSize: 11 }}>{opt.data.inQueue ? `#${opt.data.queuePos}` : `${opt.data.gamesPlayed}g`}</Text>
+										<Text type="secondary" style={{ fontSize: 11 }}>{opt.data.inQueue ? `Queue #${opt.data.queuePos}` : `${opt.data.gamesPlayed} games`}</Text>
 									</div>
 								)}
 							/>
+							{editTeamB.length !== 2 && (
+								<div style={{ fontSize: 11, color: "#e11d74", marginTop: 3 }}>Needs exactly 2 players ({editTeamB.length} selected)</div>
+							)}
 						</div>
 						<div style={{ display: "flex", gap: 6 }}>
 							<Button size="small" block icon={<CloseOutlined />} onClick={() => setEditing(false)}>Cancel</Button>
-							<Button size="small" type="primary" block icon={<CheckOutlined />} loading={updatingTeams} onClick={saveEditing}
-								style={{ background: "#e11d74", borderColor: "#e11d74" }}>Save</Button>
+							<Tooltip title={!teamsValid ? "Each team needs exactly 2 players" : ""}>
+								<span style={{ flex: 1, display: "inline-block" }}>
+									<Button size="small" type="primary" block icon={<CheckOutlined />} loading={updatingTeams} disabled={!teamsValid} onClick={saveEditing}
+										style={{ background: "#e11d74", borderColor: "#e11d74" }}>Save</Button>
+								</span>
+							</Tooltip>
 						</div>
 					</div>
 				) : (
