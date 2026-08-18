@@ -5,7 +5,7 @@ import { Court } from "@/models/Court";
 import { Game } from "@/models/Game";
 import { SessionPlayer } from "@/models/SessionPlayer";
 import { slugify, withRandomSuffix } from "@/lib/slug";
-import { getEligiblePlayers } from "@/lib/eligibility";
+import { getQueuePreview, getNextGamePreview } from "@/lib/eligibility";
 import { getSessionStandingsWithPlayers, getSessionPodiumWithPlayers } from "@/lib/stats";
 import { buildPublicSessionUrl, diffMinutes } from "@/lib/urls";
 import { SessionStatus, GameStatus, DEFAULT_SESSION_SETTINGS, PairingMode, MatchingStyle, QueueMode, type SessionSettings } from "@/types/enums";
@@ -299,7 +299,8 @@ export const sessionResolvers = {
       }),
     completedGames: async (parent: { _id: unknown }) =>
       Game.find({ sessionId: parent._id, status: GameStatus.COMPLETED }).sort({ gameNumber: 1 }),
-    queuedPlayers: async (parent: { _id: unknown }) => getEligiblePlayers(String(parent._id)),
+    queuedPlayers: async (parent: { _id: unknown }) => getQueuePreview(String(parent._id)),
+    nextGamePreview: async (parent: { _id: unknown }) => getNextGamePreview(String(parent._id)),
     standings: async (parent: { _id: unknown }) => getSessionStandingsWithPlayers(String(parent._id)),
     podium: async (parent: { _id: unknown }) => getSessionPodiumWithPlayers(String(parent._id)),
     publicUrl: async (parent: { clubId: unknown; slug: string }) => {
@@ -318,7 +319,7 @@ export const sessionResolvers = {
       Game.find({ sessionId: parent._id, status: { $in: [GameStatus.QUEUED, GameStatus.IN_PROGRESS] } }).sort({
         gameNumber: 1,
       }),
-    queuedPlayers: async (parent: { _id: unknown }) => getEligiblePlayers(String(parent._id)),
+    queuedPlayers: async (parent: { _id: unknown }) => getQueuePreview(String(parent._id)),
     completedGames: async (parent: { _id: unknown }) =>
       Game.find({ sessionId: parent._id, status: GameStatus.COMPLETED }).sort({ gameNumber: 1 }),
     standings: async (parent: { _id: unknown }) => getSessionStandingsWithPlayers(String(parent._id)),

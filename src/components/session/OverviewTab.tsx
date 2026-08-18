@@ -521,19 +521,39 @@ export function OverviewTab({
 						>
 							<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 32 }}>
 								<div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
-									{/* Group 1 — next 4 */}
+									{/* Group 1 — next 4, paired into predicted teams so players can prepare */}
 									{queuedPlayers.slice(0, 4).length > 0 && (
 										<div>
 											<div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>
 												ON DECK · NEXT OFF {nextOffCourt ? `COURT ${nextOffCourt.courtNumber}` : "COURT"}
 											</div>
-											<div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-												{queuedPlayers.slice(0, 4).map((p: any) => (
-													<span key={p.id} style={{ fontSize: 17, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-														{p.name}
-													</span>
-												))}
-											</div>
+											{session?.nextGamePreview ? (
+												<div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+													<div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+														{session.nextGamePreview.teamA.players.map((p: any) => (
+															<span key={p.id} style={{ fontSize: 17, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+																{p.name}
+															</span>
+														))}
+													</div>
+													<span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.4)" }}>VS</span>
+													<div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+														{session.nextGamePreview.teamB.players.map((p: any) => (
+															<span key={p.id} style={{ fontSize: 17, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+																{p.name}
+															</span>
+														))}
+													</div>
+												</div>
+											) : (
+												<div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+													{queuedPlayers.slice(0, 4).map((p: any) => (
+														<span key={p.id} style={{ fontSize: 17, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+															{p.name}
+														</span>
+													))}
+												</div>
+											)}
 										</div>
 									)}
 									{/* Group 2 — players 5–8 */}

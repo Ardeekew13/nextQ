@@ -23,6 +23,8 @@ export interface QueuePlayer {
   gamesSatOut: number;
   partnerHistory: Record<string, number>;
   opponentHistory: Record<string, number>;
+  /** Win rate 0-100. Used only as a tiebreak among players who've waited a similar amount of time. */
+  winRate?: number;
 }
 
 export type PlayerQuad = [QueuePlayer, QueuePlayer, QueuePlayer, QueuePlayer];
@@ -65,6 +67,21 @@ function groupKey(players: QueuePlayer[]): string {
 }
 
 /**
+ * Players who've waited within this many minutes of each other are treated as having
+ * "waited a similar amount of time" for the win-rate tiebreak below. Wait time still
+ * rules the queue at a coarser (bucketed) granularity — this window only decides who
+ * wins among players who are roughly equally deserving of the next spot.
+ */
+const WAIT_TIE_WINDOW_MINUTES = 2;
+
+/**
+ * Weight applied to win rate (0-100) as a tiebreak. Kept smaller than every mode's
+ * per-wait-bucket step so it can never override a genuine wait-time advantage, but
+ * larger than the gamesSatOut nudge so a clear win-rate edge still wins ties.
+ */
+const WIN_RATE_TIEBREAK_WEIGHT = 0.15;
+
+/**
  * Score a player for selection — lower is higher priority (will be selected first).
  * Each mode produces different weights.
  */
@@ -77,37 +94,44 @@ function playerScore(
 ): number {
   const waitMs = now - player.queueEnteredAt.getTime();
   const waitMinutes = waitMs / 60_000;
+  const waitBucket = Math.floor(waitMinutes / WAIT_TIE_WINDOW_MINUTES);
 
   // Consecutive game penalty: deprioritise if at/over limit (unless no alternatives)
   const consecutivePenalty = player.consecutiveGames >= maxConsecutiveGames ? 1_000_000 : 0;
 
+  // Among players who've waited a similar amount of time, prefer the higher win rate.
+  const winRateTiebreak = -(player.winRate ?? 0) * WIN_RATE_TIEBREAK_WEIGHT;
+
   switch (mode) {
     case QueueMode.BALANCED:
-      // Primary: fewest games; secondary: longest wait; tertiary: most sat out; then tiebreak
+      // Primary: fewest games; secondary: longest wait (bucketed); then win rate; tertiary: most sat out; then tiebreak
       return (
         consecutivePenalty +
         player.gamesPlayed * 10_000 +
-        (-waitMinutes) * 10 +
+        (-waitBucket) * 10 * WAIT_TIE_WINDOW_MINUTES +
+        winRateTiebreak +
         (-player.gamesSatOut) * 5 +
         tiebreak
       );
 
     case QueueMode.SMART:
-      // Primary: longest wait (no games-played factor)
+      // Primary: longest wait (bucketed, no games-played factor); then win rate
       return (
         consecutivePenalty +
-        (-waitMinutes) * 10_000 +
+        (-waitBucket) * 10_000 * WAIT_TIE_WINDOW_MINUTES +
+        winRateTiebreak +
         (-player.gamesSatOut) * 5 +
         tiebreak
       );
 
     case QueueMode.HYBRID:
     default:
-      // Primary: longest wait; secondary: fewest games (gentle catch-up); tertiary: most sat out
+      // Primary: longest wait (bucketed); secondary: fewest games (gentle catch-up); then win rate; tertiary: most sat out
       return (
         consecutivePenalty +
-        (-waitMinutes) * 1_000 +
+        (-waitBucket) * 1_000 * WAIT_TIE_WINDOW_MINUTES +
         player.gamesPlayed * 100 +
+        winRateTiebreak +
         (-player.gamesSatOut) * 10 +
         tiebreak
       );
@@ -161,6 +185,59 @@ function selectPlayers(
   }
 
   return { ok: true, selected };
+}
+
+/**
+ * Returns the FULL eligible pool in the order players would actually be picked,
+ * by repeatedly simulating `selectPlayers` in groups of 4 (mirroring the
+ * consecutive-game and sat-out resets a real sequence of court fills would apply)
+ * and appending any remainder (fewer than 4 left) in plain score order.
+ *
+ * This is the single source of truth for "who's up next" — used both to preview
+ * the queue for organisers and, indirectly, by `generateNextGame` — so the
+ * preview can never drift from what a real court fill would actually select.
+ */
+export function rankQueue(
+  eligible: QueuePlayer[],
+  options: QueueEngineOptions = {}
+): QueuePlayer[] {
+  const {
+    mode = QueueMode.HYBRID,
+    maxConsecutiveGames = 2,
+    pastGroups = new Set(),
+    random = Math.random,
+  } = options;
+
+  let pool = [...eligible];
+  const groups = new Set(pastGroups);
+  const ordered: QueuePlayer[] = [];
+
+  while (pool.length >= 4) {
+    const selection = selectPlayers(pool, mode, maxConsecutiveGames, random, groups);
+    if (!selection.ok) break;
+
+    const selectedIds = new Set(selection.selected.map((p) => p.id));
+    groups.add(groupKey(selection.selected));
+    ordered.push(...selection.selected);
+
+    // Simulate the sat-out reset `generateNextGame` applies to everyone else
+    // eligible for that round, so the next simulated round scores them fairly.
+    pool = pool
+      .filter((p) => !selectedIds.has(p.id))
+      .map((p) => ({ ...p, consecutiveGames: 0 }));
+  }
+
+  if (pool.length > 0) {
+    const now = Date.now();
+    const scored = pool.map((p) => ({
+      player: p,
+      score: playerScore(p, mode, maxConsecutiveGames, now, random()),
+    }));
+    scored.sort((a, b) => a.score - b.score);
+    ordered.push(...scored.map((s) => s.player));
+  }
+
+  return ordered;
 }
 
 // ---------------------------------------------------------------------------

@@ -17,6 +17,17 @@ import { GameLog } from "@/components/GameLog";
 
 const { Title, Text } = Typography;
 
+function formatClockTime(value?: string | null): string | null {
+  if (!value) return null;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(value)) {
+    const d = new Date(value);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+  }
+  return value;
+}
+
 const STATUS_META: Record<string, { color: string; label: string }> = {
   DRAFT:     { color: "default", label: "Draft" },
   ACTIVE:    { color: "green",   label: "Live" },
@@ -117,11 +128,11 @@ export default function PublicSessionPage() {
             </Text>
           </Space>
 
-          {session.startTime && (
+          {formatClockTime(session.startTime) && (
             <Space size={4}>
               <ClockCircleOutlined style={{ color: "rgba(255,255,255,0.6)" }} />
               <Text style={{ color: "rgba(255,255,255,0.75)", fontSize: 13 }}>
-                {session.startTime}{session.endTime ? ` – ${session.endTime}` : ""}
+                {formatClockTime(session.startTime)}{session.endTime ? ` – ${formatClockTime(session.endTime)}` : ""}
               </Text>
             </Space>
           )}

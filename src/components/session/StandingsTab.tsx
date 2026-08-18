@@ -3,6 +3,7 @@
 import { useMemo, useEffect, useState } from "react";
 import { useQuery } from "@apollo/client";
 import { App, Empty } from "antd";
+import { Share2, Copy } from "lucide-react";
 import { SESSION_STANDINGS_QUERY } from "@/graphql/documents/organiser";
 import { CLUB_STANDINGS_QUERY } from "@/graphql/documents/public";
 import type { StandingRowView } from "@/components/StandingsTable";
@@ -214,7 +215,10 @@ export function StandingsTab({
     unbeaten: standings.filter((s) => s.losses === 0 && s.wins > 0).length,
   }), [standings]);
 
-  useEffect(() => { onStats?.(tabStats); }, [tabStats, onStats]);
+  useEffect(() => {
+    onStats?.(tabStats);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabStats.playersRanked, tabStats.games, tabStats.unbeaten]);
   useEffect(() => { setPage(1); }, [standings.length, view]);
 
   const totalPages = view === "session"
@@ -240,7 +244,12 @@ export function StandingsTab({
   function handleCopyLink() {
     if (!session?.publicUrl) return;
     navigator.clipboard.writeText(session.publicUrl);
-    message.success("Session link copied!");
+    message.success("Public link copied!");
+  }
+
+  function handleOpenPublicView() {
+    if (!session?.publicUrl) return;
+    window.open(session.publicUrl, "_blank", "noopener,noreferrer");
   }
 
   if (loading && !data) return null;
@@ -257,8 +266,36 @@ export function StandingsTab({
         {/* Podium */}
         {podium.length > 0 && (
           <>
-            <div style={{ display: "flex", alignItems: "center", marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
               <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(29,31,32,0.45)" }}>PODIUM</span>
+              {session?.publicUrl && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <button
+                    onClick={handleCopyLink}
+                    title="Copy public link"
+                    style={{
+                      display: "flex", alignItems: "center", gap: 6, padding: "6px 12px",
+                      fontSize: 12, fontWeight: 600, border: "1px solid #e5e7eb", borderRadius: 6,
+                      background: "#fff", color: "#1d1f20", cursor: "pointer",
+                    }}
+                  >
+                    <Copy size={13} />
+                    Copy link
+                  </button>
+                  <button
+                    onClick={handleOpenPublicView}
+                    title="Open public standings & games (view only)"
+                    style={{
+                      display: "flex", alignItems: "center", gap: 6, padding: "6px 12px",
+                      fontSize: 12, fontWeight: 600, border: "none", borderRadius: 6,
+                      background: "#e11d74", color: "#fff", cursor: "pointer",
+                    }}
+                  >
+                    <Share2 size={13} />
+                    Share result
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* 2nd | 1st | 3rd */}
@@ -311,7 +348,7 @@ export function StandingsTab({
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(29,31,32,0.45)" }}>FULL STANDINGS</span>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(29,31,32,0.35)" }}>RANKED BY WIN %, THEN GAMES</span>
+            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(29,31,32,0.35)" }}>RANKED BY WIN %, THEN WINS</span>
             <div style={{ display: "flex", border: "1px solid #e5e7eb", borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
               {(["session", "alltime"] as const).map((v) => (
                 <button key={v} onClick={() => setView(v)} style={{

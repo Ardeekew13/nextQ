@@ -111,7 +111,10 @@ export function GameLog({
   }, [games]);
 
   // Notify parent of stats
-  useEffect(() => { onStats?.(stats); }, [stats, onStats]);
+  useEffect(() => {
+    onStats?.(stats);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stats.gamesPlayed, stats.rounds, stats.avgGameMin, stats.voided]);
 
   // Filter
   const filtered = useMemo(() => {

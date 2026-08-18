@@ -415,6 +415,20 @@ export const SESSION_DASHBOARD_QUERY = gql`
         gamesPlayed
         queueEnteredAt
       }
+      nextGamePreview {
+        teamA {
+          players {
+            id
+            name
+          }
+        }
+        teamB {
+          players {
+            id
+            name
+          }
+        }
+      }
       activeGames {
         ...GameFields
       }
@@ -525,6 +539,7 @@ export const SESSION_STANDINGS_QUERY = gql`
   query SessionStandings($id: ID!) {
     session(id: $id) {
       id
+      name
       status
       clubSlug
       standings {

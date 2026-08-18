@@ -95,8 +95,8 @@ export interface SessionSettings {
 export const DEFAULT_SESSION_SETTINGS: SessionSettings = {
   scoring: { pointsTarget: 11, winByTwo: false },
   rankingOrder: [
-    "WINS",
     "WIN_RATE",
+    "WINS",
     "POINT_DIFFERENTIAL",
     "POINTS_SCORED",
     "FEWEST_LOSSES",

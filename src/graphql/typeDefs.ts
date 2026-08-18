@@ -193,6 +193,12 @@ export const typeDefs = gql`
     players: [SessionPlayer!]!
   }
 
+  """Predicted teams for the very next game, so players can see their partner in advance."""
+  type NextGamePreview {
+    teamA: Team!
+    teamB: Team!
+  }
+
   type Game {
     id: ID!
     sessionId: ID!
@@ -278,6 +284,7 @@ export const typeDefs = gql`
     activeGames: [Game!]!
     completedGames: [Game!]!
     queuedPlayers: [SessionPlayer!]!
+    nextGamePreview: NextGamePreview
     standings: [SessionStanding!]!
     podium: [PodiumEntry!]!
     publicPublished: Boolean!

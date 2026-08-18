@@ -4,7 +4,7 @@ import { Court } from "@/models/Court";
 import { SessionPlayer, type SessionPlayerDoc } from "@/models/SessionPlayer";
 import { generateGame, type MatchPlayer } from "@/lib/matchmaking";
 import { generateNextGame as queueEngineGenerate, type QueuePlayer } from "@/lib/queueEngine";
-import { getEligiblePlayers } from "@/lib/eligibility";
+import { getEligiblePlayers, toQueuePlayer, queuePoolSeed, seededRandom } from "@/lib/eligibility";
 import { rebuildSessionStatistics } from "@/lib/stats";
 import { withOptionalTransaction } from "@/lib/transaction";
 import { CourtStatus, GameStatus, WinningTeam, PairingMode, QueueMode, type SessionSettings } from "@/types/enums";
@@ -59,7 +59,18 @@ export const gameResolvers = {
     ) => {
       const session = await requireSessionOwner(context, args.sessionId);
 
-      const court = await Court.findById(args.courtId);
+      const [court, eligibleDocs, priorGames, lastGame] = await Promise.all([
+        Court.findById(args.courtId),
+        getEligiblePlayers(args.sessionId),
+        Game.find(
+          { sessionId: args.sessionId, status: { $ne: GameStatus.CANCELLED } },
+          { teamAPlayerIds: 1, teamBPlayerIds: 1 }
+        )
+          .sort({ gameNumber: -1 })
+          .limit(200),
+        Game.findOne({ sessionId: session._id }).sort({ gameNumber: -1 }),
+      ]);
+
       if (!court || String(court.sessionId) !== String(session._id)) {
         throw new GraphQLError("Court not found for this session.", { extensions: { code: "NOT_FOUND" } });
       }
@@ -69,42 +80,21 @@ export const gameResolvers = {
         });
       }
 
-      const eligibleDocs = await getEligiblePlayers(args.sessionId);
-
-      // Build QueuePlayer objects (superset of old MatchPlayer)
-      const eligible: QueuePlayer[] = eligibleDocs.map((doc) => {
-        const partnerHistory: Record<string, number> =
-          doc.partnerHistory instanceof Map
-            ? Object.fromEntries(doc.partnerHistory)
-            : Object.fromEntries(Object.entries(doc.partnerHistory ?? {}));
-        const opponentHistory: Record<string, number> =
-          doc.opponentHistory instanceof Map
-            ? Object.fromEntries(doc.opponentHistory)
-            : Object.fromEntries(Object.entries(doc.opponentHistory ?? {}));
-        return {
-          id: String(doc._id),
-          gamesPlayed: doc.gamesPlayed,
-          consecutiveGames: (doc as any).consecutiveGames ?? 0,
-          queueEnteredAt: doc.queueEnteredAt,
-          gamesSatOut: doc.gamesSatOut,
-          partnerHistory,
-          opponentHistory,
-        };
-      });
+      // Build QueuePlayer objects (superset of old MatchPlayer), including win rate
+      const eligible: QueuePlayer[] = eligibleDocs.map(toQueuePlayer);
 
       const settings = session.settings as SessionSettings;
-      const priorGames = await Game.find(
-        { sessionId: args.sessionId, status: { $ne: GameStatus.CANCELLED } },
-        { teamAPlayerIds: 1, teamBPlayerIds: 1 }
-      );
       const pastGroups = new Set(
         priorGames.map((g) => [...g.teamAPlayerIds, ...g.teamBPlayerIds].map(String).sort().join(":"))
       );
 
+      // Seeded from the eligible pool so this matches the organiser-facing preview
+      // (queuedPlayers/nextGamePreview) bit-for-bit whenever the pool hasn't changed.
       const result = queueEngineGenerate(eligible, {
         mode: (settings.queueMode ?? QueueMode.HYBRID) as QueueMode,
         maxConsecutiveGames: settings.maxConsecutiveGames ?? 2,
         pastGroups,
+        random: seededRandom(queuePoolSeed(eligibleDocs)),
       });
 
       if (!result.ok) {
@@ -116,7 +106,6 @@ export const gameResolvers = {
       const selectedIds = new Set(result.selected.map((p) => p.id));
       const playersSatOutIds = eligible.filter((p) => !selectedIds.has(p.id)).map((p) => p.id);
 
-      const lastGame = await Game.findOne({ sessionId: session._id }).sort({ gameNumber: -1 });
       const gameNumber = (lastGame?.gameNumber ?? 0) + 1;
 
       const game = await Game.create({
@@ -130,20 +119,21 @@ export const gameResolvers = {
       });
 
       // Increment consecutive games for selected players, reset for sat-out players
-      await SessionPlayer.updateMany(
-        { _id: { $in: [...selectedIds] } },
-        { $inc: { consecutiveGames: 1 } }
-      );
-      if (playersSatOutIds.length > 0) {
-        await SessionPlayer.updateMany(
-          { _id: { $in: playersSatOutIds } },
-          { $set: { consecutiveGames: 0 } }
-        );
-      }
-
       court.activeGameId = game._id;
       court.status = CourtStatus.IN_USE;
-      await court.save();
+      await Promise.all([
+        SessionPlayer.updateMany(
+          { _id: { $in: [...selectedIds] } },
+          { $inc: { consecutiveGames: 1 } }
+        ),
+        playersSatOutIds.length > 0
+          ? SessionPlayer.updateMany(
+              { _id: { $in: playersSatOutIds } },
+              { $set: { consecutiveGames: 0 } }
+            )
+          : Promise.resolve(),
+        court.save(),
+      ]);
 
       return game;
     },

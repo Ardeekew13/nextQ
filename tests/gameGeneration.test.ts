@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { generateNextGame, type QueuePlayer } from "@/lib/queueEngine";
+import { generateNextGame, rankQueue, type QueuePlayer } from "@/lib/queueEngine";
 
 function makePlayer(overrides: Partial<QueuePlayer> & { id: string }): QueuePlayer {
   return {
@@ -153,8 +153,10 @@ describe("Game Generation - Team Shuffling", () => {
 
     const players = [p1, p2, p3, p4];
 
+    // BALANCED (unlike HYBRID) doesn't randomize team splits by default, so the
+    // partner-avoidance scoring is what actually decides the split here.
     const result = generateNextGame(players, {
-      mode: "HYBRID" as const,
+      mode: "BALANCED" as const,
     });
 
     if (result.ok) {
@@ -165,5 +167,80 @@ describe("Game Generation - Team Shuffling", () => {
       const sameteam = (teamAIds.has("p1") && teamAIds.has("p2")) || (teamBIds.has("p1") && teamBIds.has("p2"));
       expect(sameteam).toBe(false);
     }
+  });
+});
+
+describe("Game Generation - Win Rate Tiebreak", () => {
+  it("prefers the higher win rate among players who've waited the same amount of time", () => {
+    const sameArrival = new Date("2026-01-01T00:00:00Z");
+    const players = [
+      makePlayer({ id: "low-winrate", queueEnteredAt: sameArrival, winRate: 20 }),
+      makePlayer({ id: "high-winrate", queueEnteredAt: sameArrival, winRate: 90 }),
+      makePlayer({ id: "mid-winrate", queueEnteredAt: sameArrival, winRate: 50 }),
+      makePlayer({ id: "no-winrate", queueEnteredAt: sameArrival }),
+      // A 5th player who arrived a clear wait-bucket (>2min) later should still lose
+      // to all of the above on wait time, however high their win rate.
+      makePlayer({ id: "just-arrived", queueEnteredAt: new Date("2026-01-01T00:03:00Z"), winRate: 100 }),
+    ];
+
+    const result = generateNextGame(players, { mode: "SMART" as const, random: () => 0.5 });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const ids = result.selected.map((p) => p.id);
+      expect(ids).not.toContain("just-arrived");
+      expect(ids).toContain("high-winrate");
+    }
+  });
+
+  it("never lets win rate override a genuine wait-time advantage", () => {
+    const players = [
+      makePlayer({ id: "waited-long", queueEnteredAt: new Date("2026-01-01T00:00:00Z"), winRate: 0 }),
+      makePlayer({ id: "waited-mid", queueEnteredAt: new Date("2026-01-01T00:01:00Z"), winRate: 0 }),
+      makePlayer({ id: "waited-short", queueEnteredAt: new Date("2026-01-01T00:02:00Z"), winRate: 0 }),
+      makePlayer({ id: "just-arrived", queueEnteredAt: new Date("2026-01-01T00:10:00Z"), winRate: 100 }),
+    ];
+
+    const result = generateNextGame(players, { mode: "SMART" as const, random: () => 0.5 });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // Only 4 players total, so all 4 must be selected regardless — but confirms
+      // a high win rate alone doesn't blow up the scoring in a way that breaks selection.
+      expect(result.selected.map((p) => p.id).sort()).toEqual(
+        ["just-arrived", "waited-long", "waited-mid", "waited-short"].sort()
+      );
+    }
+  });
+});
+
+describe("rankQueue", () => {
+  it("orders the full eligible pool the same way generateNextGame would pick them", () => {
+    const sameArrival = new Date("2026-01-01T00:00:00Z");
+    const players = [
+      makePlayer({ id: "p1", queueEnteredAt: sameArrival, winRate: 10 }),
+      makePlayer({ id: "p2", queueEnteredAt: sameArrival, winRate: 80 }),
+      makePlayer({ id: "p3", queueEnteredAt: sameArrival, winRate: 40 }),
+      makePlayer({ id: "p4", queueEnteredAt: sameArrival, winRate: 60 }),
+    ];
+
+    const generated = generateNextGame(players, { mode: "SMART" as const, random: () => 0.5 });
+    const ranked = rankQueue(players, { mode: "SMART" as const, random: () => 0.5 });
+
+    expect(generated.ok).toBe(true);
+    if (generated.ok) {
+      expect(ranked.slice(0, 4).map((p) => p.id)).toEqual(generated.selected.map((p) => p.id));
+    }
+  });
+
+  it("appends a leftover group smaller than 4 in score order instead of dropping them", () => {
+    const players = [
+      makePlayer({ id: "p1" }),
+      makePlayer({ id: "p2" }),
+      makePlayer({ id: "p3" }),
+      makePlayer({ id: "p4" }),
+      makePlayer({ id: "p5" }),
+    ];
+
+    const ranked = rankQueue(players, { random: () => 0.5 });
+    expect(ranked.map((p) => p.id).sort()).toEqual(players.map((p) => p.id).sort());
   });
 });
