@@ -116,10 +116,21 @@ export const authResolvers = {
         });
       }
 
+      user.lastLoginAt = new Date();
+      await user.save();
+
       const token = signAuthToken({ sub: String(user._id), email: user.email, name: user.name, role: user.role });
       await setAuthCookie(token);
 
       return { user };
+    },
+
+    markFixedPartnerTourSeen: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+      if (!context.organiser) {
+        throw new GraphQLError("Not authenticated.", { extensions: { code: "UNAUTHENTICATED" } });
+      }
+      await User.updateOne({ _id: context.organiser.sub }, { $set: { hasSeenFixedPartnerTour: true } });
+      return true;
     },
 
     logoutOrganiser: async () => {

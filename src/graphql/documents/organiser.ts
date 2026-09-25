@@ -91,7 +91,15 @@ export const ME_QUERY = gql`
       email
       name
       role
+      lastLoginAt
+      hasSeenFixedPartnerTour
     }
+  }
+`;
+
+export const MARK_FIXED_PARTNER_TOUR_SEEN = gql`
+  mutation MarkFixedPartnerTourSeen {
+    markFixedPartnerTourSeen
   }
 `;
 

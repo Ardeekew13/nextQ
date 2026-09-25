@@ -13,6 +13,14 @@ const UserSchema = new Schema(
     /** SHA-256 hash of the current password-reset token, if one has been issued and not yet used/expired. */
     resetPasswordTokenHash: { type: String, default: null },
     resetPasswordExpires: { type: Date, default: null },
+
+    /** Timestamp of this organiser's most recent successful login. Null until their first login after this field shipped. */
+    lastLoginAt: { type: Date, default: null },
+
+    /** Whether they've been shown (and dismissed) the fixed-partner feature walkthrough. Defaults to false for every
+     * existing account too, since Mongoose applies schema defaults on read for fields missing from older documents —
+     * so it naturally shows once to everyone on their first login after this shipped, and never again after that. */
+    hasSeenFixedPartnerTour: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

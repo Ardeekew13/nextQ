@@ -1,10 +1,13 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Layout } from "antd";
+import { useQuery, useMutation } from "@apollo/client";
 import { Sidebar } from "./Layout/Sidebar";
 import { Navbar } from "./Navbar";
+import { FixedPartnerTour } from "./FixedPartnerTour";
+import { ME_QUERY, MARK_FIXED_PARTNER_TOUR_SEEN } from "@/graphql/documents/organiser";
 import {
 	NavbarActionsProvider,
 	useNavbarActions,
@@ -47,6 +50,36 @@ function DashboardShellInner({
 	const [sidebarOpen, setSidebarOpen] = useState(true);
 	const pathname = usePathname();
 	const { actions, title } = useNavbarActions();
+
+	// One-time "what's new" walkthrough: shows the first time an organiser
+	// logs in after the fixed-partner feature shipped, then never again.
+	// network-only: this component's Apollo cache instance survives client-side
+	// logout/login (no hard page reload), so cache-first would keep serving a
+	// stale "not seen yet" result from before the previous dismissal.
+	const { data: meData } = useQuery(ME_QUERY, { fetchPolicy: "network-only" });
+	const [markFixedPartnerTourSeen] = useMutation(MARK_FIXED_PARTNER_TOUR_SEEN, {
+		update(cache) {
+			if (!meData?.me?.id) return;
+			cache.modify({
+				id: cache.identify({ __typename: "User", id: meData.me.id }),
+				fields: { hasSeenFixedPartnerTour: () => true },
+			});
+		},
+	});
+	const [fixedPartnerTourOpen, setFixedPartnerTourOpen] = useState(false);
+
+	useEffect(() => {
+		if (meData?.me && meData.me.hasSeenFixedPartnerTour === false) {
+			setFixedPartnerTourOpen(true);
+		}
+	}, [meData?.me?.id, meData?.me?.hasSeenFixedPartnerTour]);
+
+	function handleFixedPartnerTourDone() {
+		setFixedPartnerTourOpen(false);
+		markFixedPartnerTourSeen().catch(() => {
+			// Best-effort — worst case it shows again next login, which is harmless.
+		});
+	}
 
 	const isSessionPage = /\/dashboard\/sessions\/[^/]+/.test(pathname ?? "");
 	const isNewSessionPage = /\/(dashboard\/)?clubs\/[^/]+\/sessions\/new/.test(pathname ?? "");
@@ -224,6 +257,7 @@ function DashboardShellInner({
 				</Content>
 			</Layout>
 			</Layout>
+			<FixedPartnerTour open={fixedPartnerTourOpen} onDone={handleFixedPartnerTourDone} />
 		</>
 	);
 }

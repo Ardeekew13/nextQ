@@ -105,6 +105,8 @@ export const typeDefs = gql`
     email: String!
     name: String!
     role: String!
+    lastLoginAt: Date
+    hasSeenFixedPartnerTour: Boolean!
     createdAt: Date!
     updatedAt: Date!
   }
@@ -474,6 +476,9 @@ export const typeDefs = gql`
     """Consumes a reset token (single use, expires 1 hour after being requested) and
     sets a new password."""
     resetPassword(token: String!, newPassword: String!): Boolean!
+    """Marks the fixed-partner feature walkthrough as seen for the current organiser, so it
+    won't be shown again. Called once they finish or dismiss the tour."""
+    markFixedPartnerTourSeen: Boolean!
 
     createClub(input: CreateClubInput!): Club!
     updateClub(id: ID!, input: UpdateClubInput!): Club!
