@@ -8,6 +8,11 @@ export function buildPublicClubUrl(clubSlug: string): string {
   return `${base}/club/${clubSlug}`;
 }
 
+export function buildPasswordResetUrl(token: string): string {
+  const base = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  return `${base}/reset-password?token=${encodeURIComponent(token)}`;
+}
+
 /** Parses "HH:mm" strings and returns the difference in minutes, or null if either is missing/invalid. */
 export function diffMinutes(startTime?: string | null, endTime?: string | null): number | null {
   if (!startTime || !endTime) return null;

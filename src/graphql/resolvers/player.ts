@@ -19,6 +19,52 @@ async function requirePlayerOwner(context: GraphQLContext, playerId: string) {
   return player;
 }
 
+/**
+ * Sets (or clears) a mutual "fixed partner" link between two players in the same session.
+ * Setting A -> B always makes B -> A too, and unlinks either player's previous partner
+ * first so no player is ever linked to more than one fixed partner at a time.
+ */
+async function setFixedPartner(
+  player: Awaited<ReturnType<typeof SessionPlayer.findById>> & { _id: unknown; sessionId: unknown; fixedPartnerId?: unknown },
+  partnerId: string | null,
+  sessionId: string
+) {
+  if (!player) return;
+
+  if (partnerId === null) {
+    if (player.fixedPartnerId) {
+      await SessionPlayer.updateOne({ _id: player.fixedPartnerId }, { $set: { fixedPartnerId: null } });
+      player.fixedPartnerId = null;
+    }
+    return;
+  }
+
+  if (String(partnerId) === String(player._id)) {
+    throw new GraphQLError("A player can't be their own fixed partner.", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+
+  const partner = await SessionPlayer.findById(partnerId);
+  if (!partner || String(partner.sessionId) !== String(sessionId)) {
+    throw new GraphQLError("Fixed partner must be another player in this session.", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+
+  // Unlink each player's previous partner (if any, and if different from the new pairing)
+  if (player.fixedPartnerId && String(player.fixedPartnerId) !== String(partner._id)) {
+    await SessionPlayer.updateOne({ _id: player.fixedPartnerId }, { $set: { fixedPartnerId: null } });
+  }
+  if (partner.fixedPartnerId && String(partner.fixedPartnerId) !== String(player._id)) {
+    await SessionPlayer.updateOne({ _id: partner.fixedPartnerId }, { $set: { fixedPartnerId: null } });
+  }
+
+  player.fixedPartnerId = partner._id as never;
+  partner.fixedPartnerId = player._id as never;
+  await partner.save();
+}
+
 async function historyMapToEntries(
   context: GraphQLContext,
   sessionId: string,
@@ -73,7 +119,10 @@ export const playerResolvers = {
   Mutation: {
     addSessionPlayer: async (
       _p: unknown,
-      args: { sessionId: string; input: { name: string; nickname?: string; skillLevel?: string } },
+      args: {
+        sessionId: string;
+        input: { name: string; nickname?: string; skillLevel?: string; fixedPartnerId?: string | null };
+      },
       context: GraphQLContext
     ) => {
       const session = await requireSessionOwner(context, args.sessionId);
@@ -88,6 +137,10 @@ export const playerResolvers = {
       });
       session.playerIds.push(player._id);
       await session.save();
+      if (args.input.fixedPartnerId) {
+        await setFixedPartner(player, args.input.fixedPartnerId, args.sessionId);
+        await player.save();
+      }
       // Upsert into club roster
       await ClubMember.findOneAndUpdate(
         { clubId: session.clubId, name: args.input.name.trim() },
@@ -134,13 +187,19 @@ export const playerResolvers = {
 
     updateSessionPlayer: async (
       _p: unknown,
-      args: { id: string; input: Partial<{ name: string; nickname: string; skillLevel: string }> },
+      args: {
+        id: string;
+        input: Partial<{ name: string; nickname: string; skillLevel: string; fixedPartnerId: string | null }>;
+      },
       context: GraphQLContext
     ) => {
       const player = await requirePlayerOwner(context, args.id);
       if (args.input.name !== undefined) player.name = args.input.name.trim();
       if (args.input.nickname !== undefined) player.nickname = args.input.nickname;
       if (args.input.skillLevel !== undefined) player.skillLevel = args.input.skillLevel as never;
+      if (args.input.fixedPartnerId !== undefined) {
+        await setFixedPartner(player, args.input.fixedPartnerId, String(player.sessionId));
+      }
       await player.save();
       return player;
     },
@@ -152,6 +211,9 @@ export const playerResolvers = {
         throw new GraphQLError("Players can only be removed before the session starts.", {
           extensions: { code: "BAD_USER_INPUT" },
         });
+      }
+      if (player.fixedPartnerId) {
+        await SessionPlayer.updateOne({ _id: player.fixedPartnerId }, { $set: { fixedPartnerId: null } });
       }
       await player.deleteOne();
       if (session) {
@@ -181,6 +243,14 @@ export const playerResolvers = {
 
   SessionPlayer: {
     id: (parent: { _id: unknown }) => String(parent._id),
+    fixedPartnerId: (parent: { fixedPartnerId?: unknown }) =>
+      parent.fixedPartnerId ? String(parent.fixedPartnerId) : null,
+    fixedPartner: async (parent: { fixedPartnerId?: unknown }) => {
+      if (!parent.fixedPartnerId) return null;
+      // Explicit await (rather than returning the Query directly) so this resolver
+      // always hands GraphQL a plain, already-settled value.
+      return SessionPlayer.findById(parent.fixedPartnerId).exec();
+    },
     winRate: (parent: { gamesPlayed: number; wins: number }) =>
       parent.gamesPlayed === 0 ? 0 : (parent.wins / parent.gamesPlayed) * 100,
     partnerHistory: (parent: { sessionId: unknown; partnerHistory: unknown }, _args: unknown, context: GraphQLContext) =>

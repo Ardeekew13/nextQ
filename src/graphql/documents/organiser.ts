@@ -125,6 +125,18 @@ export const LOGOUT_ORGANISER = gql`
   }
 `;
 
+export const REQUEST_PASSWORD_RESET = gql`
+  mutation RequestPasswordReset($email: String!) {
+    requestPasswordReset(email: $email)
+  }
+`;
+
+export const RESET_PASSWORD = gql`
+  mutation ResetPassword($token: String!, $newPassword: String!) {
+    resetPassword(token: $token, newPassword: $newPassword)
+  }
+`;
+
 export const MY_CLUBS_QUERY = gql`
   query MyClubs {
     myClubs {
@@ -587,6 +599,8 @@ export const UPDATE_SESSION_PLAYER = gql`
       name
       nickname
       skillLevel
+      fixedPartnerId
+      fixedPartner { id name }
     }
   }
 `;

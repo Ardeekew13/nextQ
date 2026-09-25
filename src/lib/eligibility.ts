@@ -55,6 +55,7 @@ export function toQueuePlayer(doc: HydratedDocument<SessionPlayerDoc>): QueuePla
     partnerHistory,
     opponentHistory,
     winRate: doc.gamesPlayed > 0 ? (doc.wins / doc.gamesPlayed) * 100 : 0,
+    fixedPartnerId: doc.fixedPartnerId ? String(doc.fixedPartnerId) : undefined,
   };
 }
 

@@ -4,6 +4,7 @@ import { LOGIN_ORGANISER } from "@/graphql/documents/organiser";
 import { useMutation } from "@apollo/client";
 import { App, Button, Form, Input } from "antd";
 import { Mail, Lock } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import NProgress from "nprogress";
 import { useEffect, useState } from "react";
@@ -232,6 +233,15 @@ export default function LoginPage() {
 									/>
 								</Form.Item>
 
+								<div style={{ textAlign: "right", marginTop: -8, marginBottom: 16 }}>
+									<Link
+										href="/forgot-password"
+										style={{ fontSize: 13, color: "#f43f75", fontWeight: 600, textDecoration: "none" }}
+									>
+										Forgot password?
+									</Link>
+								</div>
+
 								<Form.Item style={{ marginBottom: 0 }}>
 									<Button
 										type="primary"
@@ -433,6 +443,15 @@ export default function LoginPage() {
 										}}
 									/>
 								</Form.Item>
+
+								<div style={{ textAlign: "right", marginTop: -8, marginBottom: 16 }}>
+									<Link
+										href="/forgot-password"
+										style={{ fontSize: 13, color: "#f43f75", fontWeight: 600, textDecoration: "none" }}
+									>
+										Forgot password?
+									</Link>
+								</div>
 
 								<Form.Item style={{ marginBottom: 0 }}>
 									<Button

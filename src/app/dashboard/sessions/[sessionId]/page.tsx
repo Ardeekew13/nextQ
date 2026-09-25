@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Tabs, Button, App } from "antd";
@@ -21,7 +21,11 @@ import type { GameLogStats } from "@/components/GameLog";
 import { StandingsTab } from "@/components/session/StandingsTab";
 import type { StandingsTabStats } from "@/components/session/StandingsTab";
 import { QrPopover } from "@/components/QrPopover";
+import { SupportPrompt } from "@/components/SupportPrompt";
 import type { ReactNode } from "react";
+
+/** Game-count milestone that triggers the one-time "support the developer" prompt mid-session. */
+const SUPPORT_PROMPT_GAME_MILESTONE = 8;
 
 type TabKey = "overview" | "players" | "games" | "standings";
 
@@ -53,7 +57,13 @@ export default function SessionPage() {
 
 	const { data, refetch } = useQuery(SESSION_DASHBOARD_QUERY, {
 		variables: { id: params.sessionId },
+		// Keep completedGames fresh regardless of which tab is active, so the
+		// mid-session support-prompt milestone can fire without needing the
+		// Overview tab to be mounted.
+		pollInterval: 20000,
 	});
+	const [midSupportOpen, setMidSupportOpen] = useState(false);
+	const [endSupportOpen, setEndSupportOpen] = useState(false);
 	const [startSession, { loading: starting }] = useMutation(START_SESSION);
 	const [pauseSession, { loading: pausing }] = useMutation(PAUSE_SESSION);
 	const [resumeSession, { loading: resuming }] = useMutation(RESUME_SESSION);
@@ -61,7 +71,24 @@ export default function SessionPage() {
 	const [logoutOrganiser, { loading: loggingOut }] = useMutation(LOGOUT_ORGANISER);
 
 	const session = data?.session;
+	const completedGamesCount = session?.completedGames?.length ?? 0;
 
+	// Show the "enjoying the session?" support prompt once per session per
+	// device, the first time completedGamesCount crosses the milestone.
+	useEffect(() => {
+		if (!session?.id) return;
+		const key = `support-prompt-mid-${session.id}`;
+		if (completedGamesCount >= SUPPORT_PROMPT_GAME_MILESTONE) {
+			try {
+				if (!localStorage.getItem(key)) {
+					localStorage.setItem(key, "1");
+					setMidSupportOpen(true);
+				}
+			} catch {
+				// localStorage unavailable (private browsing, etc.) — skip silently.
+			}
+		}
+	}, [session?.id, completedGamesCount]);
 
 	const courtsCount = session?.courts?.length ?? 0;
 	const queueMode = session?.settings?.queueMode ?? "";
@@ -109,8 +136,10 @@ export default function SessionPage() {
 			onOk: async () => {
 				try {
 					await finishSession({ variables: { id: params.sessionId } });
-					router.push("/dashboard");
 					message.success("Session ended");
+					// Show the support prompt before leaving; navigation happens
+					// when the organiser dismisses it (see SupportPrompt onClose below).
+					setEndSupportOpen(true);
 				} catch (err) {
 					message.error(err instanceof Error ? err.message : "Could not end session");
 				}
@@ -656,6 +685,16 @@ export default function SessionPage() {
 				{activeTab === "games" && <GamesTab sessionId={params.sessionId} onStats={setGameStats} scoringLabel={data?.session?.settings?.scoring?.pointsTarget ? `First to ${data.session.settings.scoring.pointsTarget}` : "Win/loss only · no score entry"} />}
 				{activeTab === "standings" && <StandingsTab sessionId={params.sessionId} onStats={setStandingsStats} />}
 			</div>
+
+			<SupportPrompt open={midSupportOpen} onClose={() => setMidSupportOpen(false)} variant="mid" />
+			<SupportPrompt
+				open={endSupportOpen}
+				onClose={() => {
+					setEndSupportOpen(false);
+					router.push("/dashboard");
+				}}
+				variant="end"
+			/>
 		</div>
 	);
 }

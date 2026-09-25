@@ -25,6 +25,13 @@ export interface QueuePlayer {
   opponentHistory: Record<string, number>;
   /** Win rate 0-100. Used only as a tiebreak among players who've waited a similar amount of time. */
   winRate?: number;
+  /** Optional mutual "fixed partner" request. When both players in a pair are eligible,
+   * the engine always selects and teams them together instead of treating them individually.
+   * The pair's turn is decided by whichever partner has the WORSE individual priority —
+   * i.e. the pair waits as a unit for its slower half, rather than the faster half dragging
+   * the other one forward. This keeps the "always together" guarantee without letting a
+   * pair jump ahead of players who'd otherwise be next. */
+  fixedPartnerId?: string;
 }
 
 export type PlayerQuad = [QueuePlayer, QueuePlayer, QueuePlayer, QueuePlayer];
@@ -158,28 +165,85 @@ function selectPlayers(
 
   const now = Date.now();
 
-  // Score all players
-  const scored = eligible.map((p) => ({
-    player: p,
-    score: playerScore(p, mode, maxConsecutiveGames, now, random()),
-  }));
+  // Score every eligible player individually first.
+  const scoreById = new Map<string, number>();
+  for (const p of eligible) {
+    scoreById.set(p.id, playerScore(p, mode, maxConsecutiveGames, now, random()));
+  }
 
   // If everyone is at consecutive limit, ignore the penalty (not enough alts)
-  const belowLimit = scored.filter((s) => s.player.consecutiveGames < maxConsecutiveGames);
-  const pool = belowLimit.length >= 4 ? belowLimit : scored;
+  const belowLimitIds = new Set(eligible.filter((p) => p.consecutiveGames < maxConsecutiveGames).map((p) => p.id));
+  const pool = belowLimitIds.size >= 4 ? eligible.filter((p) => belowLimitIds.has(p.id)) : eligible;
+  const poolIds = new Set(pool.map((p) => p.id));
+  const byId = new Map(pool.map((p) => [p.id, p]));
 
-  pool.sort((a, b) => a.score - b.score);
-  let selected = pool.slice(0, 4).map((s) => s.player) as PlayerQuad;
+  // Merge intact fixed pairs (both halves present in the pool) into single units, scored by
+  // the WORSE of the two individual scores — so the pair's turn is set by whichever partner
+  // is furthest from being due, and the pool is otherwise unaffected. A player whose fixed
+  // partner isn't currently eligible is treated as an ordinary single.
+  type Entry =
+    | { kind: "single"; player: QueuePlayer; score: number }
+    | { kind: "pair"; players: [QueuePlayer, QueuePlayer]; score: number };
+  const entries: Entry[] = [];
+  const consumed = new Set<string>();
+  for (const player of pool) {
+    if (consumed.has(player.id)) continue;
+    const partnerId = player.fixedPartnerId;
+    const partner = partnerId && poolIds.has(partnerId) && !consumed.has(partnerId) ? byId.get(partnerId) : undefined;
+    if (partner) {
+      const score = Math.max(scoreById.get(player.id)!, scoreById.get(partner.id)!);
+      entries.push({ kind: "pair", players: [player, partner], score });
+      consumed.add(player.id);
+      consumed.add(partner.id);
+    } else {
+      entries.push({ kind: "single", player, score: scoreById.get(player.id)! });
+      consumed.add(player.id);
+    }
+  }
+
+  entries.sort((a, b) => a.score - b.score);
+
+  const selectedList: QueuePlayer[] = [];
+  for (const entry of entries) {
+    if (selectedList.length >= 4) break;
+    if (entry.kind === "pair") {
+      if (selectedList.length > 2) continue; // no room for both — leave the pair for next round
+      selectedList.push(entry.players[0], entry.players[1]);
+    } else {
+      selectedList.push(entry.player);
+    }
+  }
+
+  // Order the final foursome by individual priority for a sensible "up next" display —
+  // this is cosmetic only and doesn't affect who was selected or how teams get assigned.
+  let selected = selectedList
+    .slice(0, 4)
+    .sort((a, b) => (scoreById.get(a.id) ?? 0) - (scoreById.get(b.id) ?? 0)) as PlayerQuad;
 
   // HARD RULE: Don't allow the same exact group of 4 to be drawn consecutively
   if (pastGroups && pastGroups.has(groupKey(selected)) && eligible.length >= 5) {
-    // Try to swap one player to break the group
-    for (let i = 4; i < pool.length; i++) {
-      const candidate = pool[i].player;
-      const newGroup = [selected[0], selected[1], selected[2], candidate] as PlayerQuad;
-      if (!pastGroups.has(groupKey(newGroup))) {
-        selected = newGroup;
+    const selectedIds = new Set(selected.map((p) => p.id));
+    // Only swap out a player who isn't half of an intact fixed pair in this selection —
+    // breaking up a fixed partnership to dodge a repeat group would defeat the point of it.
+    let swapIndex = -1;
+    for (let i = selected.length - 1; i >= 0; i--) {
+      const candidate = selected[i];
+      const paired = Boolean(candidate.fixedPartnerId && selectedIds.has(candidate.fixedPartnerId));
+      if (!paired) {
+        swapIndex = i;
         break;
+      }
+    }
+    if (swapIndex !== -1) {
+      for (const entry of entries) {
+        if (entry.kind !== "single") continue; // keep it simple: don't swap in a pair here
+        if (selectedIds.has(entry.player.id)) continue;
+        const newGroup = [...selected] as PlayerQuad;
+        newGroup[swapIndex] = entry.player;
+        if (!pastGroups.has(groupKey(newGroup))) {
+          selected = newGroup;
+          break;
+        }
       }
     }
   }
@@ -252,11 +316,25 @@ function assignTeams(
 ): TeamAssignment {
   const [p1, p2, p3, p4] = players;
 
-  const splits: Array<{ teamA: PlayerPair; teamB: PlayerPair }> = [
+  const allSplits: Array<{ teamA: PlayerPair; teamB: PlayerPair }> = [
     { teamA: [p1, p2], teamB: [p3, p4] },
     { teamA: [p1, p3], teamB: [p2, p4] },
     { teamA: [p1, p4], teamB: [p2, p3] },
   ];
+
+  // Fixed partners must always land on the same team. Among the four players, keep only
+  // the split(s) that keep every intact fixed pair together — with at most two disjoint
+  // pairs possible in a quad, this is either exactly one split or (no fixed pairs) all three.
+  const ids = new Set(players.map((p) => p.id));
+  const keepsFixedPairsTogether = (split: { teamA: PlayerPair; teamB: PlayerPair }) =>
+    players.every((p) => {
+      if (!p.fixedPartnerId || !ids.has(p.fixedPartnerId)) return true;
+      const onTeamA = split.teamA.some((t) => t.id === p.id);
+      const partnerOnTeamA = split.teamA.some((t) => t.id === p.fixedPartnerId);
+      return onTeamA === partnerOnTeamA;
+    });
+  const constrained = allSplits.filter(keepsFixedPairsTogether);
+  const splits = constrained.length > 0 ? constrained : allSplits;
 
   // If randomizeTeams is true, just pick a random split
   if (randomizeTeams) {

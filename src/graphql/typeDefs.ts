@@ -162,6 +162,10 @@ export const typeDefs = gql`
     checkedIn: Boolean!
     checkedInAt: Date
     active: Boolean!
+    """Optional mutual partner request. When set, the queue engine always keeps this
+    player and their fixed partner together in the same game, on the same team."""
+    fixedPartnerId: ID
+    fixedPartner: SessionPlayer
     queueEnteredAt: Date!
     queuePosition: Int!
     gamesPlayed: Int!
@@ -378,6 +382,8 @@ export const typeDefs = gql`
     name: String!
     nickname: String
     skillLevel: SkillLevel
+    """Optional: ID of another player already in this session to set as a mutual fixed partner."""
+    fixedPartnerId: ID
   }
 
   input AddClubMemberInput {
@@ -397,6 +403,8 @@ export const typeDefs = gql`
     name: String
     nickname: String
     skillLevel: SkillLevel
+    """Set to another player's ID to make them mutual fixed partners, or null to clear."""
+    fixedPartnerId: ID
   }
 
   input AddCourtInput {
@@ -459,6 +467,13 @@ export const typeDefs = gql`
     registerOrganiser(email: String!, password: String!, name: String!): AuthPayload!
     loginOrganiser(email: String!, password: String!): AuthPayload!
     logoutOrganiser: Boolean!
+    """Always returns true, whether or not the email belongs to an account, so a caller
+    can't use this to probe which emails are registered. Sends a reset email only when
+    the account actually exists."""
+    requestPasswordReset(email: String!): Boolean!
+    """Consumes a reset token (single use, expires 1 hour after being requested) and
+    sets a new password."""
+    resetPassword(token: String!, newPassword: String!): Boolean!
 
     createClub(input: CreateClubInput!): Club!
     updateClub(id: ID!, input: UpdateClubInput!): Club!

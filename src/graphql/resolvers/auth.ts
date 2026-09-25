@@ -7,9 +7,37 @@ import {
   signAuthToken,
   authCookieName,
   authCookieMaxAge,
+  generatePasswordResetToken,
+  hashResetToken,
+  PASSWORD_RESET_TTL_MS,
 } from "@/lib/auth";
 import { generateCSRFToken } from "@/lib/csrf";
+import { sendPasswordResetEmail } from "@/lib/email";
+import { buildPasswordResetUrl } from "@/lib/urls";
 import type { GraphQLContext } from "../context";
+
+function assertStrongPassword(password: string) {
+  if (password.length < 12) {
+    throw new GraphQLError("Password must be at least 12 characters long.", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+  if (!/[A-Z]/.test(password)) {
+    throw new GraphQLError("Password must contain at least one uppercase letter.", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+  if (!/[0-9]/.test(password)) {
+    throw new GraphQLError("Password must contain at least one number.", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+  if (!/[!@#$%^&*]/.test(password)) {
+    throw new GraphQLError("Password must contain at least one special character (!@#$%^&*).", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -44,26 +72,7 @@ export const authResolvers = {
         });
       }
       const password = args.password;
-      if (password.length < 12) {
-        throw new GraphQLError("Password must be at least 12 characters long.", {
-          extensions: { code: "BAD_USER_INPUT" },
-        });
-      }
-      if (!/[A-Z]/.test(password)) {
-        throw new GraphQLError("Password must contain at least one uppercase letter.", {
-          extensions: { code: "BAD_USER_INPUT" },
-        });
-      }
-      if (!/[0-9]/.test(password)) {
-        throw new GraphQLError("Password must contain at least one number.", {
-          extensions: { code: "BAD_USER_INPUT" },
-        });
-      }
-      if (!/[!@#$%^&*]/.test(password)) {
-        throw new GraphQLError("Password must contain at least one special character (!@#$%^&*).", {
-          extensions: { code: "BAD_USER_INPUT" },
-        });
-      }
+      assertStrongPassword(password);
 
       const name = args.name.trim();
       if (!name) {
@@ -116,6 +125,49 @@ export const authResolvers = {
     logoutOrganiser: async () => {
       const store = await cookies();
       store.delete(authCookieName);
+      return true;
+    },
+
+    requestPasswordReset: async (_parent: unknown, args: { email: string }) => {
+      const email = args.email.trim().toLowerCase();
+      const user = await User.findOne({ email });
+      // Always return true — don't leak whether an email is registered.
+      if (!user) return true;
+
+      const { token, tokenHash } = generatePasswordResetToken();
+      user.resetPasswordTokenHash = tokenHash;
+      user.resetPasswordExpires = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
+      await user.save();
+
+      const resetUrl = buildPasswordResetUrl(token);
+      try {
+        await sendPasswordResetEmail(user.email, resetUrl);
+      } catch (err) {
+        // Don't fail the mutation (still don't want to leak account existence via errors);
+        // the token is already saved so a retried request will still work.
+        console.error("Failed to send password reset email:", err);
+      }
+      return true;
+    },
+
+    resetPassword: async (_parent: unknown, args: { token: string; newPassword: string }) => {
+      assertStrongPassword(args.newPassword);
+
+      const tokenHash = hashResetToken(args.token);
+      const user = await User.findOne({
+        resetPasswordTokenHash: tokenHash,
+        resetPasswordExpires: { $gt: new Date() },
+      });
+      if (!user) {
+        throw new GraphQLError("This reset link is invalid or has expired. Request a new one.", {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
+
+      user.passwordHash = await hashPassword(args.newPassword);
+      user.resetPasswordTokenHash = null;
+      user.resetPasswordExpires = null;
+      await user.save();
       return true;
     },
   },

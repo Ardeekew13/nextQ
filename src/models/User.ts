@@ -9,6 +9,10 @@ const UserSchema = new Schema(
     passwordHash: { type: String, required: true },
     name: { type: String, required: true, trim: true },
     role: { type: String, enum: Object.values(UserRole), default: UserRole.ORGANISER },
+
+    /** SHA-256 hash of the current password-reset token, if one has been issued and not yet used/expired. */
+    resetPasswordTokenHash: { type: String, default: null },
+    resetPasswordExpires: { type: Date, default: null },
   },
   { timestamps: true }
 );

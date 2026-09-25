@@ -67,6 +67,8 @@ const PLAYERS_QUERY = gql`
         winRate
         gamesSatOut
         queueEnteredAt
+        fixedPartnerId
+        fixedPartner { id name }
       }
       activeGames {
         id
@@ -143,7 +145,7 @@ export function PlayersTab({
   sessionId: string;
   onStats?: (s: PlayerTabStats) => void;
 }) {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const { data, refetch } = useQuery(PLAYERS_QUERY, {
     variables: { id: sessionId },
   });
@@ -151,6 +153,8 @@ export function PlayersTab({
   const [addOpen, setAddOpen] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<any>(null);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [savingPlayer, setSavingPlayer] = useState(false);
+  const [pairingSelected, setPairingSelected] = useState(false);
   const [search, setSearch] = useState("");
   const [alertDismissed, setAlertDismissed] = useState(false);
   const [setSkillOpen, setSetSkillOpen] = useState(false);
@@ -207,6 +211,17 @@ export function PlayersTab({
   const clubMembers: any[] = membersData?.clubMembers ?? [];
   const importableMembers = clubMembers.filter((m: any) => !existingNames.has(m.name.toLowerCase()));
 
+  function partnerOptions(excludeId?: string) {
+    return players
+      .filter((p: any) => p.id !== excludeId)
+      .map((p: any) => ({
+        value: p.id,
+        label: p.fixedPartner && p.fixedPartner.id !== excludeId
+          ? `${p.name} (currently: ${p.fixedPartner.name})`
+          : p.name,
+      }));
+  }
+
   const selectedPlayers = players.filter((p: any) => selectedKeys.includes(p.id));
   const allSelectedCheckedIn = selectedPlayers.length > 0 && selectedPlayers.every((p: any) => p.checkedIn);
 
@@ -258,6 +273,54 @@ export function PlayersTab({
     } catch { message.error("Could not remove players"); }
   }
 
+  function confirmLiveQueueReorder(onConfirm: () => void) {
+    modal.confirm({
+      title: "This will move them in the queue",
+      content:
+        "The session is already live, so whichever one of these two is currently further ahead in the queue will hold their spot until the other catches up \u2014 they'll always play together, but the earlier one's turn shifts down to line up with their partner's.",
+      okText: "Set fixed partner",
+      cancelText: "Cancel",
+      onOk: onConfirm,
+    });
+  }
+
+  async function doSetFixedPartner(aId: string, bId: string) {
+    if (pairingSelected) return;
+    setPairingSelected(true);
+    try {
+      await updateSessionPlayer({ variables: { id: aId, input: { fixedPartnerId: bId } } });
+      message.success("Fixed partners set");
+      setSelectedKeys([]);
+      refetch();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "Could not set fixed partners");
+    } finally {
+      setPairingSelected(false);
+    }
+  }
+
+  async function handlePairSelected() {
+    if (selectedKeys.length !== 2 || pairingSelected) return;
+    const [aId, bId] = selectedKeys;
+    const [a, b] = [aId, bId].map((id) => players.find((p: any) => p.id === id));
+    const eitherAlreadyQueued = !isDraft && [a, b].some((p: any) => p?.checkedIn && p?.active);
+    if (eitherAlreadyQueued) {
+      confirmLiveQueueReorder(() => doSetFixedPartner(aId, bId));
+    } else {
+      doSetFixedPartner(aId, bId);
+    }
+  }
+
+  async function handleUnpair(player: any) {
+    try {
+      await updateSessionPlayer({ variables: { id: player.id, input: { fixedPartnerId: null } } });
+      message.success("Fixed partner removed");
+      refetch();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "Could not remove fixed partner");
+    }
+  }
+
   async function handleBulkSetSkill() {
     if (bulkSkill === undefined) return;
     const skillValue = bulkSkill === "" ? null : bulkSkill;
@@ -304,13 +367,36 @@ export function PlayersTab({
     } catch { message.error("Could not add players"); }
   }
 
-  async function handleEditSubmit(values: any) {
+  async function doUpdatePlayer(input: any) {
+    if (savingPlayer) return;
+    setSavingPlayer(true);
     try {
-      await updateSessionPlayer({ variables: { id: editingPlayer.id, input: values } });
+      await updateSessionPlayer({ variables: { id: editingPlayer.id, input } });
       message.success("Player updated");
       setEditingPlayer(null);
       refetch();
-    } catch { message.error("Could not update player"); }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "Could not update player");
+    } finally {
+      setSavingPlayer(false);
+    }
+  }
+
+  async function handleEditSubmit(values: any) {
+    if (savingPlayer) return;
+    const input = { ...values, fixedPartnerId: values.fixedPartnerId ?? null };
+    const newPartnerId: string | null = input.fixedPartnerId;
+    const partnerChanged = newPartnerId !== (editingPlayer?.fixedPartnerId ?? null);
+    if (partnerChanged && newPartnerId) {
+      const newPartner = players.find((p: any) => p.id === newPartnerId);
+      const eitherAlreadyQueued =
+        !isDraft && ((editingPlayer?.checkedIn && editingPlayer?.active) || (newPartner?.checkedIn && newPartner?.active));
+      if (eitherAlreadyQueued) {
+        confirmLiveQueueReorder(() => doUpdatePlayer(input));
+        return;
+      }
+    }
+    doUpdatePlayer(input);
   }
 
   async function handleImportMembers() {
@@ -532,6 +618,11 @@ export function PlayersTab({
           )}
           <button className="players-selection-action" onClick={handleBulkSitOut} style={actionBtnStyle}>Sit out</button>
           <button className="players-selection-action" onClick={() => setSetSkillOpen(true)} style={actionBtnStyle}>Set skill</button>
+          {selectedKeys.length === 2 && (
+  <button className="players-selection-action" onClick={handlePairSelected} disabled={pairingSelected} style={{ ...actionBtnStyle, opacity: pairingSelected ? 0.6 : 1, cursor: pairingSelected ? "not-allowed" : "pointer" }}>
+              &#128279; {pairingSelected ? "Pairing…" : "Pair as fixed partners"}
+            </button>
+          )}
           {isDraft && (
             <Popconfirm
               title={`Remove ${selectedKeys.length} player${selectedKeys.length > 1 ? "s" : ""}?`}
@@ -586,6 +677,11 @@ export function PlayersTab({
                   <div className="pl-cell-name">
                     <div style={{ fontSize: 14, fontWeight: 600, color: "#1d1f20" }}>{player.name}</div>
                     {player.nickname && <div style={{ fontSize: 11, color: "rgba(29,31,32,0.4)" }}>{player.nickname}</div>}
+                    {player.fixedPartner && (
+                      <div style={{ fontSize: 11, color: "#e11d74", fontWeight: 600 }}>
+                        &#128279; Fixed partner: {player.fixedPartner.name}
+                      </div>
+                    )}
                   </div>
                   <div className="pl-cell-status" style={{ display: "flex", alignItems: "center", gap: 7 }}>
                     <span style={{ width: 7, height: 7, borderRadius: "50%", background: sc.dot, flexShrink: 0, display: "inline-block" }} />
@@ -599,6 +695,7 @@ export function PlayersTab({
                   <div className="pl-cell-action" onClick={(e) => e.stopPropagation()}>
                     <Dropdown trigger={["click"]} menu={{ items: [
                       { key: "edit", label: "Edit player", onClick: () => { setEditingPlayer(player); editForm.setFieldsValue(player); } },
+                      ...(player.fixedPartner ? [{ key: "unpair", label: `Unpair from ${player.fixedPartner.name}`, onClick: () => handleUnpair(player) }] : []),
                       player.checkedIn ? { key: "checkout", label: "Check out", onClick: () => checkInPlayer({ variables: { id: player.id, checkedIn: false } }).then(() => refetch()) } : { key: "checkin", label: "Check in", onClick: () => checkInPlayer({ variables: { id: player.id, checkedIn: true } }).then(() => refetch()) },
                       player.active ? { key: "sitout", label: "Sit out", onClick: () => setPlayerActiveStatus({ variables: { id: player.id, active: false } }).then(() => refetch()) } : { key: "requeue", label: "Back in queue", onClick: () => setPlayerActiveStatus({ variables: { id: player.id, active: true } }).then(() => refetch()) },
                       ...(isDraft ? [{ key: "remove", label: <span style={{ color: "#e11d74" }}>Remove</span>, onClick: () => removeSessionPlayer({ variables: { id: player.id } }).then(() => refetch()) }] : []),
@@ -663,6 +760,9 @@ export function PlayersTab({
                   <Form.Item label="Nickname" name="nickname"><Input size="large" /></Form.Item>
                   <Form.Item label="Skill level (optional)" name="skillLevel">
                     <Select allowClear options={SKILL_OPTIONS} size="large" />
+                  </Form.Item>
+                  <Form.Item label="Fixed partner (optional)" name="fixedPartnerId" extra="Always play together, on the same team, whenever both are in the queue.">
+                    <Select allowClear placeholder="No fixed partner" options={partnerOptions()} size="large" showSearch optionFilterProp="label" />
                   </Form.Item>
                   <Button type="primary" htmlType="submit" block size="large" loading={addingSingle} style={{ background: "#e11d74", borderColor: "#e11d74" }}>Add player</Button>
                 </Form>
@@ -735,11 +835,32 @@ export function PlayersTab({
       </Modal>
 
       {/* Edit player modal */}
-      <Modal title="Edit player" open={!!editingPlayer} onCancel={() => setEditingPlayer(null)} onOk={() => editForm.submit()}>
+      <Modal
+        title="Edit player"
+        open={!!editingPlayer}
+        onCancel={() => { if (!savingPlayer) setEditingPlayer(null); }}
+        onOk={() => editForm.submit()}
+        confirmLoading={savingPlayer}
+        okButtonProps={{ disabled: savingPlayer }}
+        cancelButtonProps={{ disabled: savingPlayer }}
+        maskClosable={!savingPlayer}
+        closable={!savingPlayer}
+      >
         <Form form={editForm} layout="vertical" onFinish={handleEditSubmit}>
           <Form.Item label="Name" name="name" rules={[{ required: true }]}><Input size="large" /></Form.Item>
           <Form.Item label="Nickname" name="nickname"><Input size="large" /></Form.Item>
           <Form.Item label="Skill level" name="skillLevel"><Select allowClear options={SKILL_OPTIONS} size="large" /></Form.Item>
+          <Form.Item
+            label="Fixed partner (optional)"
+            name="fixedPartnerId"
+            extra={
+              isDraft
+                ? "Always play together, on the same team, whenever both are in the queue."
+                : "Always play together, on the same team. The session is live, so whichever one is further ahead in the queue right now will hold their spot to line up with the other."
+            }
+          >
+            <Select allowClear placeholder="No fixed partner" options={partnerOptions(editingPlayer?.id)} size="large" showSearch optionFilterProp="label" />
+          </Form.Item>
         </Form>
       </Modal>
 

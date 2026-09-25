@@ -14,6 +14,10 @@ const SessionPlayerSchema = new Schema(
     checkedInAt: { type: Date },
     active: { type: Boolean, default: true },
 
+    /** Optional mutual partner request: when both players in a pair set each other, the
+     * queue engine always keeps them together and on the same team. Nullable. */
+    fixedPartnerId: { type: Schema.Types.ObjectId, ref: "SessionPlayer", default: null },
+
     queueEnteredAt: { type: Date, default: () => new Date() },
     queuePosition: { type: Number, default: 0 },
 
