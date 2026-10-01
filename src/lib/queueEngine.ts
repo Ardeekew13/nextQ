@@ -4,7 +4,11 @@
  * Three modes:
  *   BALANCED — equal games for everyone; late arrivals catch up fast.
  *   SMART    — strict queue order by wait time; no catch-up.
- *   HYBRID   — default; wait-time first, gentle catch-up, consecutive game protection.
+ *   HYBRID   — default; wait-time first, with one override: anyone who hasn't played a
+ *              single game yet always goes ahead of anyone who has, however long the
+ *              others have waited. Once that's settled, ordering falls back to wait-time
+ *              first with gentle catch-up (secondary factor), plus consecutive game
+ *              protection.
  *
  * Pure functions with no DB dependency so they can be unit-tested in isolation.
  */
@@ -89,6 +93,19 @@ const WAIT_TIE_WINDOW_MINUTES = 2;
 const WIN_RATE_TIEBREAK_WEIGHT = 0.15;
 
 /**
+ * HYBRID only: flat priority boost for a player who hasn't played a single game yet
+ * this session, so "hasn't played" always wins over "has played" regardless of who's
+ * waited longer. Sized to outlast the wait-bucket term (weighted at 2,000/bucket) for
+ * over 8 hours of continuous queueing — comfortably past any real session's length —
+ * while staying below the consecutive-game limit penalty (1,000,000), so someone who
+ * must sit out for pacing reasons is still deprioritised first (moot in practice: a
+ * player with zero games played can never also be at the consecutive-game limit).
+ * Once the never-played/has-played split is decided, ordering within each group falls
+ * back to the normal wait-time-first, gentle-catch-up scoring below.
+ */
+const NEVER_PLAYED_PRIORITY_BOOST = 500_000;
+
+/**
  * Score a player for selection — lower is higher priority (will be selected first).
  * Each mode produces different weights.
  */
@@ -132,16 +149,21 @@ function playerScore(
       );
 
     case QueueMode.HYBRID:
-    default:
-      // Primary: longest wait (bucketed); secondary: fewest games (gentle catch-up); then win rate; tertiary: most sat out
+    default: {
+      // First-time priority: anyone with zero games played always outranks anyone who's
+      // played at least once, no matter how long either has waited.
+      const neverPlayedBoost = player.gamesPlayed === 0 ? -NEVER_PLAYED_PRIORITY_BOOST : 0;
+      // Then: longest wait (bucketed); secondary: fewest games (gentle catch-up); then win rate; tertiary: most sat out
       return (
         consecutivePenalty +
+        neverPlayedBoost +
         (-waitBucket) * 1_000 * WAIT_TIE_WINDOW_MINUTES +
         player.gamesPlayed * 100 +
         winRateTiebreak +
         (-player.gamesSatOut) * 10 +
         tiebreak
       );
+    }
   }
 }
 
@@ -391,7 +413,12 @@ export function generateNextGame(
     maxConsecutiveGames = 2,
     pastGroups = new Set(),
     random = Math.random,
-    randomizeTeams = mode === QueueMode.HYBRID,
+    // Team splits always minimize repeat partners/opponents by default, in every mode
+    // (including HYBRID) — the queue-selection logic above already varies who gets picked
+    // next, so there's no need to also randomize who partners whom once a foursome is
+    // chosen. A caller can still opt into pure-random splits by passing randomizeTeams: true
+    // explicitly, but nothing does that today.
+    randomizeTeams = false,
   } = options;
 
   const selection = selectPlayers(eligible, mode, maxConsecutiveGames, random, pastGroups);

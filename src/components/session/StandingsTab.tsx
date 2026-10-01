@@ -208,6 +208,7 @@ export function StandingsTab({
   const clubStandings: any[] = clubStandingsData?.clubStandings ?? [];
   const standings: StandingRowView[] = session?.standings ?? [];
   const podium: PodiumEntryView[] = session?.podium ?? [];
+  const firstPlaceTie: StandingRowView[] = session?.firstPlaceTie ?? [];
 
   const tabStats = useMemo<StandingsTabStats>(() => ({
     playersRanked: standings.length,
@@ -262,6 +263,37 @@ export function StandingsTab({
       <style>{STANDINGS_STYLES}</style>
       {/* ── Main content ── */}
       <div style={{ flex: 1, minWidth: 0, padding: "24px 28px", overflowY: "auto", height: "100%" }}>
+
+        {/* Tied for 1st — needs a decider before any prize goes out */}
+        {firstPlaceTie.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 12,
+              background: "#fff7ed",
+              border: "1px solid #fde3b8",
+              borderRadius: 10,
+              padding: "14px 16px",
+              marginBottom: 20,
+            }}
+          >
+            <span style={{ fontSize: 20, lineHeight: 1 }}>⚠️</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: "#92400e", marginBottom: 4 }}>
+                {firstPlaceTie.length === 2
+                  ? `${firstPlaceTie[0].player.name} and ${firstPlaceTie[1].player.name} are tied for 1st`
+                  : `${firstPlaceTie.length} players are tied for 1st: ${firstPlaceTie.map((s) => s.player.name).join(", ")}`}
+              </div>
+              <div style={{ fontSize: 13, color: "#78350f", lineHeight: 1.5 }}>
+                They're dead even on every stat this session tracks. If a prize is riding on 1st place, have
+                {firstPlaceTie.length === 2 ? " them" : " the tied players"} play a decider against each other —
+                put them on opposite teams for one more game from the Courts tab (use "Fill court manually"), and
+                whoever's team wins that game becomes the clear #1.
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Podium */}
         {podium.length > 0 && (

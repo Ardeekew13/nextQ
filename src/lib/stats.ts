@@ -3,7 +3,7 @@ import { Game } from "@/models/Game";
 import { SessionPlayer } from "@/models/SessionPlayer";
 import { Session } from "@/models/Session";
 import { GameStatus, type RankingCriterion } from "@/types/enums";
-import { computePodium, computeStandings, type StandingsInput } from "@/lib/ranking";
+import { computePodium, computeStandings, findFirstPlaceTie, type StandingsInput } from "@/lib/ranking";
 import { computePlayerStatistics } from "@/lib/statsCore";
 
 /**
@@ -105,4 +105,21 @@ export async function getSessionPodiumWithPlayers(sessionId: string) {
   return standings
     .filter((entry) => entry.gamesPlayed > 0 && entry.rank <= 3)
     .map((entry) => ({ ...entry, position: entry.rank }));
+}
+
+/**
+ * Players genuinely tied for 1st (see findFirstPlaceTie) with their full
+ * SessionPlayer document attached, for GraphQL resolution. Empty when 1st
+ * place is uncontested.
+ */
+export async function getSessionFirstPlaceTieWithPlayers(sessionId: string) {
+  const [session, players] = await Promise.all([
+    Session.findById(sessionId),
+    SessionPlayer.find({ sessionId }),
+  ]);
+  if (!session) throw new Error("Session not found");
+
+  const tied = findFirstPlaceTie(players.map(toStandingsInput), session.settings.rankingOrder as RankingCriterion[]);
+  const byId = new Map(players.map((p) => [String(p._id), p]));
+  return tied.map((entry) => ({ ...entry, player: byId.get(entry.id) }));
 }
