@@ -9,9 +9,9 @@ export function seededClubId(): string {
 
 export async function login(page: Page) {
   await page.goto("/login");
-  await page.getByPlaceholder("Enter your email").first().fill(E2E_EMAIL);
-  await page.getByPlaceholder("Password").first().fill(E2E_PASSWORD);
-  await page.getByRole("button", { name: "Log In" }).first().click();
+  await page.getByRole("textbox", { name: "Email" }).fill(E2E_EMAIL);
+  await page.getByRole("textbox", { name: "Password" }).fill(E2E_PASSWORD);
+  await page.getByRole("button", { name: "Log in", exact: true }).click();
   await expect(page).toHaveURL(/\/dashboard/);
 }
 
