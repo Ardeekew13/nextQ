@@ -828,6 +828,15 @@ export const REMOVE_CLUB_MEMBER = gql`
   }
 `;
 
+export const MERGE_CLUB_MEMBERS = gql`
+  mutation MergeClubMembers($keepId: ID!, $removeId: ID!) {
+    mergeClubMembers(keepId: $keepId, removeId: $removeId) {
+      id
+      name
+    }
+  }
+`;
+
 export const IMPORT_CLUB_MEMBERS_TO_SESSION = gql`
   mutation ImportClubMembersToSession($sessionId: ID!, $memberIds: [ID!]!) {
     importClubMembersToSession(sessionId: $sessionId, memberIds: $memberIds) {

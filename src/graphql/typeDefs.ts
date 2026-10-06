@@ -530,6 +530,8 @@ export const typeDefs = gql`
     addClubMember(clubId: ID!, input: AddClubMemberInput!): ClubMember!
     updateClubMember(id: ID!, input: UpdateClubMemberInput!): ClubMember!
     removeClubMember(id: ID!): Boolean!
+    """Merges removeId into keepId: keepId inherits the game history and removeId is deleted."""
+    mergeClubMembers(keepId: ID!, removeId: ID!): ClubMember!
     importClubMembersToSession(sessionId: ID!, memberIds: [ID!]!): [SessionPlayer!]!
 
     addCourt(sessionId: ID!, input: AddCourtInput!): Court!

@@ -207,6 +207,73 @@ export const clubMemberResolvers = {
     },
 
     /**
+     * Merges one club member into another: the kept member inherits the removed member's
+     * game history (their session records are renamed, which is how club standings and
+     * all-time stats are grouped) and the removed member is deleted from the roster.
+     */
+    mergeClubMembers: async (
+      _p: unknown,
+      args: { keepId: string; removeId: string },
+      context: GraphQLContext
+    ) => {
+      if (args.keepId === args.removeId) {
+        throw new GraphQLError("Pick two different players to merge.", { extensions: { code: "BAD_USER_INPUT" } });
+      }
+      const keep = await requireMemberOwner(context, args.keepId);
+      const remove = await requireMemberOwner(context, args.removeId);
+      if (String(keep.clubId) !== String(remove.clubId)) {
+        throw new GraphQLError("Both players must belong to the same club.", { extensions: { code: "BAD_USER_INPUT" } });
+      }
+
+      const sessions = await Session.find({ clubId: keep.clubId }).select("_id status").lean();
+      const nameMatches = (name: string) => ({
+        $expr: { $eq: [{ $toLower: { $trim: { input: "$name" } } }, name.trim().toLowerCase()] },
+      });
+
+      // Sessions that contain BOTH players can't simply be renamed into one (that would leave
+      // two identical names in the same session). Refuse if one is live; in a draft, the
+      // removed player has no history yet, so just drop them from it.
+      const both: { sessionId: unknown }[] = [];
+      for (const s of sessions) {
+        const [hasKeep, hasRemove] = await Promise.all([
+          SessionPlayer.exists({ sessionId: s._id, ...nameMatches(keep.name) }),
+          SessionPlayer.exists({ sessionId: s._id, ...nameMatches(remove.name) }),
+        ]);
+        if (hasKeep && hasRemove) both.push({ sessionId: s._id });
+      }
+      const statusById = new Map(sessions.map((s) => [String(s._id), s.status]));
+      const live = both.some((b) => {
+        const st = statusById.get(String(b.sessionId));
+        return st === SessionStatus.ACTIVE || st === SessionStatus.PAUSED;
+      });
+      if (live) {
+        throw new GraphQLError(
+          `${keep.name} and ${remove.name} are both in a session that's running right now. Finish it first, then merge.`,
+          { extensions: { code: "BAD_USER_INPUT" } }
+        );
+      }
+      const draftBoth = both
+        .filter((b) => statusById.get(String(b.sessionId)) === SessionStatus.DRAFT)
+        .map((b) => b.sessionId);
+      if (draftBoth.length > 0) {
+        await SessionPlayer.deleteMany({ sessionId: { $in: draftBoth }, ...nameMatches(remove.name) });
+      }
+
+      await SessionPlayer.updateMany(
+        { sessionId: { $in: sessions.map((s) => s._id) }, ...nameMatches(remove.name) },
+        { $set: { name: keep.name } }
+      );
+
+      keep.sessionsPlayed = (keep.sessionsPlayed ?? 0) + (remove.sessionsPlayed ?? 0);
+      keep.totalGames = (keep.totalGames ?? 0) + (remove.totalGames ?? 0);
+      if (!keep.nickname && remove.nickname) keep.nickname = remove.nickname;
+      if (!keep.skillLevel && remove.skillLevel) keep.skillLevel = remove.skillLevel;
+      await keep.save();
+      await ClubMember.findByIdAndDelete(remove._id);
+      return keep;
+    },
+
+    /**
      * Bulk-import selected club members into a session.
      * Each member becomes a new SessionPlayer (skips if already in session by name).
      */
