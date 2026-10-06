@@ -85,6 +85,8 @@ interface QueueContext {
   mode: QueueMode;
   maxConsecutiveGames: number;
   pastGroups: Set<string>;
+  /** Groups the organiser asked to keep out of the same game. */
+  keepApart: string[][];
   /** Stable per-pool seed. Passing a fresh `seededRandom(seed)` to both the flat
    * queue preview and the next-game preview keeps their first-round selection
    * (including tiebreaks and the anti-repeat swap) identical to each other. */
@@ -93,7 +95,7 @@ interface QueueContext {
 
 async function loadQueueContext(sessionId: string): Promise<QueueContext> {
   const [session, eligibleDocs, priorGames] = await Promise.all([
-    Session.findById(sessionId).select("settings"),
+    Session.findById(sessionId).select("settings separatedGroups"),
     getEligiblePlayers(sessionId),
     Game.find(
       { sessionId, status: { $ne: GameStatus.CANCELLED } },
@@ -114,6 +116,7 @@ async function loadQueueContext(sessionId: string): Promise<QueueContext> {
     mode: (settings?.queueMode ?? QueueMode.HYBRID) as QueueMode,
     maxConsecutiveGames: settings?.maxConsecutiveGames ?? 2,
     pastGroups,
+    keepApart: (session?.separatedGroups ?? []).map((g) => g.playerIds.map(String)),
     seed: queuePoolSeed(eligibleDocs),
   };
 }
@@ -133,6 +136,7 @@ export async function getQueuePreview(
     mode: ctx.mode,
     maxConsecutiveGames: ctx.maxConsecutiveGames,
     pastGroups: ctx.pastGroups,
+    keepApart: ctx.keepApart,
     random: seededRandom(ctx.seed),
   });
 
@@ -162,6 +166,7 @@ export async function getNextGamePreview(
     mode: ctx.mode,
     maxConsecutiveGames: ctx.maxConsecutiveGames,
     pastGroups: ctx.pastGroups,
+    keepApart: ctx.keepApart,
     random: seededRandom(ctx.seed),
   });
   if (!result.ok) return null;

@@ -15,7 +15,7 @@ function makePlayers(n: number): QueuePlayer[] {
 }
 
 /** Plays `games` sequential games the way the app does, returning each foursome's ids. */
-function simulate(players: QueuePlayer[], games: number, mode: QueueMode): string[][] {
+function simulate(players: QueuePlayer[], games: number, mode: QueueMode, keepApart?: string[][]): string[][] {
   const pastGroups = new Set<string>();
   const played: string[][] = [];
   let clock = new Date("2026-01-01T00:00:00Z").getTime();
@@ -23,7 +23,7 @@ function simulate(players: QueuePlayer[], games: number, mode: QueueMode): strin
   const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 
   for (let g = 0; g < games; g++) {
-    const result = generateNextGame(players, { mode, pastGroups, random });
+    const result = generateNextGame(players, { mode, pastGroups, random, keepApart });
     if (!result.ok) throw new Error(result.reason);
     const ids = result.selected.map((p) => p.id);
     clock += 5 * 60_000;
@@ -68,4 +68,13 @@ describe("queue engine - no trio shares a game twice", () => {
     const games = simulate(makePlayers(6), 12, QueueMode.HYBRID);
     expect(games).toHaveLength(12);
   });
+
+  it.each([QueueMode.HYBRID, QueueMode.BALANCED, QueueMode.SMART])(
+    "%s: a keep-apart group never shares a game",
+    (mode) => {
+      const apart = ["p1", "p2", "p3"];
+      const games = simulate(makePlayers(12), 20, mode, [apart]);
+      for (const g of games) expect(g.filter((id) => apart.includes(id)).length).toBeLessThanOrEqual(1);
+    }
+  );
 });

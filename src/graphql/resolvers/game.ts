@@ -94,6 +94,7 @@ export const gameResolvers = {
         mode: (settings.queueMode ?? QueueMode.HYBRID) as QueueMode,
         maxConsecutiveGames: settings.maxConsecutiveGames ?? 2,
         pastGroups,
+        keepApart: (session.separatedGroups ?? []).map((g) => g.playerIds.map(String)),
         random: seededRandom(queuePoolSeed(eligibleDocs)),
       });
 

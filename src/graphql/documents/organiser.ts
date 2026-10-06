@@ -435,6 +435,17 @@ export const SESSION_DASHBOARD_QUERY = gql`
         gamesPlayed
         queueEnteredAt
       }
+      togetherGroups {
+        id
+        gamesTogether
+        players {
+          id
+          name
+        }
+        games {
+          ...GameFields
+        }
+      }
       nextGamePreview {
         teamA {
           players {
@@ -572,6 +583,14 @@ export const SESSION_STANDINGS_QUERY = gql`
         ...StandingFields
       }
       publicUrl
+    }
+  }
+`;
+
+export const SEPARATE_PLAYERS = gql`
+  mutation SeparatePlayers($sessionId: ID!, $playerIds: [ID!]!) {
+    separatePlayers(sessionId: $sessionId, playerIds: $playerIds) {
+      id
     }
   }
 `;

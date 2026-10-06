@@ -8,6 +8,7 @@ import {
 	DELETE_COURT,
 	FILL_COURT_MANUALLY,
 	GENERATE_NEXT_GAME,
+	SEPARATE_PLAYERS,
 	SESSION_DASHBOARD_QUERY,
 	UPDATE_GAME_RESULT,
 	UPDATE_GAME_TEAMS,
@@ -78,6 +79,10 @@ export function OverviewTab({
 		useMutation(UPDATE_GAME_RESULT);
 	const [cancelGame] = useMutation(CANCEL_GAME);
 	const [checkInPlayer] = useMutation(CHECK_IN_PLAYER);
+	const [separatePlayers, { loading: separating }] = useMutation(SEPARATE_PLAYERS, {
+		refetchQueries: [{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } }],
+		awaitRefetchQueries: true,
+	});
 	const [addCourt, { loading: addingCourt }] = useMutation(ADD_COURT, {
 		refetchQueries: [{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } }],
 	});
@@ -92,6 +97,7 @@ export function OverviewTab({
 	const [editResultGame, setEditResultGame] = useState<any>(null);
 	const [queueSearch, setQueueSearch] = useState("");
 	const [alertDismissed, setAlertDismissed] = useState(false);
+	const [expandedTogether, setExpandedTogether] = useState<Record<string, boolean>>({});
 	const [queuePage, setQueuePage] = useState(1);
 	const QUEUE_PAGE_SIZE = 10;
 
@@ -377,6 +383,79 @@ export function OverviewTab({
 							Dismiss
 						</button>
 					</div>
+				</div>
+			)}
+
+			{/* ── Players who keep landing in the same games ── */}
+			{(session?.togetherGroups ?? []).length > 0 && (
+				<div
+					style={{
+						background: "#fffbeb",
+						borderBottom: "1px solid #fde68a",
+						padding: "12px 24px",
+						display: "flex",
+						flexDirection: "column",
+						gap: 10,
+					}}
+				>
+					{session.togetherGroups.map((group: any) => {
+						const names: string[] = group.players.map((p: any) => p.name);
+						const nameList =
+							names.length > 1
+								? `${names.slice(0, -1).join(", ")} & ${names[names.length - 1]}`
+								: names[0];
+						const open = !!expandedTogether[group.id];
+						return (
+							<div key={group.id}>
+								<div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+									<span style={{ fontSize: 15, color: "#b45309", flexShrink: 0 }}>⚠</span>
+									<Text style={{ fontSize: 13, flex: 1, minWidth: 220, color: "#111827" }}>
+										<strong>{nameList}</strong> have been in the same game{" "}
+										<strong style={{ color: "#b45309" }}>{group.gamesTogether} times</strong>.
+									</Text>
+									<Button
+										size="small"
+										onClick={() =>
+											setExpandedTogether((prev) => ({ ...prev, [group.id]: !open }))
+										}
+									>
+										{open ? "Hide games" : "Show games"}
+									</Button>
+									<Button
+										size="small"
+										type="primary"
+										loading={separating}
+										onClick={async () => {
+											try {
+												await separatePlayers({
+													variables: {
+														sessionId,
+														playerIds: group.players.map((p: any) => p.id),
+													},
+												});
+												message.success(`${nameList} will no longer be put in the same game.`);
+											} catch (e) {
+												message.error(e instanceof Error ? e.message : "Could not break them up");
+											}
+										}}
+									>
+										Break them up
+									</Button>
+								</div>
+								{open && (
+									<div style={{ margin: "8px 0 0 27px", display: "flex", flexDirection: "column", gap: 4 }}>
+										{group.games.map((game: any) => (
+											<Text key={game.id} style={{ fontSize: 12, color: "#374151" }}>
+												<strong>Game {game.gameNumber}:</strong>{" "}
+												{game.teamA.players.map((p: any) => p.name).join(" & ")} vs{" "}
+												{game.teamB.players.map((p: any) => p.name).join(" & ")}
+											</Text>
+										))}
+									</div>
+								)}
+							</div>
+						);
+					})}
 				</div>
 			)}
 

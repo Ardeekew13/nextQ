@@ -6,6 +6,7 @@ import { Game } from "@/models/Game";
 import { SessionPlayer } from "@/models/SessionPlayer";
 import { slugify, withRandomSuffix } from "@/lib/slug";
 import { getQueuePreview, getNextGamePreview } from "@/lib/eligibility";
+import { findTogetherGroups } from "@/lib/togetherGroups";
 import { getSessionStandingsWithPlayers, getSessionPodiumWithPlayers, getSessionFirstPlaceTieWithPlayers } from "@/lib/stats";
 import { buildPublicSessionUrl, diffMinutes } from "@/lib/urls";
 import { SessionStatus, GameStatus, DEFAULT_SESSION_SETTINGS, PairingMode, MatchingStyle, QueueMode, type SessionSettings } from "@/types/enums";
@@ -257,6 +258,31 @@ export const sessionResolvers = {
       return session;
     },
 
+    separatePlayers: async (
+      _p: unknown,
+      args: { sessionId: string; playerIds: string[] },
+      context: GraphQLContext
+    ) => {
+      const session = await requireSessionOwner(context, args.sessionId);
+      const ids = [...new Set(args.playerIds.map(String))];
+      if (ids.length < 2) {
+        throw new GraphQLError("Pick at least two players to separate.", { extensions: { code: "BAD_USER_INPUT" } });
+      }
+      const found = await SessionPlayer.countDocuments({ _id: { $in: ids }, sessionId: session._id });
+      if (found !== ids.length) {
+        throw new GraphQLError("Those players are not part of this session.", { extensions: { code: "BAD_USER_INPUT" } });
+      }
+      const key = [...ids].sort().join(":");
+      const already = (session.separatedGroups ?? []).some(
+        (g) => [...g.playerIds.map(String)].sort().join(":") === key
+      );
+      if (!already) {
+        session.separatedGroups.push({ playerIds: ids } as never);
+        await session.save();
+      }
+      return session;
+    },
+
     cancelSession: async (_p: unknown, args: { id: string }, context: GraphQLContext) => {
       const session = await requireSessionOwner(context, args.id);
       assertTransition(
@@ -304,6 +330,29 @@ export const sessionResolvers = {
     standings: async (parent: { _id: unknown }) => getSessionStandingsWithPlayers(String(parent._id)),
     podium: async (parent: { _id: unknown }) => getSessionPodiumWithPlayers(String(parent._id)),
     firstPlaceTie: async (parent: { _id: unknown }) => getSessionFirstPlaceTieWithPlayers(String(parent._id)),
+    togetherGroups: async (parent: { _id: unknown; separatedGroups?: { playerIds: unknown[] }[] }) => {
+      const games = await Game.find({ sessionId: parent._id, status: { $ne: GameStatus.CANCELLED } }).sort({
+        gameNumber: 1,
+      });
+      const groups = findTogetherGroups(
+        games.map((g) => ({
+          id: String(g._id),
+          gameNumber: g.gameNumber,
+          playerIds: [...g.teamAPlayerIds, ...g.teamBPlayerIds].map(String),
+        })),
+        { separated: (parent.separatedGroups ?? []).map((s) => s.playerIds.map(String)) }
+      );
+      if (groups.length === 0) return [];
+      const players = await SessionPlayer.find({ _id: { $in: groups.flatMap((g) => g.playerIds) } });
+      const playerById = new Map(players.map((p) => [String(p._id), p]));
+      const gameById = new Map(games.map((g) => [String(g._id), g]));
+      return groups.map((g) => ({
+        id: g.key,
+        players: g.playerIds.map((id) => playerById.get(id)).filter(Boolean),
+        gamesTogether: g.gamesTogether,
+        games: g.gameIds.map((id) => gameById.get(id)).filter(Boolean),
+      }));
+    },
     publicUrl: async (parent: { clubId: unknown; slug: string }) => {
       const club = await Club.findById(parent.clubId);
       return buildPublicSessionUrl(club?.slug ?? "", parent.slug);

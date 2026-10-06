@@ -212,6 +212,22 @@ function countRepeatedTriples(players: QueuePlayer[], pastTriples: ReadonlySet<s
   return n;
 }
 
+/** How many "keep apart" groups this foursome breaks (two or more members of one group). */
+function countKeepApartBreaches(
+  players: QueuePlayer[],
+  keepApart: ReadonlyArray<ReadonlyArray<string>> | undefined
+): number {
+  if (!keepApart || keepApart.length === 0) return 0;
+  const ids = new Set(players.map((p) => p.id));
+  let breaches = 0;
+  for (const group of keepApart) {
+    let inQuad = 0;
+    for (const id of group) if (ids.has(id)) inQuad++;
+    if (inQuad >= 2) breaches++;
+  }
+  return breaches;
+}
+
 /**
  * Finds the best foursome among the top-priority entries that doesn't reuse a trio from any
  * earlier game. Fixed pairs stay intact. Among foursomes with the fewest repeated trios (zero
@@ -221,7 +237,7 @@ function countRepeatedTriples(players: QueuePlayer[], pastTriples: ReadonlySet<s
  */
 function findFoursomeAvoidingRepeatedTrios(
   entries: ScoredEntry[],
-  pastTriples: ReadonlySet<string>
+  violationsOf: (players: QueuePlayer[]) => number
 ): QueuePlayer[] | null {
   const candidates = entries.slice(0, TRIO_SEARCH_WIDTH);
   let best: { players: QueuePlayer[]; violations: number; score: number } | null = null;
@@ -230,7 +246,7 @@ function findFoursomeAvoidingRepeatedTrios(
   function dfs(start: number, size: number, score: number) {
     if (size === 4) {
       const players = chosen.flatMap((e) => (e.kind === "pair" ? [...e.players] : [e.player]));
-      const violations = countRepeatedTriples(players, pastTriples);
+      const violations = violationsOf(players);
       if (!best || violations < best.violations || (violations === best.violations && score < best.score)) {
         best = { players, violations, score };
       }
@@ -255,7 +271,8 @@ function selectPlayers(
   mode: QueueMode,
   maxConsecutiveGames: number,
   random: () => number,
-  pastGroups?: ReadonlySet<string>
+  pastGroups?: ReadonlySet<string>,
+  keepApart?: ReadonlyArray<ReadonlyArray<string>>
 ): { ok: true; selected: PlayerQuad } | { ok: false; reason: string } {
   if (eligible.length < 4) {
     return {
@@ -315,14 +332,28 @@ function selectPlayers(
     }
   }
 
-  // Trio rule: no three players may share a game twice, ever, in this session. If the
-  // priority order would reuse a trio, swap in the next-best players instead. Skipped for
-  // SMART (strict first-come-first-served), whose whole promise is a pure queue order, and
-  // applied best-effort only when the pool is too small to avoid every repeat.
-  if (mode !== QueueMode.SMART && selectedList.length >= 4) {
-    const pastTriples = buildPastTriples(pastGroups);
-    if (pastTriples.size > 0 && countRepeatedTriples(selectedList.slice(0, 4), pastTriples) > 0) {
-      const alternative = findFoursomeAvoidingRepeatedTrios(entries, pastTriples);
+  // Variety rules, applied when the priority order would break one:
+  //  - Keep apart: groups the organiser asked to separate never share a game (any mode).
+  //  - Trio rule: no three players may share a game twice, ever, in this session. Skipped
+  //    for SMART (strict first-come-first-served), whose whole promise is a pure queue order.
+  // Breaking a keep-apart group outweighs repeating a trio. If the pool is too small to
+  // avoid everything, the least-bad foursome is used rather than blocking the game.
+  if (selectedList.length >= 4) {
+    const pastTriples = mode === QueueMode.SMART ? new Set<string>() : buildPastTriples(pastGroups);
+    const violationsOf = (players: QueuePlayer[]) =>
+      countKeepApartBreaches(players, keepApart) * 100 + countRepeatedTriples(players, pastTriples);
+    if (violationsOf(selectedList.slice(0, 4)) > 0) {
+      let alternative = findFoursomeAvoidingRepeatedTrios(entries, violationsOf);
+      // A keep-apart group outranks the consecutive-game pacing limit: if the below-limit
+      // pool can't avoid breaking one, widen the search to players who are over the limit.
+      if (alternative && countKeepApartBreaches(alternative, keepApart) > 0 && pool.length < eligible.length) {
+        const inPool = new Set(pool.map((p) => p.id));
+        const extras: ScoredEntry[] = eligible
+          .filter((p) => !inPool.has(p.id) && !p.fixedPartnerId)
+          .map((player) => ({ kind: "single" as const, player, score: scoreById.get(player.id)! }));
+        const widened = [...entries, ...extras].sort((a, b) => a.score - b.score);
+        alternative = findFoursomeAvoidingRepeatedTrios(widened, violationsOf) ?? alternative;
+      }
       if (alternative) selectedList.splice(0, selectedList.length, ...alternative);
     }
   }
@@ -353,7 +384,10 @@ function selectPlayers(
         if (selectedIds.has(entry.player.id)) continue;
         const newGroup = [...selected] as PlayerQuad;
         newGroup[swapIndex] = entry.player;
-        if (!pastGroups.has(groupKey(newGroup))) {
+        if (
+          !pastGroups.has(groupKey(newGroup)) &&
+          countKeepApartBreaches(newGroup, keepApart) <= countKeepApartBreaches(selected, keepApart)
+        ) {
           selected = newGroup;
           break;
         }
@@ -382,6 +416,7 @@ export function rankQueue(
     mode = QueueMode.HYBRID,
     maxConsecutiveGames = 2,
     pastGroups = new Set(),
+    keepApart,
     random = Math.random,
   } = options;
 
@@ -390,7 +425,7 @@ export function rankQueue(
   const ordered: QueuePlayer[] = [];
 
   while (pool.length >= 4) {
-    const selection = selectPlayers(pool, mode, maxConsecutiveGames, random, groups);
+    const selection = selectPlayers(pool, mode, maxConsecutiveGames, random, groups, keepApart);
     if (!selection.ok) break;
 
     const selectedIds = new Set(selection.selected.map((p) => p.id));
@@ -491,6 +526,8 @@ export interface QueueEngineOptions {
   mode?: QueueMode;
   maxConsecutiveGames?: number;
   pastGroups?: ReadonlySet<string>;
+  /** Groups of player ids the organiser asked to keep out of the same game. */
+  keepApart?: ReadonlyArray<ReadonlyArray<string>>;
   random?: () => number;
   randomizeTeams?: boolean;
 }
@@ -503,6 +540,7 @@ export function generateNextGame(
     mode = QueueMode.HYBRID,
     maxConsecutiveGames = 2,
     pastGroups = new Set(),
+    keepApart,
     random = Math.random,
     // Team splits always minimize repeat partners/opponents by default, in every mode
     // (including HYBRID) — the queue-selection logic above already varies who gets picked
@@ -512,7 +550,7 @@ export function generateNextGame(
     randomizeTeams = false,
   } = options;
 
-  const selection = selectPlayers(eligible, mode, maxConsecutiveGames, random, pastGroups);
+  const selection = selectPlayers(eligible, mode, maxConsecutiveGames, random, pastGroups, keepApart);
   if (!selection.ok) return selection;
 
   const { teamA, teamB } = assignTeams(selection.selected, pastGroups, random, randomizeTeams);

@@ -224,6 +224,13 @@ export const typeDefs = gql`
     updatedAt: Date!
   }
 
+  type TogetherGroup {
+    id: ID!
+    players: [SessionPlayer!]!
+    gamesTogether: Int!
+    games: [Game!]!
+  }
+
   type SessionStanding {
     rank: Int!
     player: SessionPlayer!
@@ -293,6 +300,9 @@ export const typeDefs = gql`
     nextGamePreview: NextGamePreview
     standings: [SessionStanding!]!
     podium: [PodiumEntry!]!
+    """Players who keep landing in the same games (2+ players sharing 2+ games), strongest first,
+    so the organiser can be prompted to break them up. Groups already separated are excluded."""
+    togetherGroups: [TogetherGroup!]!
     """Players genuinely tied for 1st place under this session's ranking rules.
     Empty when there's a clear #1. When 2+ players show up here, they should
     play each other to decide the winner — useful when a prize is on the line."""
@@ -492,6 +502,8 @@ export const typeDefs = gql`
 
     createSession(input: CreateSessionInput!): Session!
     updateSession(id: ID!, input: UpdateSessionInput!): Session!
+    """Breaks a group up: from now on the queue never puts two or more of these players in the same game."""
+    separatePlayers(sessionId: ID!, playerIds: [ID!]!): Session!
     startSession(id: ID!): Session!
     pauseSession(id: ID!): Session!
     resumeSession(id: ID!): Session!
