@@ -4,23 +4,33 @@ import {
 	ADD_COURT,
 	CANCEL_GAME,
 	CHECK_IN_PLAYER,
-	COMPLETE_GAME,
 	DELETE_COURT,
 	FILL_COURT_MANUALLY,
 	GENERATE_NEXT_GAME,
+	SEPARATE_PLAYERS,
 	SESSION_DASHBOARD_QUERY,
+	SESSION_QUEUE_SNAPSHOT,
 	UPDATE_GAME_RESULT,
 	UPDATE_GAME_TEAMS,
 	CLUB_DETAIL_QUERY,
 } from "@/graphql/documents/organiser";
 import { useMutation, useQuery } from "@apollo/client";
 import { App, Button, Empty, Input, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	ScoreEntryForm,
 	type ScoreEntryValues,
 } from "@/components/ScoreEntryForm";
 import { CourtCard } from "./CourtCard";
+import { useOfflineResults } from "@/apollo/OfflineResultsProvider";
+import {
+	deriveLocalState,
+	generateLocalGame,
+	isLocalGameId,
+	rankLocalQueue,
+	type QueueSnapshot,
+} from "@/lib/offlineQueue";
+import { isNetworkFailure, loadPending, loadSnapshot, saveSnapshot } from "@/lib/offlineResults";
 import type { SessionStats } from "@/app/dashboard/sessions/[sessionId]/page";
 
 const { Text } = Typography;
@@ -73,11 +83,15 @@ export function OverviewTab({
 		useMutation(FILL_COURT_MANUALLY);
 	const [updateGameTeams, { loading: updatingTeams }] =
 		useMutation(UPDATE_GAME_TEAMS);
-	const [completeGame, { loading: completing }] = useMutation(COMPLETE_GAME);
+	const offline = useOfflineResults();
 	const [updateGameResult, { loading: switching }] =
 		useMutation(UPDATE_GAME_RESULT);
 	const [cancelGame] = useMutation(CANCEL_GAME);
 	const [checkInPlayer] = useMutation(CHECK_IN_PLAYER);
+	const [separatePlayers, { loading: separating }] = useMutation(SEPARATE_PLAYERS, {
+		refetchQueries: [{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } }],
+		awaitRefetchQueries: true,
+	});
 	const [addCourt, { loading: addingCourt }] = useMutation(ADD_COURT, {
 		refetchQueries: [{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } }],
 	});
@@ -92,10 +106,105 @@ export function OverviewTab({
 	const [editResultGame, setEditResultGame] = useState<any>(null);
 	const [queueSearch, setQueueSearch] = useState("");
 	const [alertDismissed, setAlertDismissed] = useState(false);
+	const [expandedTogether, setExpandedTogether] = useState<Record<string, boolean>>({});
 	const [queuePage, setQueuePage] = useState(1);
 	const QUEUE_PAGE_SIZE = 10;
 
-	const session = data?.session;
+	// ── Offline overlay ──
+	// The queue state is kept on this device. While anything is waiting to sync (or the
+	// connection is down) the courts, queue and next-game preview are derived locally by
+	// replaying what the organiser did on top of the last server snapshot.
+	const [snapshot, setSnapshot] = useState<QueueSnapshot | null>(null);
+	const { data: snapData, refetch: refetchSnapshot } = useQuery(SESSION_QUEUE_SNAPSHOT, {
+		variables: { sessionId },
+		fetchPolicy: "network-only",
+		errorPolicy: "ignore",
+	});
+	const sessionOps = useMemo(
+		() => offline.pending.filter((p) => p.sessionId === sessionId),
+		[offline.pending, sessionId],
+	);
+
+	useEffect(() => {
+		setSnapshot((cur) => cur ?? loadSnapshot(sessionId));
+	}, [sessionId]);
+
+	useEffect(() => {
+		const raw = snapData?.sessionQueueSnapshot;
+		if (!raw) return;
+		// A snapshot taken while results/games are still waiting would be applied twice.
+		if (loadPending().some((p) => p.sessionId === sessionId)) return;
+		try {
+			const parsed = JSON.parse(raw) as QueueSnapshot;
+			setSnapshot(parsed);
+			saveSnapshot(parsed);
+		} catch {
+			/* keep the previous snapshot */
+		}
+	}, [snapData, sessionId]);
+
+	// Keep the snapshot in step with the dashboard whenever it reloads.
+	const lastDashboard = useRef<unknown>(null);
+	useEffect(() => {
+		if (!data) return;
+		if (lastDashboard.current && lastDashboard.current !== data && offline.online && sessionOps.length === 0) {
+			void refetchSnapshot();
+		}
+		lastDashboard.current = data;
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [data]);
+
+	const local = useMemo(
+		() => (snapshot && sessionOps.length > 0 ? deriveLocalState(snapshot, sessionOps) : null),
+		[snapshot, sessionOps],
+	);
+
+	const session = useMemo(() => {
+		const base = data?.session;
+		if (!base || !snapshot || !local) return base;
+		const names = new Map(snapshot.players.map((p) => [p.id, p.name]));
+		const team = (ids: string[]) => ({ players: ids.map((id) => ({ id, name: names.get(id) ?? "Player" })) });
+		const courts = base.courts.map((c: any) => {
+			const lc = local.courts.find((x) => x.id === c.id);
+			if (!lc) return c;
+			let currentGame = c.currentGame;
+			if ((currentGame?.id ?? null) !== lc.currentGameId) {
+				const g = local.activeGames.find((x) => x.id === lc.currentGameId);
+				currentGame = g
+					? {
+							__typename: "Game",
+							id: g.id,
+							gameNumber: g.gameNumber,
+							winningTeam: null,
+							losingTeam: null,
+							status: g.status,
+							startedAt: g.startedAt ?? null,
+							completedAt: null,
+							notes: null,
+							court: { id: c.id, courtNumber: c.courtNumber, name: c.name },
+							teamA: team(g.teamA),
+							teamB: team(g.teamB),
+						}
+					: null;
+			}
+			return { ...c, status: lc.status, currentGame };
+		});
+		const queued = rankLocalQueue(snapshot, local).map((p) => ({
+			id: p.id,
+			name: p.name,
+			gamesPlayed: p.gamesPlayed,
+			gamesSatOut: p.gamesSatOut,
+			queueEnteredAt: p.queueEnteredAt,
+		}));
+		const next = generateLocalGame(snapshot, local);
+		return {
+			...base,
+			courts,
+			queuedPlayers: queued,
+			nextGamePreview: next.ok ? { teamA: team(next.teamA), teamB: team(next.teamB) } : null,
+			activeGames: courts.filter((c: any) => c.currentGame).map((c: any) => c.currentGame),
+		};
+	}, [data, snapshot, local]);
 
 	const queuedPlayers: any[] = session?.queuedPlayers ?? [];
 	const checkedIn =
@@ -159,6 +268,39 @@ export function OverviewTab({
 	);
 
 	async function handleGenerate(courtId: string) {
+		// Generated on this device whenever the connection is down or earlier actions are still
+		// waiting to sync (the server doesn't know about them yet).
+		const fillHere = () => {
+			if (!snapshot) {
+				message.error("Can't generate games offline until this session has loaded once online.");
+				return;
+			}
+			const state = deriveLocalState(snapshot, sessionOps);
+			const court = state.courts.find((c) => c.id === courtId);
+			if (!court || court.currentGameId) {
+				message.error("That court is already in use.");
+				return;
+			}
+			const picked = generateLocalGame(snapshot, state);
+			if (!picked.ok) {
+				message.error(picked.reason);
+				return;
+			}
+			offline.fillCourt({
+				sessionId,
+				courtId,
+				teamAPlayerIds: picked.teamA,
+				teamBPlayerIds: picked.teamB,
+				playersSatOutIds: picked.satOut,
+			});
+			const names = new Map(snapshot.players.map((p) => [p.id, p.name]));
+			const team = (ids: string[]) => ({ players: ids.map((id) => ({ name: names.get(id) ?? "" })) });
+			announceMatchup(team(picked.teamA), team(picked.teamB), court.name ?? `Court ${court.courtNumber}`);
+		};
+		if (snapshot && (!offline.online || sessionOps.length > 0)) {
+			fillHere();
+			return;
+		}
 		try {
 			const result = await generateNextGame({ variables: { sessionId: session.id, courtId } });
 			const game = result.data?.generateNextGame;
@@ -167,6 +309,10 @@ export function OverviewTab({
 			}
 			refetch();
 		} catch (err) {
+			if (snapshot && isNetworkFailure(err)) {
+				fillHere();
+				return;
+			}
 			message.error(
 				err instanceof Error ? err.message : "Could not generate a game",
 			);
@@ -178,6 +324,10 @@ export function OverviewTab({
 		teamAPlayerIds: string[],
 		teamBPlayerIds: string[],
 	) {
+		if (isLocalGameId(gameId)) {
+			message.warning("This game was made offline. Edit its teams once it has synced.");
+			return;
+		}
 		try {
 			await updateGameTeams({
 				variables: { id: gameId, teamAPlayerIds, teamBPlayerIds },
@@ -190,16 +340,17 @@ export function OverviewTab({
 		}
 	}
 
-	async function handleScoreSubmit(values: ScoreEntryValues) {
-		try {
-			await completeGame({ variables: { id: scoreGame.id, input: values } });
-			setScoreGame(null);
-			refetch();
-		} catch (err) {
-			message.error(
-				err instanceof Error ? err.message : "Could not record result",
-			);
-		}
+	// Recording is instant: the result is stored on this device and sent in the background,
+	// so it works with a flaky or missing connection and syncs once it's back.
+	function handleScoreSubmit(values: ScoreEntryValues) {
+		if (!scoreGame) return;
+		offline.recordResult({
+			sessionId,
+			gameId: scoreGame.id,
+			winningTeam: values.winningTeam,
+			notes: values.notes,
+		});
+		setScoreGame(null);
 	}
 
 	async function handleRecordResult(game: any, _winner: "A" | "B") {
@@ -221,6 +372,10 @@ export function OverviewTab({
 	}
 
 	async function handleCancelGame(gameId: string) {
+		if (isLocalGameId(gameId)) {
+			message.warning("This game was made offline. Cancel it once it has synced.");
+			return;
+		}
 		try {
 			await cancelGame({ variables: { id: gameId } });
 			refetch();
@@ -380,6 +535,146 @@ export function OverviewTab({
 				</div>
 			)}
 
+			{/* ── Offline / waiting-to-sync status ── */}
+			{(!offline.online || sessionOps.some((p) => !p.synced)) && (
+				<div
+					style={{
+						background: offline.online ? "#f0fdf4" : "#fff7ed",
+						borderBottom: `1px solid ${offline.online ? "#bbf7d0" : "#fed7aa"}`,
+						padding: "10px 24px",
+						fontSize: 13,
+						color: "#111827",
+					}}
+				>
+					{!offline.online ? (
+						<>
+							<strong>You&apos;re offline.</strong>{" "}
+							{snapshot
+								? "You can keep filling courts and recording results; everything is saved on this device and syncs automatically when the connection returns."
+								: "Results you record are saved on this device and sync when the connection returns. Filling courts offline needs this session to have loaded once online."}
+							{sessionOps.filter((p) => !p.synced).length > 0 &&
+								` (${sessionOps.filter((p) => !p.synced).length} waiting)`}
+						</>
+					) : (
+						<>
+							{offline.syncing ? "Syncing" : "Waiting to sync"}{" "}
+							<strong>{sessionOps.filter((p) => !p.synced && !p.error).length} saved action(s)</strong>…
+						</>
+					)}
+				</div>
+			)}
+
+			{/* ── Offline actions the server rejected ── */}
+			{sessionOps.filter((p) => p.error).length > 0 && (
+				<div
+					style={{
+						background: "#fef2f2",
+						borderBottom: "1px solid #fecaca",
+						padding: "10px 24px",
+						display: "flex",
+						flexDirection: "column",
+						gap: 8,
+						fontSize: 13,
+					}}
+				>
+					{sessionOps
+						.filter((p) => p.error)
+						.map((p) => {
+							const names = new Map((snapshot?.players ?? []).map((x) => [x.id, x.name]));
+							const label =
+								p.kind === "fill"
+									? `Game ${[...p.teamAPlayerIds, ...p.teamBPlayerIds].map((id) => names.get(id) ?? "?").join(", ")}`
+									: `Result (team ${p.winningTeam} won)`;
+							return (
+								<div key={p.id} style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+									<Text style={{ flex: 1, minWidth: 220, fontSize: 13, color: "#991b1b" }}>
+										<strong>{label}</strong> could not be saved: {p.error}
+									</Text>
+									<Button size="small" onClick={() => offline.retry(p.id)}>
+										Try again
+									</Button>
+									<Button size="small" danger onClick={() => offline.discard(p.id)}>
+										Discard
+									</Button>
+								</div>
+							);
+						})}
+				</div>
+			)}
+
+			{/* ── Players who keep landing in the same games ── */}
+			{(session?.togetherGroups ?? []).length > 0 && (
+				<div
+					style={{
+						background: "#fffbeb",
+						borderBottom: "1px solid #fde68a",
+						padding: "12px 24px",
+						display: "flex",
+						flexDirection: "column",
+						gap: 10,
+					}}
+				>
+					{session.togetherGroups.map((group: any) => {
+						const names: string[] = group.players.map((p: any) => p.name);
+						const nameList =
+							names.length > 1
+								? `${names.slice(0, -1).join(", ")} & ${names[names.length - 1]}`
+								: names[0];
+						const open = !!expandedTogether[group.id];
+						return (
+							<div key={group.id}>
+								<div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+									<span style={{ fontSize: 15, color: "#b45309", flexShrink: 0 }}>⚠</span>
+									<Text style={{ fontSize: 13, flex: 1, minWidth: 220, color: "#111827" }}>
+										<strong>{nameList}</strong> have been in the same game{" "}
+										<strong style={{ color: "#b45309" }}>{group.gamesTogether} times</strong>.
+									</Text>
+									<Button
+										size="small"
+										onClick={() =>
+											setExpandedTogether((prev) => ({ ...prev, [group.id]: !open }))
+										}
+									>
+										{open ? "Hide games" : "Show games"}
+									</Button>
+									<Button
+										size="small"
+										type="primary"
+										loading={separating}
+										onClick={async () => {
+											try {
+												await separatePlayers({
+													variables: {
+														sessionId,
+														playerIds: group.players.map((p: any) => p.id),
+													},
+												});
+												message.success(`${nameList} will no longer be put in the same game.`);
+											} catch (e) {
+												message.error(e instanceof Error ? e.message : "Could not break them up");
+											}
+										}}
+									>
+										Break them up
+									</Button>
+								</div>
+								{open && (
+									<div style={{ margin: "8px 0 0 27px", display: "flex", flexDirection: "column", gap: 4 }}>
+										{group.games.map((game: any) => (
+											<Text key={game.id} style={{ fontSize: 12, color: "#374151" }}>
+												<strong>Game {game.gameNumber}:</strong>{" "}
+												{game.teamA.players.map((p: any) => p.name).join(" & ")} vs{" "}
+												{game.teamB.players.map((p: any) => p.name).join(" & ")}
+											</Text>
+										))}
+									</div>
+								)}
+							</div>
+						);
+					})}
+				</div>
+			)}
+
 			{/* ── Main content: courts + queue ── */}
 			<div className="main-content-grid">
 				{/* Left: courts + on deck + last games */}
@@ -474,6 +769,21 @@ export function OverviewTab({
 								queuedPlayers={queuedPlayers}
 								updatingTeams={updatingTeams}
 								onFill={handleGenerate}
+								resultState={(() => {
+									if (local) return undefined;
+									const p = offline.pending.find((x) => x.kind === "complete" && x.gameId === court.currentGame?.id);
+									if (!p) return undefined;
+									return p.error ? "failed" : !offline.online ? "offline" : "saving";
+								})()}
+								resultError={local ? undefined : offline.pending.find((x) => x.kind === "complete" && x.gameId === court.currentGame?.id)?.error}
+								onRetryResult={() => {
+									const p = offline.pending.find((x) => x.kind === "complete" && x.gameId === court.currentGame?.id);
+									if (p) offline.retry(p.id);
+								}}
+								onDiscardResult={() => {
+									const p = offline.pending.find((x) => x.kind === "complete" && x.gameId === court.currentGame?.id);
+									if (p) offline.discard(p.id);
+								}}
 								onRecordResult={handleRecordResult}
 								onCancelGame={handleCancelGame}
 								onUpdateTeams={handleUpdateTeams}
@@ -947,7 +1257,7 @@ export function OverviewTab({
 			<ScoreEntryForm
 				open={!!scoreGame}
 				game={scoreGame}
-				loading={completing}
+				quick
 				onCancel={() => setScoreGame(null)}
 				onSubmit={handleScoreSubmit}
 			/>

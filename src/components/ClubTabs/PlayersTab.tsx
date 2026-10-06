@@ -27,6 +27,8 @@ interface PlayersTabProps {
 	onAddMember: (values: any) => Promise<void>;
 	onEditMember: (values: any) => Promise<void>;
 	onRemoveMember: (id: string) => Promise<void>;
+	/** Merges `removeId` into `keepId` (keepId inherits the game history). */
+	onMergeMembers?: (keepId: string, removeId: string) => Promise<void>;
 	refetchMembers?: (variables?: { filter?: string }) => void;
 }
 
@@ -43,6 +45,7 @@ export function PlayersTab({
 	onAddMember,
 	onEditMember,
 	onRemoveMember,
+	onMergeMembers,
 	refetchMembers,
 }: PlayersTabProps) {
 	if (activeTab !== "roster") return null;
@@ -52,6 +55,9 @@ export function PlayersTab({
 	const [currentPage, setCurrentPage] = useState(1);
 	const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
 	const [removing, setRemoving] = useState(false);
+	const [mergeSource, setMergeSource] = useState<any>(null);
+	const [mergeTargetId, setMergeTargetId] = useState<string | undefined>(undefined);
+	const [merging, setMerging] = useState(false);
 
 	useEffect(() => {
 		if (refetchMembers) {
@@ -379,6 +385,18 @@ export function PlayersTab({
 												editForm.setFieldsValue({ skillLevel: member.skillLevel });
 											},
 										},
+										...(onMergeMembers
+											? [
+													{
+														key: "merge",
+														label: "Merge into another player…",
+														onClick: () => {
+															setMergeSource(member);
+															setMergeTargetId(undefined);
+														},
+													},
+												]
+											: []),
 										{
 											type: "divider",
 										},
@@ -488,6 +506,43 @@ export function PlayersTab({
 						<Select allowClear options={SKILL_OPTIONS} size="large" />
 					</Form.Item>
 				</Form>
+			</Modal>
+
+			<Modal
+				title={mergeSource ? `Merge ${mergeSource.name} into another player` : "Merge players"}
+				open={!!mergeSource}
+				onCancel={() => setMergeSource(null)}
+				okText="Merge"
+				okButtonProps={{ disabled: !mergeTargetId, danger: true, loading: merging }}
+				onOk={async () => {
+					if (!mergeSource || !mergeTargetId || !onMergeMembers) return;
+					setMerging(true);
+					try {
+						await onMergeMembers(mergeTargetId, mergeSource.id);
+						setMergeSource(null);
+					} catch {
+						/* the page already showed the error */
+					} finally {
+						setMerging(false);
+					}
+				}}
+			>
+				<p style={{ marginTop: 12 }}>
+					Pick the player to keep. All of <strong>{mergeSource?.name}</strong>&apos;s games and stats move to
+					them, and <strong>{mergeSource?.name}</strong> is removed from the roster. This can&apos;t be undone.
+				</p>
+				<Select
+					showSearch
+					style={{ width: "100%" }}
+					size="large"
+					placeholder="Keep this player"
+					value={mergeTargetId}
+					onChange={setMergeTargetId}
+					optionFilterProp="label"
+					options={members
+						.filter((m) => m.id !== mergeSource?.id)
+						.map((m) => ({ value: m.id, label: m.name }))}
+				/>
 			</Modal>
 		</>
 	);

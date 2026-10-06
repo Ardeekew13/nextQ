@@ -28,12 +28,15 @@ export function ScoreEntryForm({
   open,
   game,
   loading,
+  quick = false,
   onCancel,
   onSubmit,
 }: {
   open: boolean;
   game: ScoreEntryTeams | null;
   loading?: boolean;
+  /** One tap on the winning team records it straight away (no separate confirm button). */
+  quick?: boolean;
   onCancel: () => void;
   onSubmit: (values: ScoreEntryValues) => void;
 }) {
@@ -58,7 +61,9 @@ export function ScoreEntryForm({
       title={
         <div>
           <Title level={4} style={{ margin: 0 }}>Record match result</Title>
-          <Text type="secondary" style={{ fontWeight: 400, fontSize: 14 }}>Which team won?</Text>
+          <Text type="secondary" style={{ fontWeight: 400, fontSize: 14 }}>
+            {quick ? "Tap the winning team to record it" : "Which team won?"}
+          </Text>
         </div>
       }
       open={open}
@@ -66,15 +71,17 @@ export function ScoreEntryForm({
       footer={
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
           <Button onClick={onCancel} style={{ borderRadius: 10, height: 48, padding: "0 24px" }}>Cancel</Button>
-          <Button
-            type="primary"
-            disabled={!winner}
-            loading={loading}
-            onClick={handleConfirm}
-            style={{ borderRadius: 10, height: 48, padding: "0 24px", background: "#ec4899", borderColor: "#ec4899" }}
-          >
-            Record result
-          </Button>
+          {!quick && (
+            <Button
+              type="primary"
+              disabled={!winner}
+              loading={loading}
+              onClick={handleConfirm}
+              style={{ borderRadius: 10, height: 48, padding: "0 24px", background: "#ec4899", borderColor: "#ec4899" }}
+            >
+              Record result
+            </Button>
+          )}
         </div>
       }
       styles={{ header: { paddingBottom: 4 } }}
@@ -86,7 +93,10 @@ export function ScoreEntryForm({
           return (
             <button
               key={team}
-              onClick={() => setWinner(team)}
+              onClick={() => {
+                setWinner(team);
+                if (quick) onSubmit({ winningTeam: team });
+              }}
               style={{
                 all: "unset",
                 cursor: "pointer",

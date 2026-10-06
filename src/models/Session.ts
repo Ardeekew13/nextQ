@@ -61,6 +61,12 @@ const SessionSchema = new Schema(
     courtIds: [{ type: Schema.Types.ObjectId, ref: "Court" }],
     publicPublished: { type: Boolean, default: false },
     finalStandings: { type: [FinalStandingEntrySchema], default: [] },
+    /** Groups of players the organiser chose to "break up": the queue engine never puts two
+     * or more members of one group in the same game (see separatePlayers). */
+    separatedGroups: {
+      type: [new Schema({ playerIds: [{ type: Schema.Types.ObjectId, ref: "SessionPlayer" }] }, { _id: false })],
+      default: [],
+    },
     finalisedAt: { type: Date },
   },
   { timestamps: true }

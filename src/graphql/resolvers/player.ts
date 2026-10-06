@@ -7,6 +7,7 @@ import { SessionStatus } from "@/types/enums";
 import { getSessionStandingsWithPlayers } from "@/lib/stats";
 import { getPlayerNamesForSession } from "../context";
 import { requireSessionOwner, requireOrganiser } from "../guards";
+import { isSameName, isSimilarName } from "@/lib/playerNames";
 import type { GraphQLContext } from "../context";
 
 async function requirePlayerOwner(context: GraphQLContext, playerId: string) {
@@ -88,6 +89,24 @@ async function getPlayerGames(sessionId: string, playerId: string) {
 
 export const playerResolvers = {
   Query: {
+    /** Possible "same person" matches for a name about to be added: near matches among this
+     * session's players and the club roster (exact matches are blocked outright on add). */
+    similarPlayers: async (_p: unknown, args: { sessionId: string; name: string }, context: GraphQLContext) => {
+      const session = await requireSessionOwner(context, args.sessionId);
+      const [players, members] = await Promise.all([
+        SessionPlayer.find({ sessionId: session._id }).select("name").lean(),
+        ClubMember.find({ clubId: session.clubId }).select("name").lean(),
+      ]);
+      const inSession = players.filter((p) => isSimilarName(p.name, args.name));
+      const sessionNames = players.map((p) => p.name);
+      const fromRoster = members.filter(
+        (m) => isSimilarName(m.name, args.name) && !sessionNames.some((n) => isSameName(n, m.name))
+      );
+      return [
+        ...inSession.map((p) => ({ id: String(p._id), name: p.name, source: "SESSION" })),
+        ...fromRoster.map((m) => ({ id: String(m._id), name: m.name, source: "CLUB" })),
+      ];
+    },
     sessionPlayers: async (_p: unknown, args: { sessionId: string }, context: GraphQLContext) => {
       await requireSessionOwner(context, args.sessionId);
       return SessionPlayer.find({ sessionId: args.sessionId }).sort({ createdAt: 1 });
@@ -129,6 +148,12 @@ export const playerResolvers = {
       if (!args.input.name.trim()) {
         throw new GraphQLError("Player name is required.", { extensions: { code: "BAD_USER_INPUT" } });
       }
+      const existingPlayers = await SessionPlayer.find({ sessionId: session._id }).select("name").lean();
+      if (existingPlayers.some((p) => isSameName(p.name, args.input.name))) {
+        throw new GraphQLError(`"${args.input.name.trim()}" is already in this session.`, {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
       const player = await SessionPlayer.create({
         sessionId: session._id,
         name: args.input.name.trim(),
@@ -141,12 +166,16 @@ export const playerResolvers = {
         await setFixedPartner(player, args.input.fixedPartnerId, args.sessionId);
         await player.save();
       }
-      // Upsert into club roster
-      await ClubMember.findOneAndUpdate(
-        { clubId: session.clubId, name: args.input.name.trim() },
-        { $setOnInsert: { organiserId: session.organiserId, nickname: args.input.nickname, skillLevel: args.input.skillLevel } },
-        { upsert: true, new: false }
-      );
+      // Upsert into club roster, unless the same person is already on it under a
+      // spelling/spacing/case variant (the unique index only catches exact matches).
+      const rosterNames = await ClubMember.find({ clubId: session.clubId }).select("name").lean();
+      if (!rosterNames.some((m) => isSameName(m.name, args.input.name))) {
+        await ClubMember.findOneAndUpdate(
+          { clubId: session.clubId, name: args.input.name.trim() },
+          { $setOnInsert: { organiserId: session.organiserId, nickname: args.input.nickname, skillLevel: args.input.skillLevel } },
+          { upsert: true, new: false }
+        );
+      }
       return player;
     },
 
@@ -156,9 +185,22 @@ export const playerResolvers = {
       context: GraphQLContext
     ) => {
       const session = await requireSessionOwner(context, args.sessionId);
-      const validNames = args.inputs.filter((input) => input.name.trim());
-      if (validNames.length === 0) {
+      const nonEmpty = args.inputs.filter((input) => input.name.trim());
+      if (nonEmpty.length === 0) {
         throw new GraphQLError("At least one valid player name is required.", {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
+      // Skip anyone already in the session, and repeats within this same batch.
+      const existingPlayers = await SessionPlayer.find({ sessionId: session._id }).select("name").lean();
+      const seen = existingPlayers.map((p) => p.name);
+      const validNames = nonEmpty.filter((input) => {
+        if (seen.some((n) => isSameName(n, input.name))) return false;
+        seen.push(input.name);
+        return true;
+      });
+      if (validNames.length === 0) {
+        throw new GraphQLError("Everyone in that list is already in this session.", {
           extensions: { code: "BAD_USER_INPUT" },
         });
       }
@@ -172,9 +214,11 @@ export const playerResolvers = {
       );
       session.playerIds.push(...players.map((p) => p._id));
       await session.save();
-      // Upsert all into club roster
+      // Upsert into club roster, skipping anyone already there under a name variant.
+      const rosterNames = (await ClubMember.find({ clubId: session.clubId }).select("name").lean()).map((m) => m.name);
+      const newForRoster = validNames.filter((input) => !rosterNames.some((n) => isSameName(n, input.name)));
       await Promise.all(
-        validNames.map((input) =>
+        newForRoster.map((input) =>
           ClubMember.findOneAndUpdate(
             { clubId: session.clubId, name: input.name.trim() },
             { $setOnInsert: { organiserId: session.organiserId, nickname: input.nickname, skillLevel: input.skillLevel } },

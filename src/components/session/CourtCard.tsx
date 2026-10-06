@@ -72,6 +72,11 @@ interface CourtCardProps {
 	onUpdateTeams?: (gameId: string, teamAPlayerIds: string[], teamBPlayerIds: string[]) => Promise<void>;
 	onRemove?: (courtId: string) => void;
 	onCallOut?: (game: any) => void;
+	/** A result for this court's game was recorded and is waiting to reach the server. */
+	resultState?: "saving" | "offline" | "failed";
+	resultError?: string;
+	onRetryResult?: () => void;
+	onDiscardResult?: () => void;
 }
 
 export function CourtCard({
@@ -87,6 +92,10 @@ export function CourtCard({
 	onUpdateTeams,
 	onRemove,
 	onCallOut,
+	resultState,
+	resultError,
+	onRetryResult,
+	onDiscardResult,
 }: CourtCardProps) {
 	const [editing, setEditing] = useState(false);
 	const [editTeamA, setEditTeamA] = useState<string[]>([]);
@@ -267,6 +276,33 @@ export function CourtCard({
 						<div style={{ height: 1, background: "#f3f4f6", margin: "0 18px" }} />
 
 						{/* Record Result + Cancel */}
+						{resultState ? (
+							<div style={{ padding: "12px 18px 14px", textAlign: "center" }}>
+								{resultState === "failed" ? (
+									<>
+										<div style={{ fontSize: 13, fontWeight: 600, color: "#b91c1c", marginBottom: 4 }}>
+											Result couldn&apos;t be saved
+										</div>
+										<div style={{ fontSize: 12, color: "rgba(29,31,32,0.6)", marginBottom: 10 }}>{resultError}</div>
+										<div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+											<Button size="small" type="primary" onClick={onRetryResult}>Try again</Button>
+											<Button size="small" onClick={onDiscardResult}>Discard</Button>
+										</div>
+									</>
+								) : (
+									<>
+										<div style={{ fontSize: 13, fontWeight: 600, color: resultState === "offline" ? "#b45309" : "#15803d" }}>
+											{resultState === "offline" ? "Result saved on this device" : "Saving result…"}
+										</div>
+										<div style={{ fontSize: 12, color: "rgba(29,31,32,0.6)", marginTop: 2 }}>
+											{resultState === "offline"
+												? "No connection. It will sync automatically when you're back online."
+												: "Almost done."}
+										</div>
+									</>
+								)}
+							</div>
+						) : (
 						<div style={{ padding: "12px 18px 14px" }}>
 							<Button block
 								style={{
@@ -288,6 +324,7 @@ export function CourtCard({
 								</button>
 							</div>
 						</div>
+						)}
 					</div>
 				)
 			) : (

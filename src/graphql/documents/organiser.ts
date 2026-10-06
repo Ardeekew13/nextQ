@@ -435,6 +435,17 @@ export const SESSION_DASHBOARD_QUERY = gql`
         gamesPlayed
         queueEnteredAt
       }
+      togetherGroups {
+        id
+        gamesTogether
+        players {
+          id
+          name
+        }
+        games {
+          ...GameFields
+        }
+      }
       nextGamePreview {
         teamA {
           players {
@@ -568,7 +579,28 @@ export const SESSION_STANDINGS_QUERY = gql`
       podium {
         ...PodiumFields
       }
+      firstPlaceTie {
+        ...StandingFields
+      }
       publicUrl
+    }
+  }
+`;
+
+export const SIMILAR_PLAYERS = gql`
+  query SimilarPlayers($sessionId: ID!, $name: String!) {
+    similarPlayers(sessionId: $sessionId, name: $name) {
+      id
+      name
+      source
+    }
+  }
+`;
+
+export const SEPARATE_PLAYERS = gql`
+  mutation SeparatePlayers($sessionId: ID!, $playerIds: [ID!]!) {
+    separatePlayers(sessionId: $sessionId, playerIds: $playerIds) {
+      id
     }
   }
 `;
@@ -683,6 +715,37 @@ export const GENERATE_NEXT_GAME = gql`
   }
 `;
 
+export const SYNC_OFFLINE_GAME = gql`
+  ${GAME_FIELDS}
+  mutation SyncOfflineGame(
+    $sessionId: ID!
+    $courtId: ID!
+    $clientGameId: String!
+    $teamAPlayerIds: [ID!]!
+    $teamBPlayerIds: [ID!]!
+    $playersSatOutIds: [ID!]!
+    $createdAt: Date
+  ) {
+    syncOfflineGame(
+      sessionId: $sessionId
+      courtId: $courtId
+      clientGameId: $clientGameId
+      teamAPlayerIds: $teamAPlayerIds
+      teamBPlayerIds: $teamBPlayerIds
+      playersSatOutIds: $playersSatOutIds
+      createdAt: $createdAt
+    ) {
+      ...GameFields
+    }
+  }
+`;
+
+export const SESSION_QUEUE_SNAPSHOT = gql`
+  query SessionQueueSnapshot($sessionId: ID!) {
+    sessionQueueSnapshot(sessionId: $sessionId)
+  }
+`;
+
 export const FILL_COURT_MANUALLY = gql`
   ${GAME_FIELDS}
   mutation FillCourtManually($courtId: ID!, $teamAPlayerIds: [ID!]!, $teamBPlayerIds: [ID!]!) {
@@ -793,6 +856,15 @@ export const UPDATE_CLUB_MEMBER = gql`
 export const REMOVE_CLUB_MEMBER = gql`
   mutation RemoveClubMember($id: ID!) {
     removeClubMember(id: $id)
+  }
+`;
+
+export const MERGE_CLUB_MEMBERS = gql`
+  mutation MergeClubMembers($keepId: ID!, $removeId: ID!) {
+    mergeClubMembers(keepId: $keepId, removeId: $removeId) {
+      id
+      name
+    }
   }
 `;
 

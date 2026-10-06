@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, type CSSProperties } from "react";
-import { useMutation, useQuery, useLazyQuery } from "@apollo/client";
+import { useMutation, useQuery, useLazyQuery, useApolloClient } from "@apollo/client";
 import { gql } from "@apollo/client";
 import {
   Button, Modal, Form, Input, Select,
@@ -19,6 +19,7 @@ import {
   IMPORT_CLUB_MEMBERS_TO_SESSION,
   SESSION_PLAYERS_ALLTIME_QUERY,
   SESSION_DASHBOARD_QUERY,
+  SIMILAR_PLAYERS,
 } from "@/graphql/documents/organiser";
 
 const { Text } = Typography;
@@ -167,6 +168,7 @@ export function PlayersTab({
   const [bulkForm] = Form.useForm();
   const [editForm] = Form.useForm();
 
+  const apollo = useApolloClient();
   const [addSessionPlayer, { loading: addingSingle }] = useMutation(ADD_SESSION_PLAYER);
   const [addSessionPlayers, { loading: addingBulk }] = useMutation(ADD_SESSION_PLAYERS);
   const [updateSessionPlayer] = useMutation(UPDATE_SESSION_PLAYER);
@@ -343,12 +345,48 @@ export function PlayersTab({
       message.error(`"${name}" is already in this session`);
       return;
     }
+    // Near matches ("RODELL" vs "RODEL", "JOYANN" vs "JOY ANN"): ask before creating a duplicate.
+    let similar: { id: string; name: string; source: string }[] = [];
     try {
-      await addSessionPlayer({ variables: { sessionId, input: { ...values, name } } });
-      message.success("Player added — sitting out until checked in");
-      singleForm.resetFields();
-      refetch();
-    } catch { message.error("Could not add player"); }
+      const res = await apollo.query({ query: SIMILAR_PLAYERS, variables: { sessionId, name }, fetchPolicy: "network-only" });
+      similar = res.data?.similarPlayers ?? [];
+    } catch { /* if the check fails, fall through and just add */ }
+
+    const addAs = async (finalName: string) => {
+      try {
+        await addSessionPlayer({ variables: { sessionId, input: { ...values, name: finalName } } });
+        message.success("Player added — sitting out until checked in");
+        singleForm.resetFields();
+        refetch();
+      } catch (e) {
+        message.error(e instanceof Error ? e.message : "Could not add player");
+      }
+    };
+
+    if (similar.length === 0) {
+      await addAs(name);
+      return;
+    }
+    const match = similar[0];
+    const matchLabel = match.source === "SESSION" ? "already in this session" : "on your club roster";
+    modal.confirm({
+      title: `Is "${name}" the same person as ${match.name}?`,
+      content: `${match.name} is ${matchLabel}. If it's the same person, we won't add a duplicate.`,
+      okText: "No, add as new",
+      cancelText: "Yes, same person",
+      maskClosable: false,
+      keyboard: false,
+      onOk: () => addAs(name),
+      onCancel: () => {
+        if (match.source === "SESSION") {
+          message.info(`${match.name} is already in this session — nothing added`);
+          singleForm.resetFields();
+        } else {
+          // Same person as a roster member: add them under their saved name.
+          void addAs(match.name);
+        }
+      },
+    });
   }
 
   async function handleAddBulk(values: any) {

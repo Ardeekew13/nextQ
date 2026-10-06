@@ -224,6 +224,21 @@ export const typeDefs = gql`
     updatedAt: Date!
   }
 
+  """A possible "same person" match for a name being added."""
+  type SimilarPlayer {
+    id: ID!
+    name: String!
+    """SESSION = already in this session, CLUB = on the club roster but not in this session."""
+    source: String!
+  }
+
+  type TogetherGroup {
+    id: ID!
+    players: [SessionPlayer!]!
+    gamesTogether: Int!
+    games: [Game!]!
+  }
+
   type SessionStanding {
     rank: Int!
     player: SessionPlayer!
@@ -293,6 +308,13 @@ export const typeDefs = gql`
     nextGamePreview: NextGamePreview
     standings: [SessionStanding!]!
     podium: [PodiumEntry!]!
+    """Players who keep landing in the same games (2+ players sharing 2+ games), strongest first,
+    so the organiser can be prompted to break them up. Groups already separated are excluded."""
+    togetherGroups: [TogetherGroup!]!
+    """Players genuinely tied for 1st place under this session's ranking rules.
+    Empty when there's a clear #1. When 2+ players show up here, they should
+    play each other to decide the winner — useful when a prize is on the line."""
+    firstPlaceTie: [SessionStanding!]!
     publicPublished: Boolean!
     publicUrl: String!
     finalisedAt: Date
@@ -423,6 +445,9 @@ export const typeDefs = gql`
   input CompleteGameInput {
     winningTeam: WinningTeam!
     notes: String
+    """When the result was actually recorded on the court. Sent when a result was saved offline
+    and synced later, so wait times and the game's completion time reflect real life."""
+    recordedAt: Date
   }
 
   type ClubStanding {
@@ -460,6 +485,9 @@ export const typeDefs = gql`
     sessionSummary(sessionId: ID!): SessionSummary!
 
     clubMembers(clubId: ID!, filter: String): [ClubMember!]!
+    similarPlayers(sessionId: ID!, name: String!): [SimilarPlayer!]!
+    "JSON snapshot of the queue state so the browser can keep generating games offline."
+    sessionQueueSnapshot(sessionId: ID!): String!
 
     playerSessionStats(sessionId: ID!, playerId: ID!): PlayerStatistics!
     playerGameLogs(sessionId: ID!, playerId: ID!): [Game!]!
@@ -488,6 +516,8 @@ export const typeDefs = gql`
 
     createSession(input: CreateSessionInput!): Session!
     updateSession(id: ID!, input: UpdateSessionInput!): Session!
+    """Breaks a group up: from now on the queue never puts two or more of these players in the same game."""
+    separatePlayers(sessionId: ID!, playerIds: [ID!]!): Session!
     startSession(id: ID!): Session!
     pauseSession(id: ID!): Session!
     resumeSession(id: ID!): Session!
@@ -505,6 +535,8 @@ export const typeDefs = gql`
     addClubMember(clubId: ID!, input: AddClubMemberInput!): ClubMember!
     updateClubMember(id: ID!, input: UpdateClubMemberInput!): ClubMember!
     removeClubMember(id: ID!): Boolean!
+    """Merges removeId into keepId: keepId inherits the game history and removeId is deleted."""
+    mergeClubMembers(keepId: ID!, removeId: ID!): ClubMember!
     importClubMembersToSession(sessionId: ID!, memberIds: [ID!]!): [SessionPlayer!]!
 
     addCourt(sessionId: ID!, input: AddCourtInput!): Court!
@@ -513,6 +545,16 @@ export const typeDefs = gql`
     deleteCourt(id: ID!): Boolean!
 
     generateNextGame(sessionId: ID!, courtId: ID!): Game!
+    "Saves a game that was generated offline in the browser. Idempotent on clientGameId."
+    syncOfflineGame(
+      sessionId: ID!
+      courtId: ID!
+      clientGameId: String!
+      teamAPlayerIds: [ID!]!
+      teamBPlayerIds: [ID!]!
+      playersSatOutIds: [ID!]!
+      createdAt: Date
+    ): Game!
     fillCourtManually(courtId: ID!, teamAPlayerIds: [ID!]!, teamBPlayerIds: [ID!]!): Game!
     updateGameTeams(id: ID!, teamAPlayerIds: [ID!]!, teamBPlayerIds: [ID!]!): Game!
     startGame(id: ID!): Game!

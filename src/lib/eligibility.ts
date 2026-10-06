@@ -2,6 +2,7 @@ import { Game } from "@/models/Game";
 import { Session } from "@/models/Session";
 import { SessionPlayer, type SessionPlayerDoc } from "@/models/SessionPlayer";
 import { GameStatus, QueueMode, type SessionSettings } from "@/types/enums";
+import { poolSeed, seededRandom } from "@/lib/seededRandom";
 import { rankQueue, generateNextGame as queueEngineGenerateNextGame, type QueuePlayer } from "@/lib/queueEngine";
 import type { HydratedDocument } from "mongoose";
 
@@ -59,24 +60,11 @@ export function toQueuePlayer(doc: HydratedDocument<SessionPlayerDoc>): QueuePla
   };
 }
 
-/** Deterministic PRNG (mulberry32-style) seeded from a string — stable across repeated calls with the same input. */
-export function seededRandom(seed: string): () => number {
-  let h = 1779033703 ^ seed.length;
-  for (let i = 0; i < seed.length; i++) {
-    h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
-    h = (h << 13) | (h >>> 19);
-  }
-  return function next() {
-    h = Math.imul(h ^ (h >>> 16), 2246822507);
-    h = Math.imul(h ^ (h >>> 13), 3266489909);
-    h ^= h >>> 16;
-    return (h >>> 0) / 4294967296;
-  };
-}
+export { seededRandom } from "@/lib/seededRandom";
 
 /** Stable seed for a given eligible pool — same pool always yields the same seed. */
 export function queuePoolSeed(docs: HydratedDocument<SessionPlayerDoc>[]): string {
-  return docs.map((d) => String(d._id)).sort().join(",");
+  return poolSeed(docs.map((d) => String(d._id)));
 }
 
 interface QueueContext {
@@ -85,6 +73,8 @@ interface QueueContext {
   mode: QueueMode;
   maxConsecutiveGames: number;
   pastGroups: Set<string>;
+  /** Groups the organiser asked to keep out of the same game. */
+  keepApart: string[][];
   /** Stable per-pool seed. Passing a fresh `seededRandom(seed)` to both the flat
    * queue preview and the next-game preview keeps their first-round selection
    * (including tiebreaks and the anti-repeat swap) identical to each other. */
@@ -93,7 +83,7 @@ interface QueueContext {
 
 async function loadQueueContext(sessionId: string): Promise<QueueContext> {
   const [session, eligibleDocs, priorGames] = await Promise.all([
-    Session.findById(sessionId).select("settings"),
+    Session.findById(sessionId).select("settings separatedGroups"),
     getEligiblePlayers(sessionId),
     Game.find(
       { sessionId, status: { $ne: GameStatus.CANCELLED } },
@@ -114,6 +104,7 @@ async function loadQueueContext(sessionId: string): Promise<QueueContext> {
     mode: (settings?.queueMode ?? QueueMode.HYBRID) as QueueMode,
     maxConsecutiveGames: settings?.maxConsecutiveGames ?? 2,
     pastGroups,
+    keepApart: (session?.separatedGroups ?? []).map((g) => g.playerIds.map(String)),
     seed: queuePoolSeed(eligibleDocs),
   };
 }
@@ -133,6 +124,7 @@ export async function getQueuePreview(
     mode: ctx.mode,
     maxConsecutiveGames: ctx.maxConsecutiveGames,
     pastGroups: ctx.pastGroups,
+    keepApart: ctx.keepApart,
     random: seededRandom(ctx.seed),
   });
 
@@ -162,6 +154,7 @@ export async function getNextGamePreview(
     mode: ctx.mode,
     maxConsecutiveGames: ctx.maxConsecutiveGames,
     pastGroups: ctx.pastGroups,
+    keepApart: ctx.keepApart,
     random: seededRandom(ctx.seed),
   });
   if (!result.ok) return null;

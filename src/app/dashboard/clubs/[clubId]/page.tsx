@@ -8,6 +8,7 @@ import {
 	ADD_CLUB_MEMBER,
 	UPDATE_CLUB_MEMBER,
 	REMOVE_CLUB_MEMBER,
+	MERGE_CLUB_MEMBERS,
 	ME_QUERY,
 } from "@/graphql/documents/organiser";
 import { CLUB_STANDINGS_QUERY } from "@/graphql/documents/public";
@@ -96,6 +97,7 @@ export default function ClubDetailPage() {
 	const [addClubMember] = useMutation(ADD_CLUB_MEMBER);
 	const [updateClubMember] = useMutation(UPDATE_CLUB_MEMBER);
 	const [removeClubMember] = useMutation(REMOVE_CLUB_MEMBER);
+	const [mergeClubMembers] = useMutation(MERGE_CLUB_MEMBERS);
 
 	const [addMemberOpen, setAddMemberOpen] = useState(false);
 	const [editingMember, setEditingMember] = useState<any>(null);
@@ -193,6 +195,18 @@ export default function ClubDetailPage() {
 			message.error(
 				err instanceof Error ? err.message : "Could not remove player",
 			);
+		}
+	}
+
+	async function handleMergeMembers(keepId: string, removeId: string) {
+		try {
+			await mergeClubMembers({ variables: { keepId, removeId } });
+			message.success("Players merged");
+			refetchMembers();
+			refetchStandings();
+		} catch (err) {
+			message.error(err instanceof Error ? err.message : "Could not merge players");
+			throw err;
 		}
 	}
 
@@ -818,6 +832,7 @@ export default function ClubDetailPage() {
 						onAddMember={handleAddMember}
 						onEditMember={handleEditMember}
 						onRemoveMember={handleRemoveMember}
+						onMergeMembers={handleMergeMembers}
 						refetchMembers={refetchMembers}
 					/>
 					<StandingsTab
