@@ -171,6 +171,85 @@ function playerScore(
 // Player selection
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Shared-trio avoidance
+// ---------------------------------------------------------------------------
+
+type ScoredEntry =
+  | { kind: "single"; player: QueuePlayer; score: number }
+  | { kind: "pair"; players: [QueuePlayer, QueuePlayer]; score: number };
+
+/** How many of the highest-priority entries (singles or fixed pairs) are considered when
+ * looking for a foursome that avoids repeating a trio. Wide enough to find an alternative in
+ * a real session, narrow enough that the search stays instant and fairness is barely touched. */
+const TRIO_SEARCH_WIDTH = 14;
+
+function tripleKey(a: string, b: string, c: string): string {
+  return [a, b, c].sort().join(":");
+}
+
+function triplesOf(ids: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < ids.length; i++)
+    for (let j = i + 1; j < ids.length; j++)
+      for (let k = j + 1; k < ids.length; k++) out.push(tripleKey(ids[i], ids[j], ids[k]));
+  return out;
+}
+
+/** Every trio of players that has already shared a game, taken from the session's past
+ * foursomes (pastGroups holds each one as sorted ids joined by ":"). */
+function buildPastTriples(pastGroups: ReadonlySet<string> | undefined): Set<string> {
+  const triples = new Set<string>();
+  if (!pastGroups) return triples;
+  for (const key of pastGroups) for (const t of triplesOf(key.split(":"))) triples.add(t);
+  return triples;
+}
+
+/** How many of this foursome's four trios have already played together in an earlier game. */
+function countRepeatedTriples(players: QueuePlayer[], pastTriples: ReadonlySet<string>): number {
+  let n = 0;
+  for (const t of triplesOf(players.map((p) => p.id))) if (pastTriples.has(t)) n++;
+  return n;
+}
+
+/**
+ * Finds the best foursome among the top-priority entries that doesn't reuse a trio from any
+ * earlier game. Fixed pairs stay intact. Among foursomes with the fewest repeated trios (zero
+ * whenever one exists) it picks the one closest to the normal priority order (lowest total
+ * score). If no clean foursome exists (e.g. a small pool late in a long session) it returns
+ * the least-repetitive option rather than blocking the game.
+ */
+function findFoursomeAvoidingRepeatedTrios(
+  entries: ScoredEntry[],
+  pastTriples: ReadonlySet<string>
+): QueuePlayer[] | null {
+  const candidates = entries.slice(0, TRIO_SEARCH_WIDTH);
+  let best: { players: QueuePlayer[]; violations: number; score: number } | null = null;
+  const chosen: ScoredEntry[] = [];
+
+  function dfs(start: number, size: number, score: number) {
+    if (size === 4) {
+      const players = chosen.flatMap((e) => (e.kind === "pair" ? [...e.players] : [e.player]));
+      const violations = countRepeatedTriples(players, pastTriples);
+      if (!best || violations < best.violations || (violations === best.violations && score < best.score)) {
+        best = { players, violations, score };
+      }
+      return;
+    }
+    for (let i = start; i < candidates.length; i++) {
+      const e = candidates[i];
+      const sz = e.kind === "pair" ? 2 : 1;
+      if (size + sz > 4) continue;
+      chosen.push(e);
+      dfs(i + 1, size + sz, score + e.score);
+      chosen.pop();
+    }
+  }
+  dfs(0, 0, 0);
+
+  return best ? (best as { players: QueuePlayer[] }).players : null;
+}
+
 function selectPlayers(
   eligible: QueuePlayer[],
   mode: QueueMode,
@@ -233,6 +312,18 @@ function selectPlayers(
       selectedList.push(entry.players[0], entry.players[1]);
     } else {
       selectedList.push(entry.player);
+    }
+  }
+
+  // Trio rule: no three players may share a game twice, ever, in this session. If the
+  // priority order would reuse a trio, swap in the next-best players instead. Skipped for
+  // SMART (strict first-come-first-served), whose whole promise is a pure queue order, and
+  // applied best-effort only when the pool is too small to avoid every repeat.
+  if (mode !== QueueMode.SMART && selectedList.length >= 4) {
+    const pastTriples = buildPastTriples(pastGroups);
+    if (pastTriples.size > 0 && countRepeatedTriples(selectedList.slice(0, 4), pastTriples) > 0) {
+      const alternative = findFoursomeAvoidingRepeatedTrios(entries, pastTriples);
+      if (alternative) selectedList.splice(0, selectedList.length, ...alternative);
     }
   }
 
