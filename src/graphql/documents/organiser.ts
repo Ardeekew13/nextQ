@@ -568,6 +568,9 @@ export const SESSION_STANDINGS_QUERY = gql`
       podium {
         ...PodiumFields
       }
+      firstPlaceTie {
+        ...StandingFields
+      }
       publicUrl
     }
   }

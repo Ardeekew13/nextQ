@@ -6,7 +6,7 @@ import { Game } from "@/models/Game";
 import { SessionPlayer } from "@/models/SessionPlayer";
 import { slugify, withRandomSuffix } from "@/lib/slug";
 import { getQueuePreview, getNextGamePreview } from "@/lib/eligibility";
-import { getSessionStandingsWithPlayers, getSessionPodiumWithPlayers } from "@/lib/stats";
+import { getSessionStandingsWithPlayers, getSessionPodiumWithPlayers, getSessionFirstPlaceTieWithPlayers } from "@/lib/stats";
 import { buildPublicSessionUrl, diffMinutes } from "@/lib/urls";
 import { SessionStatus, GameStatus, DEFAULT_SESSION_SETTINGS, PairingMode, MatchingStyle, QueueMode, type SessionSettings } from "@/types/enums";
 import { requireOrganiser, requireClubOwner, requireSessionOwner } from "../guards";
@@ -303,6 +303,7 @@ export const sessionResolvers = {
     nextGamePreview: async (parent: { _id: unknown }) => getNextGamePreview(String(parent._id)),
     standings: async (parent: { _id: unknown }) => getSessionStandingsWithPlayers(String(parent._id)),
     podium: async (parent: { _id: unknown }) => getSessionPodiumWithPlayers(String(parent._id)),
+    firstPlaceTie: async (parent: { _id: unknown }) => getSessionFirstPlaceTieWithPlayers(String(parent._id)),
     publicUrl: async (parent: { clubId: unknown; slug: string }) => {
       const club = await Club.findById(parent.clubId);
       return buildPublicSessionUrl(club?.slug ?? "", parent.slug);

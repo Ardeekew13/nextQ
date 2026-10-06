@@ -293,6 +293,10 @@ export const typeDefs = gql`
     nextGamePreview: NextGamePreview
     standings: [SessionStanding!]!
     podium: [PodiumEntry!]!
+    """Players genuinely tied for 1st place under this session's ranking rules.
+    Empty when there's a clear #1. When 2+ players show up here, they should
+    play each other to decide the winner — useful when a prize is on the line."""
+    firstPlaceTie: [SessionStanding!]!
     publicPublished: Boolean!
     publicUrl: String!
     finalisedAt: Date
