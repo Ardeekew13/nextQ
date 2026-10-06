@@ -269,23 +269,37 @@ export const gameResolvers = {
       _p: unknown,
       args: {
         id: string;
-        input: { winningTeam: string; notes?: string };
+        input: { winningTeam: string; notes?: string; recordedAt?: Date | string | null };
       },
       context: GraphQLContext
     ) => {
       const organiser = requireOrganiser(context);
       const { game, session } = await requireGameOwner(context, args.id);
+      // A result that was queued offline may be sent more than once (a request that timed out
+      // after the server saved it). Same result again is a harmless no-op.
+      if (game.status === GameStatus.COMPLETED && game.winningTeam === args.input.winningTeam) {
+        return game;
+      }
       if (game.status !== GameStatus.QUEUED && game.status !== GameStatus.IN_PROGRESS) {
         throw new GraphQLError(`Cannot complete a game that is ${game.status}.`, {
           extensions: { code: "BAD_USER_INPUT" },
         });
       }
 
+      // Use the time the result was really recorded when it's a sane one (not in the future,
+      // not before the game existed); otherwise now.
+      const now = new Date();
+      const claimed = args.input.recordedAt ? new Date(args.input.recordedAt) : null;
+      const completedAt =
+        claimed && !Number.isNaN(claimed.getTime()) && claimed <= now && claimed >= new Date(game.createdAt)
+          ? claimed
+          : now;
+
       return withOptionalTransaction(async (mongooseSession) => {
         game.winningTeam = args.input.winningTeam as never;
         game.notes = args.input.notes;
         game.status = GameStatus.COMPLETED;
-        game.completedAt = new Date();
+        game.completedAt = completedAt;
         game.recordedBy = organiser.sub as never;
         await game.save({ session: mongooseSession });
 
@@ -300,7 +314,7 @@ export const gameResolvers = {
         const playerIds = [...game.teamAPlayerIds, ...game.teamBPlayerIds];
         await SessionPlayer.updateMany(
           { _id: { $in: playerIds } },
-          { $set: { queueEnteredAt: new Date(), consecutiveGames: 0 } },
+          { $set: { queueEnteredAt: completedAt, consecutiveGames: 0 } },
           { session: mongooseSession ?? undefined }
         );
 

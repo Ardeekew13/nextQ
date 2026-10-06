@@ -445,6 +445,9 @@ export const typeDefs = gql`
   input CompleteGameInput {
     winningTeam: WinningTeam!
     notes: String
+    """When the result was actually recorded on the court. Sent when a result was saved offline
+    and synced later, so wait times and the game's completion time reflect real life."""
+    recordedAt: Date
   }
 
   type ClubStanding {

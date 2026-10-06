@@ -4,7 +4,6 @@ import {
 	ADD_COURT,
 	CANCEL_GAME,
 	CHECK_IN_PLAYER,
-	COMPLETE_GAME,
 	DELETE_COURT,
 	FILL_COURT_MANUALLY,
 	GENERATE_NEXT_GAME,
@@ -22,6 +21,7 @@ import {
 	type ScoreEntryValues,
 } from "@/components/ScoreEntryForm";
 import { CourtCard } from "./CourtCard";
+import { useOfflineResults } from "@/apollo/OfflineResultsProvider";
 import type { SessionStats } from "@/app/dashboard/sessions/[sessionId]/page";
 
 const { Text } = Typography;
@@ -74,7 +74,7 @@ export function OverviewTab({
 		useMutation(FILL_COURT_MANUALLY);
 	const [updateGameTeams, { loading: updatingTeams }] =
 		useMutation(UPDATE_GAME_TEAMS);
-	const [completeGame, { loading: completing }] = useMutation(COMPLETE_GAME);
+	const offline = useOfflineResults();
 	const [updateGameResult, { loading: switching }] =
 		useMutation(UPDATE_GAME_RESULT);
 	const [cancelGame] = useMutation(CANCEL_GAME);
@@ -196,16 +196,17 @@ export function OverviewTab({
 		}
 	}
 
-	async function handleScoreSubmit(values: ScoreEntryValues) {
-		try {
-			await completeGame({ variables: { id: scoreGame.id, input: values } });
-			setScoreGame(null);
-			refetch();
-		} catch (err) {
-			message.error(
-				err instanceof Error ? err.message : "Could not record result",
-			);
-		}
+	// Recording is instant: the result is stored on this device and sent in the background,
+	// so it works with a flaky or missing connection and syncs once it's back.
+	function handleScoreSubmit(values: ScoreEntryValues) {
+		if (!scoreGame) return;
+		offline.recordResult({
+			sessionId,
+			gameId: scoreGame.id,
+			winningTeam: values.winningTeam,
+			notes: values.notes,
+		});
+		setScoreGame(null);
 	}
 
 	async function handleRecordResult(game: any, _winner: "A" | "B") {
@@ -386,6 +387,35 @@ export function OverviewTab({
 				</div>
 			)}
 
+			{/* ── Offline / waiting-to-sync status ── */}
+			{(!offline.online || offline.pending.length > 0) && (
+				<div
+					style={{
+						background: offline.online ? "#f0fdf4" : "#fff7ed",
+						borderBottom: `1px solid ${offline.online ? "#bbf7d0" : "#fed7aa"}`,
+						padding: "10px 24px",
+						fontSize: 13,
+						color: "#111827",
+					}}
+				>
+					{!offline.online ? (
+						<>
+							<strong>You&apos;re offline.</strong> You can keep recording results; they&apos;re saved on this
+							device and will sync automatically when the connection returns.
+							{offline.pending.length > 0 && ` (${offline.pending.length} waiting)`}
+						</>
+					) : (
+						<>
+							{offline.syncing ? "Syncing" : "Waiting to sync"}{" "}
+							<strong>
+								{offline.pending.length} saved result{offline.pending.length === 1 ? "" : "s"}
+							</strong>
+							…
+						</>
+					)}
+				</div>
+			)}
+
 			{/* ── Players who keep landing in the same games ── */}
 			{(session?.togetherGroups ?? []).length > 0 && (
 				<div
@@ -553,6 +583,20 @@ export function OverviewTab({
 								queuedPlayers={queuedPlayers}
 								updatingTeams={updatingTeams}
 								onFill={handleGenerate}
+								resultState={(() => {
+									const p = offline.pending.find((x) => x.gameId === court.currentGame?.id);
+									if (!p) return undefined;
+									return p.error ? "failed" : !offline.online ? "offline" : "saving";
+								})()}
+								resultError={offline.pending.find((x) => x.gameId === court.currentGame?.id)?.error}
+								onRetryResult={() => {
+									const p = offline.pending.find((x) => x.gameId === court.currentGame?.id);
+									if (p) offline.retry(p.id);
+								}}
+								onDiscardResult={() => {
+									const p = offline.pending.find((x) => x.gameId === court.currentGame?.id);
+									if (p) offline.discard(p.id);
+								}}
 								onRecordResult={handleRecordResult}
 								onCancelGame={handleCancelGame}
 								onUpdateTeams={handleUpdateTeams}
@@ -1026,7 +1070,7 @@ export function OverviewTab({
 			<ScoreEntryForm
 				open={!!scoreGame}
 				game={scoreGame}
-				loading={completing}
+				quick
 				onCancel={() => setScoreGame(null)}
 				onSubmit={handleScoreSubmit}
 			/>
