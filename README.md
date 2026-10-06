@@ -203,3 +203,16 @@ Covers (see `tests/`):
    required - GraphQL is served from the same Next.js deployment.
 4. Run `npm run seed` once against your target database if you want demo
    data (safe to skip in production).
+
+## Browser tests (Playwright)
+
+End-to-end tests live in `e2e/`. They seed and wipe a **separate test database** (its name must end in `_e2e`), and run their own dev server on port 3100, so they never touch your real data.
+
+```
+npm run e2e:install      # one time: downloads Chromium
+npm run e2e              # run headless
+npm run e2e:ui           # interactive runner
+npm run e2e:headed       # watch the browser
+```
+
+By default they use a local MongoDB at `mongodb://127.0.0.1:27017/nextq_e2e`. To use Atlas, set `E2E_MONGODB_URI` to a URI ending in `/<something>_e2e`.
