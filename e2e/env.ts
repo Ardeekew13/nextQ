@@ -6,7 +6,7 @@
  * database name ends in _e2e (e.g. .../pickleq_e2e).
  */
 export const E2E_PORT = 3100;
-export const E2E_BASE_URL = `http://127.0.0.1:${E2E_PORT}`;
+export const E2E_BASE_URL = `http://localhost:${E2E_PORT}`;
 export const E2E_MONGODB_URI = process.env.E2E_MONGODB_URI ?? "mongodb://127.0.0.1:27017/nextq_e2e";
 export const E2E_JWT_SECRET = "e2e-only-secret-not-for-real-use-0123456789abcdef";
 export const E2E_PASSWORD = "e2e-password-123";
