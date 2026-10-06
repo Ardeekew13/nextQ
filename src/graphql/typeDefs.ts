@@ -486,6 +486,8 @@ export const typeDefs = gql`
 
     clubMembers(clubId: ID!, filter: String): [ClubMember!]!
     similarPlayers(sessionId: ID!, name: String!): [SimilarPlayer!]!
+    "JSON snapshot of the queue state so the browser can keep generating games offline."
+    sessionQueueSnapshot(sessionId: ID!): String!
 
     playerSessionStats(sessionId: ID!, playerId: ID!): PlayerStatistics!
     playerGameLogs(sessionId: ID!, playerId: ID!): [Game!]!
@@ -543,6 +545,16 @@ export const typeDefs = gql`
     deleteCourt(id: ID!): Boolean!
 
     generateNextGame(sessionId: ID!, courtId: ID!): Game!
+    "Saves a game that was generated offline in the browser. Idempotent on clientGameId."
+    syncOfflineGame(
+      sessionId: ID!
+      courtId: ID!
+      clientGameId: String!
+      teamAPlayerIds: [ID!]!
+      teamBPlayerIds: [ID!]!
+      playersSatOutIds: [ID!]!
+      createdAt: Date
+    ): Game!
     fillCourtManually(courtId: ID!, teamAPlayerIds: [ID!]!, teamBPlayerIds: [ID!]!): Game!
     updateGameTeams(id: ID!, teamAPlayerIds: [ID!]!, teamBPlayerIds: [ID!]!): Game!
     startGame(id: ID!): Game!

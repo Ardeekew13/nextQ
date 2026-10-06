@@ -715,6 +715,37 @@ export const GENERATE_NEXT_GAME = gql`
   }
 `;
 
+export const SYNC_OFFLINE_GAME = gql`
+  ${GAME_FIELDS}
+  mutation SyncOfflineGame(
+    $sessionId: ID!
+    $courtId: ID!
+    $clientGameId: String!
+    $teamAPlayerIds: [ID!]!
+    $teamBPlayerIds: [ID!]!
+    $playersSatOutIds: [ID!]!
+    $createdAt: Date
+  ) {
+    syncOfflineGame(
+      sessionId: $sessionId
+      courtId: $courtId
+      clientGameId: $clientGameId
+      teamAPlayerIds: $teamAPlayerIds
+      teamBPlayerIds: $teamBPlayerIds
+      playersSatOutIds: $playersSatOutIds
+      createdAt: $createdAt
+    ) {
+      ...GameFields
+    }
+  }
+`;
+
+export const SESSION_QUEUE_SNAPSHOT = gql`
+  query SessionQueueSnapshot($sessionId: ID!) {
+    sessionQueueSnapshot(sessionId: $sessionId)
+  }
+`;
+
 export const FILL_COURT_MANUALLY = gql`
   ${GAME_FIELDS}
   mutation FillCourtManually($courtId: ID!, $teamAPlayerIds: [ID!]!, $teamBPlayerIds: [ID!]!) {

@@ -2,6 +2,7 @@ import { Game } from "@/models/Game";
 import { Session } from "@/models/Session";
 import { SessionPlayer, type SessionPlayerDoc } from "@/models/SessionPlayer";
 import { GameStatus, QueueMode, type SessionSettings } from "@/types/enums";
+import { poolSeed, seededRandom } from "@/lib/seededRandom";
 import { rankQueue, generateNextGame as queueEngineGenerateNextGame, type QueuePlayer } from "@/lib/queueEngine";
 import type { HydratedDocument } from "mongoose";
 
@@ -59,24 +60,11 @@ export function toQueuePlayer(doc: HydratedDocument<SessionPlayerDoc>): QueuePla
   };
 }
 
-/** Deterministic PRNG (mulberry32-style) seeded from a string — stable across repeated calls with the same input. */
-export function seededRandom(seed: string): () => number {
-  let h = 1779033703 ^ seed.length;
-  for (let i = 0; i < seed.length; i++) {
-    h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
-    h = (h << 13) | (h >>> 19);
-  }
-  return function next() {
-    h = Math.imul(h ^ (h >>> 16), 2246822507);
-    h = Math.imul(h ^ (h >>> 13), 3266489909);
-    h ^= h >>> 16;
-    return (h >>> 0) / 4294967296;
-  };
-}
+export { seededRandom } from "@/lib/seededRandom";
 
 /** Stable seed for a given eligible pool — same pool always yields the same seed. */
 export function queuePoolSeed(docs: HydratedDocument<SessionPlayerDoc>[]): string {
-  return docs.map((d) => String(d._id)).sort().join(",");
+  return poolSeed(docs.map((d) => String(d._id)));
 }
 
 interface QueueContext {

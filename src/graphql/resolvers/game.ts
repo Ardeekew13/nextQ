@@ -1,10 +1,11 @@
 import { GraphQLError } from "graphql";
-import { Game } from "@/models/Game";
+import { Game, type GameDoc } from "@/models/Game";
 import { Court } from "@/models/Court";
 import { SessionPlayer, type SessionPlayerDoc } from "@/models/SessionPlayer";
 import { generateGame, type MatchPlayer } from "@/lib/matchmaking";
 import { generateNextGame as queueEngineGenerate, type QueuePlayer } from "@/lib/queueEngine";
 import { getEligiblePlayers, toQueuePlayer, queuePoolSeed, seededRandom } from "@/lib/eligibility";
+import { buildQueueSnapshot } from "@/lib/queueSnapshot";
 import { rebuildSessionStatistics } from "@/lib/stats";
 import { withOptionalTransaction } from "@/lib/transaction";
 import { CourtStatus, GameStatus, WinningTeam, PairingMode, QueueMode, type SessionSettings } from "@/types/enums";
@@ -49,9 +50,116 @@ export const gameResolvers = {
       if (args.status) filter.status = args.status;
       return Game.find(filter).sort({ gameNumber: 1 });
     },
+
+    /** JSON snapshot of the queue state, used by the browser to keep generating games offline. */
+    sessionQueueSnapshot: async (_p: unknown, args: { sessionId: string }, context: GraphQLContext) => {
+      await requireSessionOwner(context, args.sessionId);
+      return JSON.stringify(await buildQueueSnapshot(args.sessionId));
+    },
   },
 
   Mutation: {
+    /**
+     * Saves a game the browser generated while offline. Idempotent on `clientGameId`, so a
+     * retried request returns the game it already created. The teams were chosen on the
+     * organiser's device; the server only checks they can still be put on this court.
+     */
+    syncOfflineGame: async (
+      _p: unknown,
+      args: {
+        sessionId: string;
+        courtId: string;
+        clientGameId: string;
+        teamAPlayerIds: string[];
+        teamBPlayerIds: string[];
+        playersSatOutIds: string[];
+        createdAt?: Date | string | null;
+      },
+      context: GraphQLContext
+    ) => {
+      const session = await requireSessionOwner(context, args.sessionId);
+
+      const existing = await Game.findOne({ sessionId: session._id, clientId: args.clientGameId });
+      if (existing) return existing;
+
+      const court = await Court.findById(args.courtId);
+      if (!court || String(court.sessionId) !== String(session._id)) {
+        throw new GraphQLError("Court not found for this session.", { extensions: { code: "NOT_FOUND" } });
+      }
+      if (court.status !== CourtStatus.AVAILABLE) {
+        throw new GraphQLError(`Court is currently ${court.status.toLowerCase()} and cannot start a new game.`, {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
+
+      const selected = [...args.teamAPlayerIds, ...args.teamBPlayerIds];
+      if (args.teamAPlayerIds.length !== 2 || args.teamBPlayerIds.length !== 2 || new Set(selected).size !== 4) {
+        throw new GraphQLError("A game needs four different players, two per team.", {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
+      const satOut = args.playersSatOutIds.filter((id) => !selected.includes(id));
+
+      const found = await SessionPlayer.find({ _id: { $in: [...selected, ...satOut] }, sessionId: session._id });
+      if (found.length !== selected.length + satOut.length) {
+        throw new GraphQLError("One or more players were not found in this session.", {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
+      const busy = await Game.findOne({
+        sessionId: session._id,
+        status: { $in: [GameStatus.QUEUED, GameStatus.IN_PROGRESS] },
+        $or: [{ teamAPlayerIds: { $in: selected } }, { teamBPlayerIds: { $in: selected } }],
+      });
+      if (busy) {
+        throw new GraphQLError("One of these players is already in a game on another court.", {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
+
+      const claimed = args.createdAt ? new Date(args.createdAt) : null;
+      const now = new Date();
+      const createdAt = claimed && !Number.isNaN(claimed.getTime()) && claimed <= now ? claimed : now;
+
+      let game: HydratedDocument<GameDoc> | null = null;
+      for (let attempt = 0; attempt < 4 && !game; attempt++) {
+        const last = await Game.findOne({ sessionId: session._id }).sort({ gameNumber: -1 });
+        try {
+          game = await Game.create({
+            sessionId: session._id,
+            courtId: court._id,
+            gameNumber: (last?.gameNumber ?? 0) + 1,
+            teamAPlayerIds: args.teamAPlayerIds,
+            teamBPlayerIds: args.teamBPlayerIds,
+            status: GameStatus.QUEUED,
+            playersSatOutIds: satOut,
+            clientId: args.clientGameId,
+            createdAt,
+          });
+        } catch (err) {
+          const dup = (err as { code?: number }).code === 11000;
+          if (!dup) throw err;
+          const again = await Game.findOne({ sessionId: session._id, clientId: args.clientGameId });
+          if (again) return again;
+          // otherwise the game number was taken by a concurrent write: retry with the next one
+        }
+      }
+      if (!game) {
+        throw new GraphQLError("Could not save the game, please try again.", { extensions: { code: "CONFLICT" } });
+      }
+
+      court.activeGameId = game._id;
+      court.status = CourtStatus.IN_USE;
+      await Promise.all([
+        SessionPlayer.updateMany({ _id: { $in: selected } }, { $inc: { consecutiveGames: 1 } }),
+        satOut.length > 0
+          ? SessionPlayer.updateMany({ _id: { $in: satOut } }, { $set: { consecutiveGames: 0 } })
+          : Promise.resolve(),
+        court.save(),
+      ]);
+      return game;
+    },
+
     generateNextGame: async (
       _p: unknown,
       args: { sessionId: string; courtId: string },

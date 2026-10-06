@@ -45,12 +45,19 @@ const GameSchema = new Schema(
      * rebuild `gamesSatOut` purely from completed-game history.
      */
     playersSatOutIds: [{ type: Schema.Types.ObjectId, ref: "SessionPlayer" }],
+
+    /**
+     * Id the browser gave this game when it was generated offline. Lets a retried sync
+     * return the game it already created instead of making a duplicate.
+     */
+    clientId: { type: String },
   },
   { timestamps: true }
 );
 
 GameSchema.index({ sessionId: 1, gameNumber: 1 }, { unique: true });
 GameSchema.index({ sessionId: 1, status: 1 });
+GameSchema.index({ sessionId: 1, clientId: 1 }, { unique: true, partialFilterExpression: { clientId: { $type: "string" } } });
 
 export type GameDoc = InferSchemaType<typeof GameSchema>;
 
