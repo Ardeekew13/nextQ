@@ -13,6 +13,9 @@ export async function login(page: Page) {
   await page.getByRole("textbox", { name: "Password" }).fill(E2E_PASSWORD);
   await page.getByRole("button", { name: "Log in", exact: true }).click();
   await expect(page).toHaveURL(/\/dashboard/);
+  // The first-time "fixed partners" tour covers the whole screen; mark it seen so it
+  // doesn't block clicks in the tests.
+  await page.request.post("/api/graphql", { data: { query: "mutation { markFixedPartnerTourSeen }" } });
 }
 
 /** Looks up the seeded club's active session through the API (uses the login cookie). */
