@@ -587,6 +587,16 @@ export const SESSION_STANDINGS_QUERY = gql`
   }
 `;
 
+export const SIMILAR_PLAYERS = gql`
+  query SimilarPlayers($sessionId: ID!, $name: String!) {
+    similarPlayers(sessionId: $sessionId, name: $name) {
+      id
+      name
+      source
+    }
+  }
+`;
+
 export const SEPARATE_PLAYERS = gql`
   mutation SeparatePlayers($sessionId: ID!, $playerIds: [ID!]!) {
     separatePlayers(sessionId: $sessionId, playerIds: $playerIds) {

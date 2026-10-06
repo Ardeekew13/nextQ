@@ -224,6 +224,14 @@ export const typeDefs = gql`
     updatedAt: Date!
   }
 
+  """A possible "same person" match for a name being added."""
+  type SimilarPlayer {
+    id: ID!
+    name: String!
+    """SESSION = already in this session, CLUB = on the club roster but not in this session."""
+    source: String!
+  }
+
   type TogetherGroup {
     id: ID!
     players: [SessionPlayer!]!
@@ -474,6 +482,7 @@ export const typeDefs = gql`
     sessionSummary(sessionId: ID!): SessionSummary!
 
     clubMembers(clubId: ID!, filter: String): [ClubMember!]!
+    similarPlayers(sessionId: ID!, name: String!): [SimilarPlayer!]!
 
     playerSessionStats(sessionId: ID!, playerId: ID!): PlayerStatistics!
     playerGameLogs(sessionId: ID!, playerId: ID!): [Game!]!
