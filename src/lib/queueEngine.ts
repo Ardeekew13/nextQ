@@ -268,6 +268,38 @@ function findFoursomeAvoidingRepeatedTrios(
   return best ? (best as { players: QueuePlayer[] }).players : null;
 }
 
+/** The splits of a foursome into two pairs that keep every intact fixed pair together. */
+function legalSplits(players: QueuePlayer[]): Array<{ teamA: PlayerPair; teamB: PlayerPair }> {
+  const [p1, p2, p3, p4] = players;
+  const allSplits: Array<{ teamA: PlayerPair; teamB: PlayerPair }> = [
+    { teamA: [p1, p2], teamB: [p3, p4] },
+    { teamA: [p1, p3], teamB: [p2, p4] },
+    { teamA: [p1, p4], teamB: [p2, p3] },
+  ];
+  const ids = new Set(players.map((p) => p.id));
+  const keepsFixedPairsTogether = (split: { teamA: PlayerPair; teamB: PlayerPair }) =>
+    players.every((p) => {
+      if (!p.fixedPartnerId || !ids.has(p.fixedPartnerId)) return true;
+      const onTeamA = split.teamA.some((t) => t.id === p.id);
+      const partnerOnTeamA = split.teamA.some((t) => t.id === p.fixedPartnerId);
+      return onTeamA === partnerOnTeamA;
+    });
+  const constrained = allSplits.filter(keepsFixedPairsTogether);
+  return constrained.length > 0 ? constrained : allSplits;
+}
+
+/** Fewest repeat partnerships any legal split of this foursome can manage (0, 1 or 2).
+ * Fixed pairs are ignored: they're meant to partner every game. */
+function minPartnerRepeats(players: QueuePlayer[]): number {
+  let best = Infinity;
+  for (const { teamA, teamB } of legalSplits(players)) {
+    const repeats = (pair: PlayerPair) =>
+      pair[0].fixedPartnerId === pair[1].id ? 0 : historyCount(pair[0].partnerHistory, pair[1].id);
+    best = Math.min(best, repeats(teamA) + repeats(teamB));
+  }
+  return best;
+}
+
 function selectPlayers(
   eligible: QueuePlayer[],
   mode: QueueMode,
@@ -342,8 +374,13 @@ function selectPlayers(
   // avoid everything, the least-bad foursome is used rather than blocking the game.
   if (selectedList.length >= 4) {
     const pastTriples = mode === QueueMode.SMART ? new Set<string>() : buildPastTriples(pastGroups);
+    // Ranked: keep-apart breaches, then repeated trios, then partnerships that must repeat
+    // (the foursome's best split still pairs two people who've already partnered). The last
+    // one is skipped for SMART, whose promise is a pure queue order.
     const violationsOf = (players: QueuePlayer[]) =>
-      countKeepApartBreaches(players, keepApart) * 100 + countRepeatedTriples(players, pastTriples);
+      countKeepApartBreaches(players, keepApart) * 1000 +
+      countRepeatedTriples(players, pastTriples) * 10 +
+      (mode === QueueMode.SMART ? 0 : minPartnerRepeats(players));
     if (violationsOf(selectedList.slice(0, 4)) > 0) {
       let alternative = findFoursomeAvoidingRepeatedTrios(entries, violationsOf);
       // A keep-apart group outranks the consecutive-game pacing limit: if the below-limit
@@ -470,27 +507,7 @@ function assignTeams(
   // partners even for the very same four. Ties are broken by a PRNG seeded from the four ids.
   const players = [...selected].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) as PlayerQuad;
   if (!randomizeTeams) random = seededRandom(players.map((p) => p.id).join(","));
-  const [p1, p2, p3, p4] = players;
-
-  const allSplits: Array<{ teamA: PlayerPair; teamB: PlayerPair }> = [
-    { teamA: [p1, p2], teamB: [p3, p4] },
-    { teamA: [p1, p3], teamB: [p2, p4] },
-    { teamA: [p1, p4], teamB: [p2, p3] },
-  ];
-
-  // Fixed partners must always land on the same team. Among the four players, keep only
-  // the split(s) that keep every intact fixed pair together — with at most two disjoint
-  // pairs possible in a quad, this is either exactly one split or (no fixed pairs) all three.
-  const ids = new Set(players.map((p) => p.id));
-  const keepsFixedPairsTogether = (split: { teamA: PlayerPair; teamB: PlayerPair }) =>
-    players.every((p) => {
-      if (!p.fixedPartnerId || !ids.has(p.fixedPartnerId)) return true;
-      const onTeamA = split.teamA.some((t) => t.id === p.id);
-      const partnerOnTeamA = split.teamA.some((t) => t.id === p.fixedPartnerId);
-      return onTeamA === partnerOnTeamA;
-    });
-  const constrained = allSplits.filter(keepsFixedPairsTogether);
-  const splits = constrained.length > 0 ? constrained : allSplits;
+  const splits = legalSplits(players);
 
   // If randomizeTeams is true, just pick a random split
   if (randomizeTeams) {
