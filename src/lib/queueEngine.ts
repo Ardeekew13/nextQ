@@ -15,6 +15,8 @@
 
 import { QueueMode } from "@/types/enums";
 
+import { seededRandom } from "@/lib/seededRandom";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -457,11 +459,17 @@ export function rankQueue(
 // ---------------------------------------------------------------------------
 
 function assignTeams(
-  players: PlayerQuad,
+  selected: PlayerQuad,
   pastGroups: ReadonlySet<string>,
   random: () => number,
   randomizeTeams: boolean = false
 ): TeamAssignment {
+  // The split depends only on WHO the four are, never on the rest of the pool or the order
+  // they were picked in. Otherwise the "up next" preview (made while the court is still busy)
+  // and the real fill (made once finished players are back in the pool) can disagree on
+  // partners even for the very same four. Ties are broken by a PRNG seeded from the four ids.
+  const players = [...selected].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) as PlayerQuad;
+  if (!randomizeTeams) random = seededRandom(players.map((p) => p.id).join(","));
   const [p1, p2, p3, p4] = players;
 
   const allSplits: Array<{ teamA: PlayerPair; teamB: PlayerPair }> = [
