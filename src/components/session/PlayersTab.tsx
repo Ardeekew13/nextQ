@@ -646,6 +646,8 @@ export function PlayersTab({
           background: "#3d0a1e", color: "#fff",
           padding: "0 24px", height: 52,
           display: "flex", alignItems: "center", gap: 12, flexShrink: 0,
+          // Stays pinned to the top of the page while the player list scrolls underneath.
+          position: "sticky", top: 0, zIndex: 20,
         }}>
           <span className="selection-count" style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", whiteSpace: "nowrap", marginRight: 4 }}>
             {selectedKeys.length} Selected
@@ -683,14 +685,14 @@ export function PlayersTab({
       <div className="players-table-wrapper">
       {/* Table header */}
       {view === "session" ? (
-        <div style={{ display: "grid", gridTemplateColumns: GRID, padding: "0 24px", background: "#fafafa", borderBottom: "1px solid rgba(138,39,72,0.08)", flexShrink: 0 }} className="players-table-header">
+        <div style={{ display: "grid", gridTemplateColumns: GRID, padding: "0 24px", background: "#fafafa", borderBottom: "1px solid rgba(138,39,72,0.08)", flexShrink: 0, position: "sticky", top: selectedKeys.length > 0 ? 52 : 0, zIndex: 10 }} className="players-table-header">
           <div style={thStyle}>
             <Checkbox checked={allVisibleSelected} indeterminate={selectedKeys.length > 0 && !allVisibleSelected} onChange={(e) => setSelectedKeys(e.target.checked ? sortedPlayers.map((p: any) => p.id) : [])} />
           </div>
           {(["PLAYER", "STATUS", "SKILL", "TONIGHT GP", "W\u2013L", "WIN %", "LAST ON", ""] as const).map((h) => (<div key={h} style={thStyle}>{h}</div>))}
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 120px 80px 80px 80px 100px", padding: "0 24px", background: "#fafafa", borderBottom: "1px solid rgba(138,39,72,0.08)", flexShrink: 0 }} className="players-table-header">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 120px 80px 80px 80px 100px", padding: "0 24px", background: "#fafafa", borderBottom: "1px solid rgba(138,39,72,0.08)", flexShrink: 0, position: "sticky", top: selectedKeys.length > 0 ? 52 : 0, zIndex: 10 }} className="players-table-header">
           {(["PLAYER", "SKILL", "SESSIONS", "TOTAL GP", "W\u2013L", "WIN %"] as const).map((h) => (<div key={h} style={thStyle}>{h}</div>))}
         </div>
       )}
