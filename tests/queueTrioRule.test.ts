@@ -78,3 +78,25 @@ describe("queue engine - no trio shares a game twice", () => {
     }
   );
 });
+
+describe("team split is stable for the same four", () => {
+  it("gives the same partners whatever else is in the pool or the random stream", async () => {
+    const { generateNextGame } = await import("@/lib/queueEngine");
+    const mk = (id: string, min: number) => ({
+      id, gamesPlayed: 1, consecutiveGames: 0, queueEnteredAt: new Date(Date.UTC(2026, 0, 1, 10, min)),
+      gamesSatOut: 0, partnerHistory: {}, opponentHistory: {},
+    });
+    const four = ["a", "b", "c", "d"].map((id, i) => mk(id, i));
+    const extras = ["e", "f", "g", "h"].map((id, i) => mk(id, 30 + i));
+    const split = (pool: ReturnType<typeof mk>[], seed: number) => {
+      let s = seed;
+      const r = generateNextGame(pool, { random: () => ((s = (s * 9301 + 49297) % 233280) / 233280) });
+      if (!r.ok) throw new Error("no game");
+      const key = (t: { id: string }[]) => t.map((p) => p.id).sort().join("");
+      return [key(r.teamA), key(r.teamB)].sort().join("|");
+    };
+    const base = split(four, 1);
+    expect(split([...four, ...extras], 7)).toBe(base);
+    expect(split([...extras.slice(0, 2), ...four], 99)).toBe(base);
+  });
+});

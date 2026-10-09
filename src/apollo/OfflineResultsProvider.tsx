@@ -121,6 +121,18 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      // Show the server's fresh state BEFORE dropping the on-device replay. Clearing first
+      // would flash the old server data (the finished game back on its court) until the
+      // refetch lands.
+      if (sentAny) {
+        try {
+          await client.refetchQueries({ include: ["SessionDashboard"] });
+        } catch {
+          /* offline again: keep the replay, try on the next flush */
+          return;
+        }
+      }
+
       // A session whose every entry has reached the server no longer needs the replay:
       // clear it so the next snapshot is the plain server state.
       const all = loadPending();
@@ -135,6 +147,7 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
     } finally {
       flushing.current = false;
       setSyncing(false);
+      // Refresh everything else (and take a new queue snapshot now that nothing is pending).
       if (sentAny) void client.refetchQueries({ include: "active" });
     }
   }, [client]);
