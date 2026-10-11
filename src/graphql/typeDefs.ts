@@ -559,7 +559,7 @@ export const typeDefs = gql`
       playersSatOutIds: [ID!]!
       createdAt: Date
     ): Game!
-    fillCourtManually(courtId: ID!, teamAPlayerIds: [ID!]!, teamBPlayerIds: [ID!]!): Game!
+    fillCourtManually(courtId: ID!, teamAPlayerIds: [ID!]!, teamBPlayerIds: [ID!]!, allowRepeat: Boolean): Game!
     updateGameTeams(id: ID!, teamAPlayerIds: [ID!]!, teamBPlayerIds: [ID!]!): Game!
     startGame(id: ID!): Game!
     completeGame(id: ID!, input: CompleteGameInput!): Game!

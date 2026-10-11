@@ -756,8 +756,8 @@ export const SESSION_QUEUE_SNAPSHOT = gql`
 
 export const FILL_COURT_MANUALLY = gql`
   ${GAME_FIELDS}
-  mutation FillCourtManually($courtId: ID!, $teamAPlayerIds: [ID!]!, $teamBPlayerIds: [ID!]!) {
-    fillCourtManually(courtId: $courtId, teamAPlayerIds: $teamAPlayerIds, teamBPlayerIds: $teamBPlayerIds) {
+  mutation FillCourtManually($courtId: ID!, $teamAPlayerIds: [ID!]!, $teamBPlayerIds: [ID!]!, $allowRepeat: Boolean) {
+    fillCourtManually(courtId: $courtId, teamAPlayerIds: $teamAPlayerIds, teamBPlayerIds: $teamBPlayerIds, allowRepeat: $allowRepeat) {
       ...GameFields
     }
   }

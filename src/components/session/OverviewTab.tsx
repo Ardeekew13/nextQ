@@ -278,6 +278,35 @@ export function OverviewTab({
 
 	// Fills the first open court with the four best-ranked players who are waiting in the queue
 	// (rank 1 + 4 vs rank 2 + 3). A deliberate organiser action, like filling a court by hand.
+	function offerUndo(undo: () => void | Promise<void>) {
+		const key = `top4-undo-${Date.now()}`;
+		message.success({
+			key,
+			duration: 10,
+			content: (
+				<span>
+					Top 4 match started.{" "}
+					<Button
+						type="link"
+						size="small"
+						style={{ padding: 0 }}
+						onClick={async () => {
+							message.destroy(key);
+							try {
+								await undo();
+								message.info("Match undone. The players are back in the queue.");
+							} catch (e) {
+								message.error(e instanceof Error ? e.message : "Could not undo");
+							}
+						}}
+					>
+						Undo
+					</Button>
+				</span>
+			),
+		});
+	}
+
 	async function handleMatchTopFour() {
 		const court = (session?.courts ?? []).find((c: any) => c.status === "AVAILABLE" && !c.currentGame);
 		if (!court) {
@@ -296,20 +325,41 @@ export function OverviewTab({
 		const teamA = match.teamA.map((p) => p.id);
 		const teamB = match.teamB.map((p) => p.id);
 		const team = (ps: any[]) => ({ players: ps.map((x) => ({ name: x.name })) });
+		const waitingIds = (session?.queuedPlayers ?? []).map((p: any) => p.id);
+		const playersSatOutIds = waitingIds.filter((pid: string) => ![...teamA, ...teamB].includes(pid));
 		const announce = () => announceMatchup(team([r1, r4]), team([r2, r3]), court.name ?? `Court ${court.courtNumber}`);
 		if (snapshot && (!offline.online || sessionOps.length > 0)) {
-			offline.fillCourt({ sessionId, courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, playersSatOutIds: [] });
+			const localId = offline.fillCourt({ sessionId, courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, playersSatOutIds });
 			announce();
+			offerUndo(() => {
+				const op = loadPending().find((o) => o.kind === "fill" && o.localGameId === localId);
+				if (!op) throw new Error("It already synced. Cancel the game from its court instead.");
+				offline.discard(op.id);
+			});
 			return;
 		}
 		try {
-			await fillCourtManually({ variables: { courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB } });
+			const res = await fillCourtManually({
+				variables: { courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, allowRepeat: true },
+			});
 			announce();
-			refetch();
+			await refetch();
+			const gameId = res.data?.fillCourtManually?.id;
+			if (gameId) {
+				offerUndo(async () => {
+					await cancelGame({ variables: { id: gameId } });
+					await refetch();
+				});
+			}
 		} catch (err) {
 			if (snapshot && isNetworkFailure(err)) {
-				offline.fillCourt({ sessionId, courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, playersSatOutIds: [] });
+				const localId = offline.fillCourt({ sessionId, courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, playersSatOutIds });
 				announce();
+				offerUndo(() => {
+					const op = loadPending().find((o) => o.kind === "fill" && o.localGameId === localId);
+					if (!op) throw new Error("It already synced. Cancel the game from its court instead.");
+					offline.discard(op.id);
+				});
 				return;
 			}
 			message.error(err instanceof Error ? err.message : "Could not match the top 4");

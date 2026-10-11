@@ -55,3 +55,19 @@ test("Match top 4 fills the open court with the best-ranked waiting players", as
   await expect(page.getByText("No open court right now.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(2);
 });
+
+test("Match top 4 can be undone", async ({ page }) => {
+  await login(page);
+  const id = await activeSessionId(page);
+  await page.goto(`/dashboard/sessions/${id}`);
+  await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(1);
+
+  await page.getByRole("button", { name: "Match top 4" }).click();
+  await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(2);
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(1);
+
+  // The same four can be matched again after an undo (and after they've played).
+  await page.getByRole("button", { name: "Match top 4" }).click();
+  await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(2);
+});
