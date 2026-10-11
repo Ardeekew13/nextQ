@@ -71,3 +71,23 @@ describe("queue engine - mix everyone", () => {
     expect(run(14, 20, true).spread).toBeLessThanOrEqual(1);
   });
 });
+
+describe("queue engine - match by standings", () => {
+  function pool() {
+    // p1..p8 all equally fair (0 games), but with distinct win rates: p1 best ... p8 worst.
+    return makePlayers(8).map((p, i) => ({ ...p, winRate: 100 - i * 10 }));
+  }
+
+  it("puts ranks 1-4 together in one game", () => {
+    const r = generateNextGame(pool(), { mode: QueueMode.HYBRID, rankMatchups: true, random: () => 0.5 });
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.selected.map((p) => p.id).sort()).toEqual(["p1", "p2", "p3", "p4"]);
+  });
+
+  it("splits best + weakest vs the two middle players", () => {
+    const r = generateNextGame(pool(), { mode: QueueMode.HYBRID, rankMatchups: true, random: () => 0.5 });
+    if (!r.ok) throw new Error(r.reason);
+    const teams = [r.teamA, r.teamB].map((t) => t.map((p) => p.id).sort().join("+")).sort();
+    expect(teams).toEqual(["p1+p4", "p2+p3"]);
+  });
+});

@@ -83,6 +83,7 @@ export const typeDefs = gql`
     queueMode: QueueMode!
     maxConsecutiveGames: Int!
     mixEveryone: Boolean!
+    rankMatchups: Boolean!
   }
 
   input ScoringSettingsInput {
@@ -100,6 +101,7 @@ export const typeDefs = gql`
     queueMode: QueueMode
     maxConsecutiveGames: Int
     mixEveryone: Boolean
+    rankMatchups: Boolean
   }
 
   type User {

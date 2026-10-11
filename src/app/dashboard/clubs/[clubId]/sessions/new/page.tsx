@@ -59,6 +59,7 @@ export default function NewSessionPage() {
 	const [courts, setCourts] = useState(1);
 	const [queueMode, setQueueMode] = useState<QueueMode>("HYBRID");
 	const [mixEveryone, setMixEveryone] = useState(false);
+	const [rankMatchups, setRankMatchups] = useState(false);
 	const [savedAt, setSavedAt] = useState<string | null>(null);
 	const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -80,6 +81,7 @@ export default function NewSessionPage() {
 				setQueueMode(templateSession.settings.queueMode as QueueMode);
 			}
 			if (templateSession.settings?.mixEveryone) setMixEveryone(true);
+			if (templateSession.settings?.rankMatchups) setRankMatchups(true);
 		}
 	}, [club?.sessions, searchParams]);
 
@@ -103,7 +105,7 @@ export default function NewSessionPage() {
 						name: name.trim(),
 						sessionDate: new Date(date).toISOString(),
 						numberOfCourts: courts,
-						settings: { queueMode, maxConsecutiveGames: 2, mixEveryone },
+						settings: { queueMode, maxConsecutiveGames: 2, mixEveryone, rankMatchups },
 					},
 				},
 			});
@@ -338,6 +340,16 @@ export default function NewSessionPage() {
 						<span style={{ display: "block", fontSize: 14, fontWeight: 700, color: "#1d1f20" }}>Mix everyone</span>
 						<span style={{ display: "block", fontSize: 13, color: "rgba(29,31,32,0.6)", lineHeight: 1.5 }}>
 							Prefer players who have shared the court least, so everyone plays with and against everyone else. Fairness of games played still comes first.
+						</span>
+					</span>
+				</label>
+
+				<label style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 20px", border: "1px solid rgba(29,31,32,0.15)", background: "#fff", marginBottom: 24, cursor: "pointer" }}>
+					<input type="checkbox" checked={rankMatchups} onChange={(e) => setRankMatchups(e.target.checked)} style={{ marginTop: 3 }} />
+					<span>
+						<span style={{ display: "block", fontSize: 14, fontWeight: 700, color: "#1d1f20" }}>Match by standings</span>
+						<span style={{ display: "block", fontSize: 13, color: "rgba(29,31,32,0.6)", lineHeight: 1.5 }}>
+							Prefer putting players with similar standings in the same game (ranks 1-4 together, 5-8 together, and so on), with the strongest facing each other. Fairness of games played still comes first.
 						</span>
 					</span>
 				</label>

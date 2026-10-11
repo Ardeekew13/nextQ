@@ -89,6 +89,7 @@ export interface SessionSettings {
   maxConsecutiveGames: number;
   /** Prefer foursomes whose players have shared the fewest games, within a fairness window. */
   mixEveryone?: boolean;
+  rankMatchups?: boolean;
   matchingStyle: MatchingStyle;
   /** @deprecated kept for backward compat */
   pairingMode?: PairingMode;
@@ -109,5 +110,6 @@ export const DEFAULT_SESSION_SETTINGS: SessionSettings = {
   queueMode: QueueMode.HYBRID,
   maxConsecutiveGames: 2,
   mixEveryone: false,
+  rankMatchups: false,
   matchingStyle: MatchingStyle.BALANCED,
 };

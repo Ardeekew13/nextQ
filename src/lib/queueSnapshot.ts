@@ -34,6 +34,7 @@ export async function buildQueueSnapshot(sessionId: string): Promise<QueueSnapsh
     queueMode: (settings?.queueMode ?? QueueMode.HYBRID) as string,
     maxConsecutiveGames: settings?.maxConsecutiveGames ?? 2,
     mixEveryone: settings?.mixEveryone ?? false,
+    rankMatchups: settings?.rankMatchups ?? false,
     lastGameNumber: games[0]?.gameNumber ?? 0,
     players: players.map((p) => ({
       id: String(p._id),

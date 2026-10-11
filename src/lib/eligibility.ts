@@ -73,6 +73,7 @@ interface QueueContext {
   mode: QueueMode;
   maxConsecutiveGames: number;
   mixEveryone: boolean;
+  rankMatchups: boolean;
   pastGroups: Set<string>;
   /** Groups the organiser asked to keep out of the same game. */
   keepApart: string[][];
@@ -105,6 +106,7 @@ async function loadQueueContext(sessionId: string): Promise<QueueContext> {
     mode: (settings?.queueMode ?? QueueMode.HYBRID) as QueueMode,
     maxConsecutiveGames: settings?.maxConsecutiveGames ?? 2,
     mixEveryone: settings?.mixEveryone ?? false,
+    rankMatchups: settings?.rankMatchups ?? false,
     pastGroups,
     keepApart: (session?.separatedGroups ?? []).map((g) => g.playerIds.map(String)),
     seed: queuePoolSeed(eligibleDocs),
@@ -126,6 +128,7 @@ export async function getQueuePreview(
     mode: ctx.mode,
     maxConsecutiveGames: ctx.maxConsecutiveGames,
     mixEveryone: ctx.mixEveryone,
+    rankMatchups: ctx.rankMatchups,
     pastGroups: ctx.pastGroups,
     keepApart: ctx.keepApart,
     random: seededRandom(ctx.seed),
@@ -157,6 +160,7 @@ export async function getNextGamePreview(
     mode: ctx.mode,
     maxConsecutiveGames: ctx.maxConsecutiveGames,
     mixEveryone: ctx.mixEveryone,
+    rankMatchups: ctx.rankMatchups,
     pastGroups: ctx.pastGroups,
     keepApart: ctx.keepApart,
     random: seededRandom(ctx.seed),

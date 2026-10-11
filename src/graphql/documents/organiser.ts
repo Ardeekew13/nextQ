@@ -177,6 +177,7 @@ export const DASHBOARD_QUERY = gql`
         settings {
           queueMode
           mixEveryone
+          rankMatchups
         }
         courts {
           id
@@ -212,6 +213,7 @@ export const CLUB_QUERY = gql`
         settings {
           queueMode
           mixEveryone
+          rankMatchups
         }
       }
     }
@@ -241,6 +243,7 @@ export const CLUB_DETAIL_QUERY = gql`
         settings {
           queueMode
           mixEveryone
+          rankMatchups
         }
         courts {
           id
@@ -419,6 +422,7 @@ export const SESSION_DASHBOARD_QUERY = gql`
         matchingStyle
         queueMode
         mixEveryone
+        rankMatchups
         maxConsecutiveGames
       }
       courts {

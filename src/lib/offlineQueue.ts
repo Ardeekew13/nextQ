@@ -56,6 +56,7 @@ export interface QueueSnapshot {
   queueMode: string;
   maxConsecutiveGames: number;
   mixEveryone?: boolean;
+  rankMatchups?: boolean;
   lastGameNumber: number;
   players: SnapshotPlayer[];
   activeGames: SnapshotGame[];
@@ -224,6 +225,7 @@ function engineOptions(snapshot: QueueSnapshot, state: LocalState) {
     mode: (snapshot.queueMode ?? QueueMode.HYBRID) as QueueMode,
     maxConsecutiveGames: snapshot.maxConsecutiveGames ?? 2,
     mixEveryone: snapshot.mixEveryone ?? false,
+    rankMatchups: snapshot.rankMatchups ?? false,
     pastGroups: state.pastGroups,
     keepApart: snapshot.keepApart,
     random: seededRandom(poolSeed(state.eligible.map((p) => p.id))),

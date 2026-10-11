@@ -330,7 +330,8 @@ function selectPlayers(
   random: () => number,
   pastGroups?: ReadonlySet<string>,
   keepApart?: ReadonlyArray<ReadonlyArray<string>>,
-  mixEveryone: boolean = false
+  mixEveryone: boolean = false,
+  rankMatchups: boolean = false
 ): { ok: true; selected: PlayerQuad } | { ok: false; reason: string } {
   if (eligible.length < 4) {
     return {
@@ -405,7 +406,7 @@ function selectPlayers(
       countKeepApartBreaches(players, keepApart) * 1000 +
       countRepeatedTriples(players, pastTriples) * 10 +
       (mode === QueueMode.SMART ? 0 : minPartnerRepeats(players));
-    if (mixEveryone && mode !== QueueMode.SMART) {
+    if ((mixEveryone || rankMatchups) && mode !== QueueMode.SMART) {
       // Mix everyone: among players who aren't more than one game ahead of whoever has played
       // least (so nobody is starved or favoured), pick the foursome whose members have shared
       // the fewest games with each other, then the split with the fewest repeat partners.
@@ -426,7 +427,23 @@ function selectPlayers(
         countKeepApartBreaches(players, keepApart) * 1000 +
         countRepeatedTriples(players, pastTriples) * 10 +
         minPartnerRepeats(players);
-      const mixSecondary = (players: QueuePlayer[]) => coPlayTotal(players);
+      // Standings rank among everyone eligible (1 = best): win rate, then games played.
+      const rankOf = new Map<string, number>();
+      [...eligible]
+        .sort(
+          (a, b) =>
+            (b.winRate ?? 0) - (a.winRate ?? 0) ||
+            b.gamesPlayed - a.gamesPlayed ||
+            (a.id < b.id ? -1 : 1)
+        )
+        .forEach((p, i) => rankOf.set(p.id, i + 1));
+      // Rank spread of a foursome: ranks 1-4 together = 3, the smallest possible.
+      const rankSpread = (players: QueuePlayer[]) => {
+        const r = players.map((p) => rankOf.get(p.id) ?? 0);
+        return Math.max(...r) - Math.min(...r);
+      };
+      const mixSecondary = (players: QueuePlayer[]) =>
+        (mixEveryone ? coPlayTotal(players) * 100 : 0) + (rankMatchups ? rankSpread(players) : 0);
       let mixed = findFoursomeAvoidingRepeatedTrios(windowed, mixViolations, mixSecondary);
       if (mixed && countKeepApartBreaches(mixed, keepApart) > 0 && pool.length < eligible.length) {
         const inPool = new Set(pool.map((p) => p.id));
@@ -513,6 +530,7 @@ export function rankQueue(
     pastGroups = new Set(),
     keepApart,
     mixEveryone = false,
+    rankMatchups = false,
     random = Math.random,
   } = options;
 
@@ -521,7 +539,7 @@ export function rankQueue(
   const ordered: QueuePlayer[] = [];
 
   while (pool.length >= 4) {
-    const selection = selectPlayers(pool, mode, maxConsecutiveGames, random, groups, keepApart, mixEveryone);
+    const selection = selectPlayers(pool, mode, maxConsecutiveGames, random, groups, keepApart, mixEveryone, rankMatchups);
     if (!selection.ok) break;
 
     const selectedIds = new Set(selection.selected.map((p) => p.id));
@@ -556,7 +574,8 @@ function assignTeams(
   selected: PlayerQuad,
   pastGroups: ReadonlySet<string>,
   random: () => number,
-  randomizeTeams: boolean = false
+  randomizeTeams: boolean = false,
+  rankMatchups: boolean = false
 ): TeamAssignment {
   // The split depends only on WHO the four are, never on the rest of the pool or the order
   // they were picked in. Otherwise the "up next" preview (made while the court is still busy)
@@ -589,7 +608,12 @@ function assignTeams(
 
     const groupRepeat = pastGroups.has(groupKey(players)) ? 1 : 0;
 
-    const score = partnerRepeats * 100 + groupRepeat * 25 + opponentRepeats;
+    // Rank matchups: balance the two teams' combined win rate so the strongest players
+    // end up as opponents (best + weakest vs the two middle players).
+    const strength = (t: QueuePlayer[]) => t.reduce((n, p) => n + (p.winRate ?? 0), 0);
+    const imbalance = rankMatchups ? Math.abs(strength(split.teamA) - strength(split.teamB)) / 100 : 0;
+
+    const score = partnerRepeats * 100 + groupRepeat * 25 + opponentRepeats + imbalance;
 
     return { split, score, tiebreak: random() };
   });
@@ -612,6 +636,8 @@ export interface QueueEngineOptions {
   keepApart?: ReadonlyArray<ReadonlyArray<string>>;
   /** Prefer foursomes whose players have shared the fewest games (within a fairness window). */
   mixEveryone?: boolean;
+  /** Put players with similar standings in the same game, as opponents. */
+  rankMatchups?: boolean;
   random?: () => number;
   randomizeTeams?: boolean;
 }
@@ -626,6 +652,7 @@ export function generateNextGame(
     pastGroups = new Set(),
     keepApart,
     mixEveryone = false,
+    rankMatchups = false,
     random = Math.random,
     // Team splits always minimize repeat partners/opponents by default, in every mode
     // (including HYBRID) — the queue-selection logic above already varies who gets picked
@@ -635,10 +662,10 @@ export function generateNextGame(
     randomizeTeams = false,
   } = options;
 
-  const selection = selectPlayers(eligible, mode, maxConsecutiveGames, random, pastGroups, keepApart, mixEveryone);
+  const selection = selectPlayers(eligible, mode, maxConsecutiveGames, random, pastGroups, keepApart, mixEveryone, rankMatchups);
   if (!selection.ok) return selection;
 
-  const { teamA, teamB } = assignTeams(selection.selected, pastGroups, random, randomizeTeams);
+  const { teamA, teamB } = assignTeams(selection.selected, pastGroups, random, randomizeTeams, rankMatchups);
 
   return { ok: true, selected: selection.selected, teamA, teamB };
 }

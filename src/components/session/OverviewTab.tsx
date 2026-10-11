@@ -800,6 +800,23 @@ export function OverviewTab({
 								/>
 								Mix everyone
 							</span>
+							<span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 12, fontSize: 12 }} title="Prefer players with similar standings in the same game (ranks 1-4 together), strongest facing each other.">
+								<Switch
+									size="small"
+									checked={!!session?.settings?.rankMatchups}
+									loading={updatingMix}
+									onChange={async (checked) => {
+										try {
+											await updateSession({ variables: { id: sessionId, input: { settings: { rankMatchups: checked } } } });
+											await refetch();
+											message.success(checked ? "Matching by standings: new games group similar ranks." : "Match by standings is off.");
+										} catch (e) {
+											message.error(e instanceof Error ? e.message : "Could not update the setting");
+										}
+									}}
+								/>
+								Match by standings
+							</span>
 							<Button
 								className="add-court-btn"
 								size="small"
