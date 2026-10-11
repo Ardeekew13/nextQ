@@ -32,6 +32,7 @@ import {
 	type QueueSnapshot,
 } from "@/lib/offlineQueue";
 import { isNetworkFailure, loadPending, loadSnapshot, saveSnapshot } from "@/lib/offlineResults";
+import { pickTopFour } from "@/lib/topFour";
 import type { SessionStats } from "@/app/dashboard/sessions/[sessionId]/page";
 
 const { Text } = Typography;
@@ -283,18 +284,17 @@ export function OverviewTab({
 			message.warning("No open court right now.");
 			return;
 		}
-		const waiting = new Set<string>((session?.queuedPlayers ?? []).map((p: any) => p.id));
-		const ranked = [...(session?.standings ?? [])]
-			.sort((a: any, b: any) => a.rank - b.rank)
-			.map((st: any) => st.player)
-			.filter((pl: any) => waiting.has(pl.id));
-		if (ranked.length < 4) {
+		const match = pickTopFour(
+			session?.standings ?? [],
+			(session?.queuedPlayers ?? []).map((p: any) => p.id),
+		);
+		if (!match) {
 			message.warning("Need at least 4 ranked players waiting in the queue.");
 			return;
 		}
-		const [r1, r2, r3, r4] = ranked.slice(0, 4);
-		const teamA = [r1.id, r4.id];
-		const teamB = [r2.id, r3.id];
+		const [r1, r2, r3, r4] = match.players;
+		const teamA = match.teamA.map((p) => p.id);
+		const teamB = match.teamB.map((p) => p.id);
 		const team = (ps: any[]) => ({ players: ps.map((x) => ({ name: x.name })) });
 		const announce = () => announceMatchup(team([r1, r4]), team([r2, r3]), court.name ?? `Court ${court.courtNumber}`);
 		if (snapshot && (!offline.online || sessionOps.length > 0)) {
