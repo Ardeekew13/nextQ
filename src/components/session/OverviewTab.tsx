@@ -275,6 +275,47 @@ export function OverviewTab({
 		queuePage * QUEUE_PAGE_SIZE,
 	);
 
+	// Fills the first open court with the four best-ranked players who are waiting in the queue
+	// (rank 1 + 4 vs rank 2 + 3). A deliberate organiser action, like filling a court by hand.
+	async function handleMatchTopFour() {
+		const court = (session?.courts ?? []).find((c: any) => c.status === "AVAILABLE" && !c.currentGame);
+		if (!court) {
+			message.warning("No open court right now.");
+			return;
+		}
+		const waiting = new Set<string>((session?.queuedPlayers ?? []).map((p: any) => p.id));
+		const ranked = [...(session?.standings ?? [])]
+			.sort((a: any, b: any) => a.rank - b.rank)
+			.map((st: any) => st.player)
+			.filter((pl: any) => waiting.has(pl.id));
+		if (ranked.length < 4) {
+			message.warning("Need at least 4 ranked players waiting in the queue.");
+			return;
+		}
+		const [r1, r2, r3, r4] = ranked.slice(0, 4);
+		const teamA = [r1.id, r4.id];
+		const teamB = [r2.id, r3.id];
+		const team = (ps: any[]) => ({ players: ps.map((x) => ({ name: x.name })) });
+		const announce = () => announceMatchup(team([r1, r4]), team([r2, r3]), court.name ?? `Court ${court.courtNumber}`);
+		if (snapshot && (!offline.online || sessionOps.length > 0)) {
+			offline.fillCourt({ sessionId, courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, playersSatOutIds: [] });
+			announce();
+			return;
+		}
+		try {
+			await fillCourtManually({ variables: { courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB } });
+			announce();
+			refetch();
+		} catch (err) {
+			if (snapshot && isNetworkFailure(err)) {
+				offline.fillCourt({ sessionId, courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, playersSatOutIds: [] });
+				announce();
+				return;
+			}
+			message.error(err instanceof Error ? err.message : "Could not match the top 4");
+		}
+	}
+
 	async function handleGenerate(courtId: string) {
 		// Generated on this device whenever the connection is down or earlier actions are still
 		// waiting to sync (the server doesn't know about them yet).
@@ -800,23 +841,16 @@ export function OverviewTab({
 								/>
 								Mix everyone
 							</span>
-							<span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 12, fontSize: 12 }} title="Prefer players with similar standings in the same game (ranks 1-4 together), strongest facing each other.">
-								<Switch
-									size="small"
-									checked={!!session?.settings?.rankMatchups}
-									loading={updatingMix}
-									onChange={async (checked) => {
-										try {
-											await updateSession({ variables: { id: sessionId, input: { settings: { rankMatchups: checked } } } });
-											await refetch();
-											message.success(checked ? "Matching by standings: new games group similar ranks." : "Match by standings is off.");
-										} catch (e) {
-											message.error(e instanceof Error ? e.message : "Could not update the setting");
-										}
-									}}
-								/>
-								Match by standings
-							</span>
+							<Button
+								size="small"
+								style={{ marginRight: 12, fontSize: 11, height: 28 }}
+								loading={fillingManually}
+								disabled={session?.status !== "ACTIVE"}
+								title="Fill an open court with the top 4 ranked players who are waiting: best + 4th vs 2nd + 3rd."
+								onClick={handleMatchTopFour}
+							>
+								Match top 4
+							</Button>
 							<Button
 								className="add-court-btn"
 								size="small"
