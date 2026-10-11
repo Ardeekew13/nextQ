@@ -239,18 +239,28 @@ function countKeepApartBreaches(
  */
 function findFoursomeAvoidingRepeatedTrios(
   entries: ScoredEntry[],
-  violationsOf: (players: QueuePlayer[]) => number
+  violationsOf: (players: QueuePlayer[]) => number,
+  /** Optional second criterion, compared after violations and before the priority score
+   * (used by "mix everyone" to prefer foursomes whose members have met the least). */
+  secondaryOf: (players: QueuePlayer[]) => number = () => 0
 ): QueuePlayer[] | null {
   const candidates = entries.slice(0, TRIO_SEARCH_WIDTH);
-  let best: { players: QueuePlayer[]; violations: number; score: number } | null = null;
+  let best: { players: QueuePlayer[]; violations: number; secondary: number; score: number } | null = null;
   const chosen: ScoredEntry[] = [];
 
   function dfs(start: number, size: number, score: number) {
     if (size === 4) {
       const players = chosen.flatMap((e) => (e.kind === "pair" ? [...e.players] : [e.player]));
       const violations = violationsOf(players);
-      if (!best || violations < best.violations || (violations === best.violations && score < best.score)) {
-        best = { players, violations, score };
+      const secondary = secondaryOf(players);
+      const b = best as { violations: number; secondary: number; score: number } | null;
+      if (
+        !b ||
+        violations < b.violations ||
+        (violations === b.violations && secondary < b.secondary) ||
+        (violations === b.violations && secondary === b.secondary && score < b.score)
+      ) {
+        best = { players, violations, secondary, score };
       }
       return;
     }
@@ -266,6 +276,19 @@ function findFoursomeAvoidingRepeatedTrios(
   dfs(0, 0, 0);
 
   return best ? (best as { players: QueuePlayer[] }).players : null;
+}
+
+/** How many games two players have already shared, as partners or opponents. */
+function sharedGames(a: QueuePlayer, b: QueuePlayer): number {
+  return historyCount(a.partnerHistory, b.id) + historyCount(a.opponentHistory, b.id);
+}
+
+/** Total shared games across the six pairings in a foursome — lower means fresher faces. */
+function coPlayTotal(players: QueuePlayer[]): number {
+  let total = 0;
+  for (let i = 0; i < players.length; i++)
+    for (let j = i + 1; j < players.length; j++) total += sharedGames(players[i], players[j]);
+  return total;
 }
 
 /** The splits of a foursome into two pairs that keep every intact fixed pair together. */
@@ -306,7 +329,8 @@ function selectPlayers(
   maxConsecutiveGames: number,
   random: () => number,
   pastGroups?: ReadonlySet<string>,
-  keepApart?: ReadonlyArray<ReadonlyArray<string>>
+  keepApart?: ReadonlyArray<ReadonlyArray<string>>,
+  mixEveryone: boolean = false
 ): { ok: true; selected: PlayerQuad } | { ok: false; reason: string } {
   if (eligible.length < 4) {
     return {
@@ -381,7 +405,39 @@ function selectPlayers(
       countKeepApartBreaches(players, keepApart) * 1000 +
       countRepeatedTriples(players, pastTriples) * 10 +
       (mode === QueueMode.SMART ? 0 : minPartnerRepeats(players));
-    if (violationsOf(selectedList.slice(0, 4)) > 0) {
+    if (mixEveryone && mode !== QueueMode.SMART) {
+      // Mix everyone: among players who aren't more than one game ahead of whoever has played
+      // least (so nobody is starved or favoured), pick the foursome whose members have shared
+      // the fewest games with each other, then the split with the fewest repeat partners.
+      // Keep-apart and repeated trios still come first; the queue score breaks remaining ties.
+      const minGames = Math.min(...pool.map((p) => p.gamesPlayed));
+      let window = minGames + 1;
+      let windowed = entries.filter((e) =>
+        (e.kind === "pair" ? e.players : [e.player]).every((p) => p.gamesPlayed <= window)
+      );
+      const playersIn = (list: Entry[]) => list.reduce((n, e) => n + (e.kind === "pair" ? 2 : 1), 0);
+      while (playersIn(windowed) < 8 && window < minGames + 50) {
+        window += 1;
+        windowed = entries.filter((e) =>
+          (e.kind === "pair" ? e.players : [e.player]).every((p) => p.gamesPlayed <= window)
+        );
+      }
+      const mixViolations = (players: QueuePlayer[]) =>
+        countKeepApartBreaches(players, keepApart) * 1000 +
+        countRepeatedTriples(players, pastTriples) * 10 +
+        minPartnerRepeats(players);
+      const mixSecondary = (players: QueuePlayer[]) => coPlayTotal(players);
+      let mixed = findFoursomeAvoidingRepeatedTrios(windowed, mixViolations, mixSecondary);
+      if (mixed && countKeepApartBreaches(mixed, keepApart) > 0 && pool.length < eligible.length) {
+        const inPool = new Set(pool.map((p) => p.id));
+        const extras: ScoredEntry[] = eligible
+          .filter((p) => !inPool.has(p.id) && !p.fixedPartnerId)
+          .map((player) => ({ kind: "single" as const, player, score: scoreById.get(player.id)! }));
+        const widened = [...windowed, ...extras].sort((a, b) => a.score - b.score);
+        mixed = findFoursomeAvoidingRepeatedTrios(widened, mixViolations, mixSecondary) ?? mixed;
+      }
+      if (mixed) selectedList.splice(0, selectedList.length, ...mixed);
+    } else if (violationsOf(selectedList.slice(0, 4)) > 0) {
       let alternative = findFoursomeAvoidingRepeatedTrios(entries, violationsOf);
       // A keep-apart group outranks the consecutive-game pacing limit: if the below-limit
       // pool can't avoid breaking one, widen the search to players who are over the limit.
@@ -456,6 +512,7 @@ export function rankQueue(
     maxConsecutiveGames = 2,
     pastGroups = new Set(),
     keepApart,
+    mixEveryone = false,
     random = Math.random,
   } = options;
 
@@ -464,7 +521,7 @@ export function rankQueue(
   const ordered: QueuePlayer[] = [];
 
   while (pool.length >= 4) {
-    const selection = selectPlayers(pool, mode, maxConsecutiveGames, random, groups, keepApart);
+    const selection = selectPlayers(pool, mode, maxConsecutiveGames, random, groups, keepApart, mixEveryone);
     if (!selection.ok) break;
 
     const selectedIds = new Set(selection.selected.map((p) => p.id));
@@ -553,6 +610,8 @@ export interface QueueEngineOptions {
   pastGroups?: ReadonlySet<string>;
   /** Groups of player ids the organiser asked to keep out of the same game. */
   keepApart?: ReadonlyArray<ReadonlyArray<string>>;
+  /** Prefer foursomes whose players have shared the fewest games (within a fairness window). */
+  mixEveryone?: boolean;
   random?: () => number;
   randomizeTeams?: boolean;
 }
@@ -566,6 +625,7 @@ export function generateNextGame(
     maxConsecutiveGames = 2,
     pastGroups = new Set(),
     keepApart,
+    mixEveryone = false,
     random = Math.random,
     // Team splits always minimize repeat partners/opponents by default, in every mode
     // (including HYBRID) — the queue-selection logic above already varies who gets picked
@@ -575,7 +635,7 @@ export function generateNextGame(
     randomizeTeams = false,
   } = options;
 
-  const selection = selectPlayers(eligible, mode, maxConsecutiveGames, random, pastGroups, keepApart);
+  const selection = selectPlayers(eligible, mode, maxConsecutiveGames, random, pastGroups, keepApart, mixEveryone);
   if (!selection.ok) return selection;
 
   const { teamA, teamB } = assignTeams(selection.selected, pastGroups, random, randomizeTeams);

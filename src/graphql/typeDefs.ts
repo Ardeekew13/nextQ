@@ -82,6 +82,7 @@ export const typeDefs = gql`
     matchingStyle: MatchingStyle!
     queueMode: QueueMode!
     maxConsecutiveGames: Int!
+    mixEveryone: Boolean!
   }
 
   input ScoringSettingsInput {
@@ -98,6 +99,7 @@ export const typeDefs = gql`
     matchingStyle: MatchingStyle
     queueMode: QueueMode
     maxConsecutiveGames: Int
+    mixEveryone: Boolean
   }
 
   type User {

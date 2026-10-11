@@ -72,6 +72,7 @@ interface QueueContext {
   byId: Map<string, HydratedDocument<SessionPlayerDoc>>;
   mode: QueueMode;
   maxConsecutiveGames: number;
+  mixEveryone: boolean;
   pastGroups: Set<string>;
   /** Groups the organiser asked to keep out of the same game. */
   keepApart: string[][];
@@ -103,6 +104,7 @@ async function loadQueueContext(sessionId: string): Promise<QueueContext> {
     byId: new Map(eligibleDocs.map((doc) => [String(doc._id), doc])),
     mode: (settings?.queueMode ?? QueueMode.HYBRID) as QueueMode,
     maxConsecutiveGames: settings?.maxConsecutiveGames ?? 2,
+    mixEveryone: settings?.mixEveryone ?? false,
     pastGroups,
     keepApart: (session?.separatedGroups ?? []).map((g) => g.playerIds.map(String)),
     seed: queuePoolSeed(eligibleDocs),
@@ -123,6 +125,7 @@ export async function getQueuePreview(
   const ranked = rankQueue(ctx.eligibleDocs.map(toQueuePlayer), {
     mode: ctx.mode,
     maxConsecutiveGames: ctx.maxConsecutiveGames,
+    mixEveryone: ctx.mixEveryone,
     pastGroups: ctx.pastGroups,
     keepApart: ctx.keepApart,
     random: seededRandom(ctx.seed),
@@ -153,6 +156,7 @@ export async function getNextGamePreview(
   const result = queueEngineGenerateNextGame(ctx.eligibleDocs.map(toQueuePlayer), {
     mode: ctx.mode,
     maxConsecutiveGames: ctx.maxConsecutiveGames,
+    mixEveryone: ctx.mixEveryone,
     pastGroups: ctx.pastGroups,
     keepApart: ctx.keepApart,
     random: seededRandom(ctx.seed),

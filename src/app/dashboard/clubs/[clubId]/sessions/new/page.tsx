@@ -58,6 +58,7 @@ export default function NewSessionPage() {
 	const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
 	const [courts, setCourts] = useState(1);
 	const [queueMode, setQueueMode] = useState<QueueMode>("HYBRID");
+	const [mixEveryone, setMixEveryone] = useState(false);
 	const [savedAt, setSavedAt] = useState<string | null>(null);
 	const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -78,6 +79,7 @@ export default function NewSessionPage() {
 			if (templateSession.settings?.queueMode) {
 				setQueueMode(templateSession.settings.queueMode as QueueMode);
 			}
+			if (templateSession.settings?.mixEveryone) setMixEveryone(true);
 		}
 	}, [club?.sessions, searchParams]);
 
@@ -101,7 +103,7 @@ export default function NewSessionPage() {
 						name: name.trim(),
 						sessionDate: new Date(date).toISOString(),
 						numberOfCourts: courts,
-						settings: { queueMode, maxConsecutiveGames: 2 },
+						settings: { queueMode, maxConsecutiveGames: 2, mixEveryone },
 					},
 				},
 			});
@@ -328,6 +330,17 @@ export default function NewSessionPage() {
 						);
 					})}
 				</div>
+
+				{/* Mix everyone */}
+				<label style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 20px", border: "1px solid rgba(29,31,32,0.15)", background: "#fff", marginBottom: 24, cursor: "pointer" }}>
+					<input type="checkbox" checked={mixEveryone} onChange={(e) => setMixEveryone(e.target.checked)} style={{ marginTop: 3 }} />
+					<span>
+						<span style={{ display: "block", fontSize: 14, fontWeight: 700, color: "#1d1f20" }}>Mix everyone</span>
+						<span style={{ display: "block", fontSize: 13, color: "rgba(29,31,32,0.6)", lineHeight: 1.5 }}>
+							Prefer players who have shared the court least, so everyone plays with and against everyone else. Fairness of games played still comes first.
+						</span>
+					</span>
+				</label>
 
 				{/* Hint banner */}
 				{hint && (

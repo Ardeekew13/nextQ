@@ -34,6 +34,7 @@ function mergeSettings(
     matchingStyle: string;
     queueMode: string;
     maxConsecutiveGames: number;
+    mixEveryone: boolean;
   }> | null
 ): SessionSettings {
   if (!input) return existing;
@@ -46,6 +47,7 @@ function mergeSettings(
     matchingStyle: (input.matchingStyle as SessionSettings["matchingStyle"]) ?? existing.matchingStyle ?? MatchingStyle.BALANCED,
     queueMode: (input.queueMode as SessionSettings["queueMode"]) ?? existing.queueMode ?? QueueMode.HYBRID,
     maxConsecutiveGames: input.maxConsecutiveGames ?? existing.maxConsecutiveGames ?? 2,
+    mixEveryone: input.mixEveryone ?? existing.mixEveryone ?? false,
   };
 }
 
@@ -398,5 +400,6 @@ export const sessionResolvers = {
       parent.queueMode ?? QueueMode.HYBRID,
     maxConsecutiveGames: (parent: { maxConsecutiveGames?: number }) =>
       parent.maxConsecutiveGames ?? 2,
+    mixEveryone: (parent: { mixEveryone?: boolean }) => parent.mixEveryone ?? false,
   },
 };

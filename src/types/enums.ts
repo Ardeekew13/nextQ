@@ -87,6 +87,8 @@ export interface SessionSettings {
   avoidRepeatOpponentsWindow: number;
   queueMode: QueueMode;
   maxConsecutiveGames: number;
+  /** Prefer foursomes whose players have shared the fewest games, within a fairness window. */
+  mixEveryone?: boolean;
   matchingStyle: MatchingStyle;
   /** @deprecated kept for backward compat */
   pairingMode?: PairingMode;
@@ -106,5 +108,6 @@ export const DEFAULT_SESSION_SETTINGS: SessionSettings = {
   avoidRepeatOpponentsWindow: 2,
   queueMode: QueueMode.HYBRID,
   maxConsecutiveGames: 2,
+  mixEveryone: false,
   matchingStyle: MatchingStyle.BALANCED,
 };

@@ -8,6 +8,7 @@ import {
 	FILL_COURT_MANUALLY,
 	GENERATE_NEXT_GAME,
 	SEPARATE_PLAYERS,
+	UPDATE_SESSION,
 	SESSION_DASHBOARD_QUERY,
 	SESSION_QUEUE_SNAPSHOT,
 	UPDATE_GAME_RESULT,
@@ -15,7 +16,7 @@ import {
 	CLUB_DETAIL_QUERY,
 } from "@/graphql/documents/organiser";
 import { useMutation, useQuery } from "@apollo/client";
-import { App, Button, Empty, Input, Typography } from "antd";
+import { App, Button, Empty, Input, Modal, Switch, Typography } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	ScoreEntryForm,
@@ -34,6 +35,12 @@ import { isNetworkFailure, loadPending, loadSnapshot, saveSnapshot } from "@/lib
 import type { SessionStats } from "@/app/dashboard/sessions/[sessionId]/page";
 
 const { Text } = Typography;
+
+function pairsOf(ids: string[]): [string, string][] {
+	const out: [string, string][] = [];
+	for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) out.push([ids[i], ids[j]]);
+	return out;
+}
 
 function formatWait(minutes: number) {
 	if (minutes < 60) return `${minutes} min`;
@@ -106,7 +113,8 @@ export function OverviewTab({
 	const [editResultGame, setEditResultGame] = useState<any>(null);
 	const [queueSearch, setQueueSearch] = useState("");
 	const [alertDismissed, setAlertDismissed] = useState(false);
-	const [expandedTogether, setExpandedTogether] = useState<Record<string, boolean>>({});
+	const [historyGroup, setHistoryGroup] = useState<any>(null);
+	const [updateSession, { loading: updatingMix }] = useMutation(UPDATE_SESSION);
 	const [queuePage, setQueuePage] = useState(1);
 	const QUEUE_PAGE_SIZE = 10;
 
@@ -620,7 +628,6 @@ export function OverviewTab({
 							names.length > 1
 								? `${names.slice(0, -1).join(", ")} & ${names[names.length - 1]}`
 								: names[0];
-						const open = !!expandedTogether[group.id];
 						return (
 							<div key={group.id}>
 								<div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -629,13 +636,8 @@ export function OverviewTab({
 										<strong>{nameList}</strong> have been in the same game{" "}
 										<strong style={{ color: "#b45309" }}>{group.gamesTogether} times</strong>.
 									</Text>
-									<Button
-										size="small"
-										onClick={() =>
-											setExpandedTogether((prev) => ({ ...prev, [group.id]: !open }))
-										}
-									>
-										{open ? "Hide games" : "Show games"}
+									<Button size="small" onClick={() => setHistoryGroup(group)}>
+										View history
 									</Button>
 									<Button
 										size="small"
@@ -658,22 +660,101 @@ export function OverviewTab({
 										Break them up
 									</Button>
 								</div>
-								{open && (
-									<div style={{ margin: "8px 0 0 27px", display: "flex", flexDirection: "column", gap: 4 }}>
-										{group.games.map((game: any) => (
-											<Text key={game.id} style={{ fontSize: 12, color: "#374151" }}>
-												<strong>Game {game.gameNumber}:</strong>{" "}
-												{game.teamA.players.map((p: any) => p.name).join(" & ")} vs{" "}
-												{game.teamB.players.map((p: any) => p.name).join(" & ")}
-											</Text>
-										))}
-									</div>
-								)}
 							</div>
 						);
 					})}
 				</div>
 			)}
+
+			{/* ── Match history for a "keeps landing together" group ── */}
+			<Modal
+				open={!!historyGroup}
+				onCancel={() => setHistoryGroup(null)}
+				title={historyGroup ? `Matches: ${historyGroup.players.map((p: any) => p.name).join(", ")}` : ""}
+				width={560}
+				footer={
+					historyGroup ? (
+						<div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+							<Button onClick={() => setHistoryGroup(null)}>Close</Button>
+							<Button
+								type="primary"
+								loading={separating}
+								onClick={async () => {
+									try {
+										await separatePlayers({ variables: { sessionId, playerIds: historyGroup.players.map((p: any) => p.id) } });
+										message.success("They will no longer be put in the same game.");
+										setHistoryGroup(null);
+									} catch (e) {
+										message.error(e instanceof Error ? e.message : "Could not break them up");
+									}
+								}}
+							>
+								Break them up
+							</Button>
+						</div>
+					) : null
+				}
+			>
+				{historyGroup && (() => {
+					const ids = new Set<string>(historyGroup.players.map((p: any) => p.id));
+					const games = [...historyGroup.games].sort((a: any, b: any) => a.gameNumber - b.gameNumber);
+					const pairKey = (a: string, b: string) => [a, b].sort().join(":");
+					const nameOf = new Map<string, string>(historyGroup.players.map((p: any) => [p.id, p.name]));
+					const stats = new Map<string, { with: number; against: number }>();
+					const list = [...ids];
+					for (let i = 0; i < list.length; i++)
+						for (let j = i + 1; j < list.length; j++) stats.set(pairKey(list[i], list[j]), { with: 0, against: 0 });
+					for (const g of games) {
+						const a = g.teamA.players.map((p: any) => p.id);
+						const b = g.teamB.players.map((p: any) => p.id);
+						for (const [x, y] of [...pairsOf(a), ...pairsOf(b)]) { const st = stats.get(pairKey(x, y)); if (st) st.with++; }
+						for (const x of a) for (const y of b) { const st = stats.get(pairKey(x, y)); if (st) st.against++; }
+					}
+					const renderTeam = (players: any[]) =>
+						players.map((p: any, i: number) => (
+							<span key={p.id}>
+								{i > 0 && " & "}
+								<span style={ids.has(p.id) ? { fontWeight: 700, color: "#b45309" } : undefined}>{p.name}</span>
+							</span>
+						));
+					return (
+						<div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+							<div>
+								<Text strong style={{ fontSize: 12 }}>How often each pair met</Text>
+								<div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 4 }}>
+									{[...stats.entries()].map(([key, st]) => {
+										const [x, y] = key.split(":");
+										return (
+											<Text key={key} style={{ fontSize: 12, color: "#374151" }}>
+												{nameOf.get(x)} &amp; {nameOf.get(y)}: partners {st.with}×, opponents {st.against}×
+											</Text>
+										);
+									})}
+								</div>
+							</div>
+							<div>
+								<Text strong style={{ fontSize: 12 }}>Games ({games.length})</Text>
+								<div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4, maxHeight: 320, overflowY: "auto" }}>
+									{games.map((g: any) => (
+										<div key={g.id} style={{ fontSize: 12, color: "#374151", padding: "6px 8px", background: "#f9fafb", border: "1px solid #e5e7eb" }}>
+											<strong>Game {g.gameNumber}</strong>
+											{g.court?.name || g.court?.courtNumber ? ` · ${g.court.name || `Court ${g.court.courtNumber}`}` : ""}
+											{g.status !== "COMPLETED" ? ` · ${String(g.status).toLowerCase().replace("_", " ")}` : ""}
+											<div style={{ fontWeight: g.winningTeam === "A" ? 700 : 400 }}>
+												{g.winningTeam === "A" ? "Won: " : ""}{renderTeam(g.teamA.players)}
+											</div>
+											<div style={{ color: "#9ca3af" }}>vs</div>
+											<div style={{ fontWeight: g.winningTeam === "B" ? 700 : 400 }}>
+												{g.winningTeam === "B" ? "Won: " : ""}{renderTeam(g.teamB.players)}
+											</div>
+										</div>
+									))}
+								</div>
+							</div>
+						</div>
+					);
+				})()}
+			</Modal>
 
 			{/* ── Main content: courts + queue ── */}
 			<div className="main-content-grid">
@@ -702,6 +783,23 @@ export function OverviewTab({
 							Courts
 						</span>
 						<div className="courts-header-right">
+							<span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 12, fontSize: 12 }} title="Prefer players who have shared the court least, so everyone plays with and against everyone.">
+								<Switch
+									size="small"
+									checked={!!session?.settings?.mixEveryone}
+									loading={updatingMix}
+									onChange={async (checked) => {
+										try {
+											await updateSession({ variables: { id: sessionId, input: { settings: { mixEveryone: checked } } } });
+											await refetch();
+											message.success(checked ? "Mixing everyone: new games favour players who haven't met." : "Mix everyone is off.");
+										} catch (e) {
+											message.error(e instanceof Error ? e.message : "Could not update the setting");
+										}
+									}}
+								/>
+								Mix everyone
+							</span>
 							<Button
 								className="add-court-btn"
 								size="small"
