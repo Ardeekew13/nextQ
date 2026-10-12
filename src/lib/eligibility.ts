@@ -4,6 +4,8 @@ import { SessionPlayer, type SessionPlayerDoc } from "@/models/SessionPlayer";
 import { GameStatus, QueueMode, type SessionSettings } from "@/types/enums";
 import { poolSeed, seededRandom } from "@/lib/seededRandom";
 import { rankQueue, generateNextGame as queueEngineGenerateNextGame, type QueuePlayer } from "@/lib/queueEngine";
+import { blendedStrength, normaliseName, type ClubRecord } from "@/lib/playerStrength";
+import { loadClubHistory } from "@/lib/clubHistory";
 import type { HydratedDocument } from "mongoose";
 
 /** Players currently locked to a court because they're mid-game (queued or in progress). */
@@ -36,8 +38,12 @@ export async function getEligiblePlayers(
     .sort((a, b) => a.queueEnteredAt.getTime() - b.queueEnteredAt.getTime());
 }
 
-/** Maps a SessionPlayer doc into the shape the queue engine scores on, including win rate. */
-export function toQueuePlayer(doc: HydratedDocument<SessionPlayerDoc>): QueuePlayer {
+/** Maps a SessionPlayer doc into the shape the queue engine scores on. `winRate` is the
+ * blended strength estimate (skill level → club history → tonight), not raw session win rate. */
+export function toQueuePlayer(
+  doc: HydratedDocument<SessionPlayerDoc>,
+  clubHistory?: ReadonlyMap<string, ClubRecord>
+): QueuePlayer {
   const partnerHistory: Record<string, number> =
     doc.partnerHistory instanceof Map
       ? Object.fromEntries(doc.partnerHistory)
@@ -55,7 +61,12 @@ export function toQueuePlayer(doc: HydratedDocument<SessionPlayerDoc>): QueuePla
     gamesSatOut: doc.gamesSatOut,
     partnerHistory,
     opponentHistory,
-    winRate: doc.gamesPlayed > 0 ? (doc.wins / doc.gamesPlayed) * 100 : 0,
+    winRate: blendedStrength({
+      skillLevel: doc.skillLevel,
+      club: clubHistory?.get(normaliseName(doc.name)),
+      wins: doc.wins,
+      games: doc.gamesPlayed,
+    }),
     fixedPartnerId: doc.fixedPartnerId ? String(doc.fixedPartnerId) : undefined,
   };
 }
@@ -74,6 +85,9 @@ interface QueueContext {
   maxConsecutiveGames: number;
   mixEveryone: boolean;
   rankMatchups: boolean;
+  balanceTeams: boolean;
+  /** Session id — seeds each player's fixed tiebreak so the order doesn't reshuffle. */
+  tiebreakSeed: string;
   pastGroups: Set<string>;
   /** Groups the organiser asked to keep out of the same game. */
   keepApart: string[][];
@@ -81,11 +95,13 @@ interface QueueContext {
    * queue preview and the next-game preview keeps their first-round selection
    * (including tiebreaks and the anti-repeat swap) identical to each other. */
   seed: string;
+  /** Each eligible player's recent club record, keyed by normalised name. */
+  clubHistory: Map<string, ClubRecord>;
 }
 
 async function loadQueueContext(sessionId: string): Promise<QueueContext> {
   const [session, eligibleDocs, priorGames] = await Promise.all([
-    Session.findById(sessionId).select("settings separatedGroups"),
+    Session.findById(sessionId).select("settings separatedGroups clubId"),
     getEligiblePlayers(sessionId),
     Game.find(
       { sessionId, status: { $ne: GameStatus.CANCELLED } },
@@ -96,6 +112,11 @@ async function loadQueueContext(sessionId: string): Promise<QueueContext> {
   ]);
 
   const settings = session?.settings as SessionSettings | undefined;
+  const clubHistory = await loadClubHistory(
+    session?.clubId,
+    sessionId,
+    eligibleDocs.map((d) => d.name)
+  );
   const pastGroups = new Set(
     priorGames.map((g) => [...g.teamAPlayerIds, ...g.teamBPlayerIds].map(String).sort().join(":"))
   );
@@ -107,9 +128,12 @@ async function loadQueueContext(sessionId: string): Promise<QueueContext> {
     maxConsecutiveGames: settings?.maxConsecutiveGames ?? 2,
     mixEveryone: settings?.mixEveryone ?? false,
     rankMatchups: settings?.rankMatchups ?? false,
+    balanceTeams: settings?.balanceTeams ?? true,
+    tiebreakSeed: sessionId,
     pastGroups,
     keepApart: (session?.separatedGroups ?? []).map((g) => g.playerIds.map(String)),
     seed: queuePoolSeed(eligibleDocs),
+    clubHistory,
   };
 }
 
@@ -124,11 +148,13 @@ export async function getQueuePreview(
   const ctx = await loadQueueContext(sessionId);
   if (ctx.eligibleDocs.length === 0) return [];
 
-  const ranked = rankQueue(ctx.eligibleDocs.map(toQueuePlayer), {
+  const ranked = rankQueue(ctx.eligibleDocs.map((d) => toQueuePlayer(d, ctx.clubHistory)), {
     mode: ctx.mode,
     maxConsecutiveGames: ctx.maxConsecutiveGames,
     mixEveryone: ctx.mixEveryone,
     rankMatchups: ctx.rankMatchups,
+    balanceTeams: ctx.balanceTeams,
+    tiebreakSeed: ctx.tiebreakSeed,
     pastGroups: ctx.pastGroups,
     keepApart: ctx.keepApart,
     random: seededRandom(ctx.seed),
@@ -156,11 +182,13 @@ export async function getNextGamePreview(
   const ctx = await loadQueueContext(sessionId);
   if (ctx.eligibleDocs.length < 4) return null;
 
-  const result = queueEngineGenerateNextGame(ctx.eligibleDocs.map(toQueuePlayer), {
+  const result = queueEngineGenerateNextGame(ctx.eligibleDocs.map((d) => toQueuePlayer(d, ctx.clubHistory)), {
     mode: ctx.mode,
     maxConsecutiveGames: ctx.maxConsecutiveGames,
     mixEveryone: ctx.mixEveryone,
     rankMatchups: ctx.rankMatchups,
+    balanceTeams: ctx.balanceTeams,
+    tiebreakSeed: ctx.tiebreakSeed,
     pastGroups: ctx.pastGroups,
     keepApart: ctx.keepApart,
     random: seededRandom(ctx.seed),

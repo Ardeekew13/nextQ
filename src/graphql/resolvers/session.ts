@@ -36,6 +36,7 @@ function mergeSettings(
     maxConsecutiveGames: number;
     mixEveryone: boolean;
     rankMatchups: boolean;
+    balanceTeams: boolean;
   }> | null
 ): SessionSettings {
   if (!input) return existing;
@@ -50,6 +51,7 @@ function mergeSettings(
     maxConsecutiveGames: input.maxConsecutiveGames ?? existing.maxConsecutiveGames ?? 2,
     mixEveryone: input.mixEveryone ?? existing.mixEveryone ?? false,
     rankMatchups: input.rankMatchups ?? existing.rankMatchups ?? false,
+    balanceTeams: input.balanceTeams ?? existing.balanceTeams ?? true,
   };
 }
 
@@ -410,5 +412,6 @@ export const sessionResolvers = {
       parent.maxConsecutiveGames ?? 2,
     mixEveryone: (parent: { mixEveryone?: boolean }) => parent.mixEveryone ?? false,
     rankMatchups: (parent: { rankMatchups?: boolean }) => parent.rankMatchups ?? false,
+    balanceTeams: (parent: { balanceTeams?: boolean }) => parent.balanceTeams ?? true,
   },
 };

@@ -26,6 +26,7 @@ const SessionSettingsSchema = new Schema(
     maxConsecutiveGames: { type: Number, default: 2 },
     mixEveryone: { type: Boolean, default: false },
     rankMatchups: { type: Boolean, default: false },
+    balanceTeams: { type: Boolean, default: true },
   },
   { _id: false }
 );

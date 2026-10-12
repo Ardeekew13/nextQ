@@ -65,7 +65,7 @@ describe("organiser mutations reject anonymous callers", () => {
       () =>
         gameResolvers.Mutation.completeGame(
           null,
-          { id: "game-1", input: { teamAScore: 11, teamBScore: 5, winningTeam: "A" } },
+          { id: "game-1", input: { winningTeam: "A" } },
           loggedOutContext
         ),
     ],

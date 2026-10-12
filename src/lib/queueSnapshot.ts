@@ -4,6 +4,8 @@ import { Court } from "@/models/Court";
 import { SessionPlayer } from "@/models/SessionPlayer";
 import { GameStatus, QueueMode, type SessionSettings } from "@/types/enums";
 import type { QueueSnapshot } from "@/lib/offlineQueue";
+import { loadClubHistory } from "@/lib/clubHistory";
+import { normaliseName } from "@/lib/playerStrength";
 
 function plain(map: unknown): Record<string, number> {
   if (map instanceof Map) return Object.fromEntries(map as Map<string, number>);
@@ -17,13 +19,14 @@ function plain(map: unknown): Record<string, number> {
  */
 export async function buildQueueSnapshot(sessionId: string): Promise<QueueSnapshot> {
   const [session, players, courts, games] = await Promise.all([
-    Session.findById(sessionId).select("settings separatedGroups"),
+    Session.findById(sessionId).select("settings separatedGroups clubId"),
     SessionPlayer.find({ sessionId }),
     Court.find({ sessionId }).sort({ courtNumber: 1 }),
     Game.find({ sessionId }, { teamAPlayerIds: 1, teamBPlayerIds: 1, playersSatOutIds: 1, courtId: 1, gameNumber: 1, status: 1, startedAt: 1 }).sort({ gameNumber: -1 }),
   ]);
 
   const settings = session?.settings as SessionSettings | undefined;
+  const clubHistory = await loadClubHistory(session?.clubId, sessionId, players.map((p) => p.name));
   const ids = (list: unknown[]) => list.map(String);
   const live = games.filter((g) => g.status === GameStatus.QUEUED || g.status === GameStatus.IN_PROGRESS);
   const past = games.filter((g) => g.status !== GameStatus.CANCELLED).slice(0, 200);
@@ -35,6 +38,7 @@ export async function buildQueueSnapshot(sessionId: string): Promise<QueueSnapsh
     maxConsecutiveGames: settings?.maxConsecutiveGames ?? 2,
     mixEveryone: settings?.mixEveryone ?? false,
     rankMatchups: settings?.rankMatchups ?? false,
+    balanceTeams: settings?.balanceTeams ?? true,
     lastGameNumber: games[0]?.gameNumber ?? 0,
     players: players.map((p) => ({
       id: String(p._id),
@@ -52,6 +56,9 @@ export async function buildQueueSnapshot(sessionId: string): Promise<QueueSnapsh
       partnerHistory: plain(p.partnerHistory),
       opponentHistory: plain(p.opponentHistory),
       fixedPartnerId: p.fixedPartnerId ? String(p.fixedPartnerId) : null,
+      skillLevel: p.skillLevel ?? null,
+      clubWins: clubHistory.get(normaliseName(p.name))?.wins ?? 0,
+      clubGames: clubHistory.get(normaliseName(p.name))?.games ?? 0,
     })),
     activeGames: live.map((g) => ({
       id: String(g._id),

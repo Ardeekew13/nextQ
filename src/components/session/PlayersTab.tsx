@@ -5,7 +5,7 @@ import { useMutation, useQuery, useLazyQuery, useApolloClient } from "@apollo/cl
 import { gql } from "@apollo/client";
 import {
   Button, Modal, Form, Input, Select,
-  App, Tabs, Typography, Checkbox, Empty, Spin, Dropdown, Popconfirm,
+  App, Tabs, Typography, Checkbox, Empty, Spin, Dropdown, Popconfirm, Tooltip,
 } from "antd";
 import { PlusOutlined, TeamOutlined } from "@ant-design/icons";
 import {
@@ -47,6 +47,25 @@ const SKILL_LABEL: Record<string, string> = {
   ADVANCED: "Advanced",
 };
 
+/** How the queue judges each player — skill level, recent club record and tonight blended. */
+const TIER_STYLE: Record<string, { label: string; color: string; bg: string }> = {
+  STRONG: { label: "Strong", color: "#166534", bg: "#dcfce7" },
+  MID: { label: "Mid", color: "#1e40af", bg: "#dbeafe" },
+  DEVELOPING: { label: "Developing", color: "#9a3412", bg: "#ffedd5" },
+};
+
+function StrengthTag({ tier, strength }: { tier?: string; strength?: number }) {
+  const style = tier ? TIER_STYLE[tier] : undefined;
+  if (!style) return null;
+  return (
+    <Tooltip title={`Queue estimate: ${Math.round(strength ?? 50)}% expected win rate (skill level, recent club record and tonight's games). Used by Rank matchups.`}>
+      <span style={{ display: "inline-block", borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: style.color, background: style.bg, padding: "2px 6px", textTransform: "uppercase", cursor: "help" }}>
+        {style.label}
+      </span>
+    </Tooltip>
+  );
+}
+
 const PLAYERS_QUERY = gql`
   query SessionPlayersExtended($id: ID!) {
     session(id: $id) {
@@ -66,6 +85,8 @@ const PLAYERS_QUERY = gql`
         wins
         losses
         winRate
+        strength
+        strengthTier
         gamesSatOut
         queueEnteredAt
         fixedPartnerId
@@ -727,7 +748,7 @@ export function PlayersTab({
                     <span style={{ width: 7, height: 7, borderRadius: "50%", background: sc.dot, flexShrink: 0, display: "inline-block" }} />
                     <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: sc.color, fontFamily: "'Barlow Condensed', sans-serif" }}>{sc.label}</span>
                   </div>
-                  <div className="pl-cell-skill"><span style={{ display: "inline-block", border: "1px solid #e5e7eb", borderRadius: 4, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: "#1d1f20", padding: "2px 8px", textTransform: "uppercase" }}>{player.skillLevel ? (SKILL_LABEL[player.skillLevel] ?? player.skillLevel) : "Unrated"}</span></div>
+                  <div className="pl-cell-skill" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4 }}><span style={{ display: "inline-block", border: "1px solid #e5e7eb", borderRadius: 4, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: "#1d1f20", padding: "2px 8px", textTransform: "uppercase" }}>{player.skillLevel ? (SKILL_LABEL[player.skillLevel] ?? player.skillLevel) : "Unrated"}</span><StrengthTag tier={player.strengthTier} strength={player.strength} /></div>
                   <div className="pl-cell-gp" style={{ fontSize: 14, fontWeight: 600, color: "#1d1f20" }}><span className="pl-cell-label">GP </span>{player.gamesPlayed}</div>
                   <div className="pl-cell-wl" style={{ fontSize: 13, color: "#1d1f20" }}><span className="pl-cell-label">W–L </span>{player.wins}–{player.losses}</div>
                   <div className="pl-cell-winpct" style={{ fontSize: 13, color: "#1d1f20" }}><span className="pl-cell-label">Win % </span>{winPct(player.winRate)}</div>

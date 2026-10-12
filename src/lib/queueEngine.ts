@@ -29,7 +29,8 @@ export interface QueuePlayer {
   gamesSatOut: number;
   partnerHistory: Record<string, number>;
   opponentHistory: Record<string, number>;
-  /** Win rate 0-100. Used only as a tiebreak among players who've waited a similar amount of time. */
+  /** Estimated strength 0-100 (see playerStrength.ts). Never affects who gets the next spot;
+   * only used by "rank matchups" to group similar players and balance the two teams. */
   winRate?: number;
   /** Optional mutual "fixed partner" request. When both players in a pair are eligible,
    * the engine always selects and teams them together instead of treating them individually.
@@ -81,18 +82,10 @@ function groupKey(players: QueuePlayer[]): string {
 
 /**
  * Players who've waited within this many minutes of each other are treated as having
- * "waited a similar amount of time" for the win-rate tiebreak below. Wait time still
- * rules the queue at a coarser (bucketed) granularity — this window only decides who
- * wins among players who are roughly equally deserving of the next spot.
+ * "waited a similar amount of time": wait time rules the queue at this bucketed
+ * granularity, and the secondary factors (games played, games sat out) decide within it.
  */
 const WAIT_TIE_WINDOW_MINUTES = 2;
-
-/**
- * Weight applied to win rate (0-100) as a tiebreak. Kept smaller than every mode's
- * per-wait-bucket step so it can never override a genuine wait-time advantage, but
- * larger than the gamesSatOut nudge so a clear win-rate edge still wins ties.
- */
-const WIN_RATE_TIEBREAK_WEIGHT = 0.15;
 
 /**
  * HYBRID only: flat priority boost for a player who hasn't played a single game yet
@@ -107,6 +100,22 @@ const WIN_RATE_TIEBREAK_WEIGHT = 0.15;
  */
 const NEVER_PLAYED_PRIORITY_BOOST = 500_000;
 
+/** A player's strength for matchmaking; missing or corrupt values count as an average 50. */
+function strengthOf(p: QueuePlayer): number {
+  return typeof p.winRate === "number" && Number.isFinite(p.winRate) ? p.winRate : 50;
+}
+
+/** Fixed origin for the wait-time slots (only differences between players matter). */
+const WAIT_BUCKET_EPOCH_MS = Date.UTC(2024, 0, 1);
+
+/** Per-player tiebreak that doesn't depend on who else is in the pool. With a shared random
+ * sequence, any player joining or leaving re-rolled EVERY tiebreak, so players tied on wait
+ * slot and games (e.g. the four who just came off the same court) swapped places in "up next"
+ * whenever another court finished. Seeded by session + player id it stays put instead. */
+export function stableTiebreak(seed: string, playerId: string): number {
+  return seededRandom(`${seed}:${playerId}`)();
+}
+
 /**
  * Score a player for selection — lower is higher priority (will be selected first).
  * Each mode produces different weights.
@@ -118,34 +127,38 @@ function playerScore(
   now: number,
   tiebreak: number
 ): number {
-  const waitMs = now - player.queueEnteredAt.getTime();
-  const waitMinutes = waitMs / 60_000;
-  const waitBucket = Math.floor(waitMinutes / WAIT_TIE_WINDOW_MINUTES);
+  // Bucket by WHEN the player joined the queue, not by how long ago that was. Counting
+  // elapsed time ("waited 3m59s → bucket 1, 4m01s → bucket 2") lets two players' buckets
+  // drift in and out of a tie as the clock ticks, so the "up next" preview reshuffled on
+  // every poll with nothing actually happening. Fixed slots keep each player's bucket — and
+  // so the whole order — constant until the pool itself changes. Larger = joined earlier.
+  void now;
+  const waitBucket = -Math.floor(
+    (player.queueEnteredAt.getTime() - WAIT_BUCKET_EPOCH_MS) / (WAIT_TIE_WINDOW_MINUTES * 60_000)
+  );
 
   // Consecutive game penalty: deprioritise if at/over limit (unless no alternatives)
   const consecutivePenalty = player.consecutiveGames >= maxConsecutiveGames ? 1_000_000 : 0;
 
-  // Among players who've waited a similar amount of time, prefer the higher win rate.
-  const winRateTiebreak = -(player.winRate ?? 0) * WIN_RATE_TIEBREAK_WEIGHT;
+  // Strength is deliberately NOT part of a player's queue score: who plays next depends
+  // only on fairness (wait, games played, sat out), never on how good someone is.
 
   switch (mode) {
     case QueueMode.BALANCED:
-      // Primary: fewest games; secondary: longest wait (bucketed); then win rate; tertiary: most sat out; then tiebreak
+      // Primary: fewest games; secondary: longest wait (bucketed); tertiary: most sat out; then random tiebreak
       return (
         consecutivePenalty +
         player.gamesPlayed * 10_000 +
         (-waitBucket) * 10 * WAIT_TIE_WINDOW_MINUTES +
-        winRateTiebreak +
         (-player.gamesSatOut) * 5 +
         tiebreak
       );
 
     case QueueMode.SMART:
-      // Primary: longest wait (bucketed, no games-played factor); then win rate
+      // Primary: longest wait (bucketed, no games-played factor); then most sat out
       return (
         consecutivePenalty +
         (-waitBucket) * 10_000 * WAIT_TIE_WINDOW_MINUTES +
-        winRateTiebreak +
         (-player.gamesSatOut) * 5 +
         tiebreak
       );
@@ -155,13 +168,12 @@ function playerScore(
       // First-time priority: anyone with zero games played always outranks anyone who's
       // played at least once, no matter how long either has waited.
       const neverPlayedBoost = player.gamesPlayed === 0 ? -NEVER_PLAYED_PRIORITY_BOOST : 0;
-      // Then: longest wait (bucketed); secondary: fewest games (gentle catch-up); then win rate; tertiary: most sat out
+      // Then: longest wait (bucketed); secondary: fewest games (gentle catch-up); tertiary: most sat out
       return (
         consecutivePenalty +
         neverPlayedBoost +
         (-waitBucket) * 1_000 * WAIT_TIE_WINDOW_MINUTES +
         player.gamesPlayed * 100 +
-        winRateTiebreak +
         (-player.gamesSatOut) * 10 +
         tiebreak
       );
@@ -331,7 +343,8 @@ function selectPlayers(
   pastGroups?: ReadonlySet<string>,
   keepApart?: ReadonlyArray<ReadonlyArray<string>>,
   mixEveryone: boolean = false,
-  rankMatchups: boolean = false
+  rankMatchups: boolean = false,
+  tiebreakSeed?: string
 ): { ok: true; selected: PlayerQuad } | { ok: false; reason: string } {
   if (eligible.length < 4) {
     return {
@@ -345,7 +358,8 @@ function selectPlayers(
   // Score every eligible player individually first.
   const scoreById = new Map<string, number>();
   for (const p of eligible) {
-    scoreById.set(p.id, playerScore(p, mode, maxConsecutiveGames, now, random()));
+    const tiebreak = tiebreakSeed !== undefined ? stableTiebreak(tiebreakSeed, p.id) : random();
+    scoreById.set(p.id, playerScore(p, mode, maxConsecutiveGames, now, tiebreak));
   }
 
   // If everyone is at consecutive limit, ignore the penalty (not enough alts)
@@ -432,7 +446,7 @@ function selectPlayers(
       [...eligible]
         .sort(
           (a, b) =>
-            (b.winRate ?? 0) - (a.winRate ?? 0) ||
+            strengthOf(b) - strengthOf(a) ||
             b.gamesPlayed - a.gamesPlayed ||
             (a.id < b.id ? -1 : 1)
         )
@@ -532,6 +546,7 @@ export function rankQueue(
     mixEveryone = false,
     rankMatchups = false,
     random = Math.random,
+    tiebreakSeed,
   } = options;
 
   let pool = [...eligible];
@@ -539,7 +554,7 @@ export function rankQueue(
   const ordered: QueuePlayer[] = [];
 
   while (pool.length >= 4) {
-    const selection = selectPlayers(pool, mode, maxConsecutiveGames, random, groups, keepApart, mixEveryone, rankMatchups);
+    const selection = selectPlayers(pool, mode, maxConsecutiveGames, random, groups, keepApart, mixEveryone, rankMatchups, tiebreakSeed);
     if (!selection.ok) break;
 
     const selectedIds = new Set(selection.selected.map((p) => p.id));
@@ -557,7 +572,13 @@ export function rankQueue(
     const now = Date.now();
     const scored = pool.map((p) => ({
       player: p,
-      score: playerScore(p, mode, maxConsecutiveGames, now, random()),
+      score: playerScore(
+        p,
+        mode,
+        maxConsecutiveGames,
+        now,
+        tiebreakSeed !== undefined ? stableTiebreak(tiebreakSeed, p.id) : random()
+      ),
     }));
     scored.sort((a, b) => a.score - b.score);
     ordered.push(...scored.map((s) => s.player));
@@ -575,7 +596,7 @@ function assignTeams(
   pastGroups: ReadonlySet<string>,
   random: () => number,
   randomizeTeams: boolean = false,
-  rankMatchups: boolean = false
+  balanceTeams: boolean = false
 ): TeamAssignment {
   // The split depends only on WHO the four are, never on the rest of the pool or the order
   // they were picked in. Otherwise the "up next" preview (made while the court is still busy)
@@ -608,12 +629,14 @@ function assignTeams(
 
     const groupRepeat = pastGroups.has(groupKey(players)) ? 1 : 0;
 
-    // Rank matchups: balance the two teams' combined win rate so the strongest players
-    // end up as opponents (best + weakest vs the two middle players).
-    const strength = (t: QueuePlayer[]) => t.reduce((n, p) => n + (p.winRate ?? 0), 0);
-    const imbalance = rankMatchups ? Math.abs(strength(split.teamA) - strength(split.teamB)) / 100 : 0;
+    // Balanced teams (and rank matchups): make the two teams' combined strength as even as
+    // possible — usually best + weakest vs the two middle players. Weighted so a clearly
+    // lopsided split (every 5 points of combined-strength gap = 1) outweighs a few repeat
+    // opponents, while avoiding a repeat partnership still comes first.
+    const strength = (t: QueuePlayer[]) => t.reduce((n, p) => n + strengthOf(p), 0);
+    const imbalance = balanceTeams ? Math.abs(strength(split.teamA) - strength(split.teamB)) / 5 : 0;
 
-    const score = partnerRepeats * 100 + groupRepeat * 25 + opponentRepeats + imbalance;
+    const score = partnerRepeats * 100 + groupRepeat * 25 + imbalance + opponentRepeats;
 
     return { split, score, tiebreak: random() };
   });
@@ -638,6 +661,11 @@ export interface QueueEngineOptions {
   mixEveryone?: boolean;
   /** Put players with similar standings in the same game, as opponents. */
   rankMatchups?: boolean;
+  /** Split each foursome into the two most evenly matched teams by strength. Implied by rankMatchups. */
+  balanceTeams?: boolean;
+  /** When set, each player's tiebreak is fixed per (seed, player) instead of drawn from
+   * `random`, so the queue order doesn't reshuffle whenever someone joins or leaves. */
+  tiebreakSeed?: string;
   random?: () => number;
   randomizeTeams?: boolean;
 }
@@ -653,6 +681,8 @@ export function generateNextGame(
     keepApart,
     mixEveryone = false,
     rankMatchups = false,
+    balanceTeams = false,
+    tiebreakSeed,
     random = Math.random,
     // Team splits always minimize repeat partners/opponents by default, in every mode
     // (including HYBRID) — the queue-selection logic above already varies who gets picked
@@ -662,10 +692,16 @@ export function generateNextGame(
     randomizeTeams = false,
   } = options;
 
-  const selection = selectPlayers(eligible, mode, maxConsecutiveGames, random, pastGroups, keepApart, mixEveryone, rankMatchups);
+  const selection = selectPlayers(eligible, mode, maxConsecutiveGames, random, pastGroups, keepApart, mixEveryone, rankMatchups, tiebreakSeed);
   if (!selection.ok) return selection;
 
-  const { teamA, teamB } = assignTeams(selection.selected, pastGroups, random, randomizeTeams, rankMatchups);
+  const { teamA, teamB } = assignTeams(
+    selection.selected,
+    pastGroups,
+    random,
+    randomizeTeams,
+    balanceTeams || rankMatchups
+  );
 
   return { ok: true, selected: selection.selected, teamA, teamB };
 }

@@ -90,6 +90,8 @@ export interface SessionSettings {
   /** Prefer foursomes whose players have shared the fewest games, within a fairness window. */
   mixEveryone?: boolean;
   rankMatchups?: boolean;
+  /** Split each foursome into the two most evenly matched teams by strength. */
+  balanceTeams?: boolean;
   matchingStyle: MatchingStyle;
   /** @deprecated kept for backward compat */
   pairingMode?: PairingMode;
@@ -111,5 +113,15 @@ export const DEFAULT_SESSION_SETTINGS: SessionSettings = {
   maxConsecutiveGames: 2,
   mixEveryone: false,
   rankMatchups: false,
+  balanceTeams: true,
   matchingStyle: MatchingStyle.BALANCED,
 };
+
+/** The queue-related settings "Reset to default" restores. */
+export const DEFAULT_QUEUE_SETTINGS = {
+  queueMode: DEFAULT_SESSION_SETTINGS.queueMode,
+  maxConsecutiveGames: DEFAULT_SESSION_SETTINGS.maxConsecutiveGames,
+  mixEveryone: false,
+  rankMatchups: false,
+  balanceTeams: true,
+} as const;

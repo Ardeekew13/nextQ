@@ -78,8 +78,9 @@ function compareByCriteria(order: RankingCriterion[]) {
 
 /**
  * Ranks players using the session's configured ranking order.
- * Uses standard competition ranking: tied players share a rank, and the next
- * rank skips (e.g. 1, 1, 3, 4).
+ * Ranks are always unique (1, 2, 3, ...): when every configured criterion is tied the
+ * player id breaks the tie, so there's exactly one 1st place. Genuine ties for 1st are
+ * reported separately by findFirstPlaceTie so the organiser can play them off.
  */
 export function computeStandings(
   players: StandingsInput[],

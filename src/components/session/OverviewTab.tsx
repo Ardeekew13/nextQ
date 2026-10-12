@@ -15,8 +15,9 @@ import {
 	UPDATE_GAME_TEAMS,
 	CLUB_DETAIL_QUERY,
 } from "@/graphql/documents/organiser";
+import { DEFAULT_QUEUE_SETTINGS } from "@/types/enums";
 import { useMutation, useQuery } from "@apollo/client";
-import { App, Button, Empty, Input, Modal, Switch, Typography } from "antd";
+import { App, Button, Empty, Input, Modal, Popover, Switch, Typography } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	ScoreEntryForm,
@@ -874,23 +875,57 @@ export function OverviewTab({
 							Courts
 						</span>
 						<div className="courts-header-right">
-							<span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 12, fontSize: 12 }} title="Prefer players who have shared the court least, so everyone plays with and against everyone.">
-								<Switch
-									size="small"
-									checked={!!session?.settings?.mixEveryone}
-									loading={updatingMix}
-									onChange={async (checked) => {
+							<Popover
+								trigger="click"
+								placement="bottomRight"
+								title="Queue options"
+								content={(() => {
+									const st = session?.settings ?? {};
+									const isDefault =
+										(st.queueMode ?? "HYBRID") === DEFAULT_QUEUE_SETTINGS.queueMode &&
+										(st.maxConsecutiveGames ?? 2) === DEFAULT_QUEUE_SETTINGS.maxConsecutiveGames &&
+										!!st.mixEveryone === DEFAULT_QUEUE_SETTINGS.mixEveryone &&
+										!!st.rankMatchups === DEFAULT_QUEUE_SETTINGS.rankMatchups &&
+										(st.balanceTeams ?? true) === DEFAULT_QUEUE_SETTINGS.balanceTeams;
+									const save = async (settings: Record<string, unknown>, done: string) => {
 										try {
-											await updateSession({ variables: { id: sessionId, input: { settings: { mixEveryone: checked } } } });
+											await updateSession({ variables: { id: sessionId, input: { settings } } });
 											await refetch();
-											message.success(checked ? "Mixing everyone: new games favour players who haven't met." : "Mix everyone is off.");
+											message.success(done);
 										} catch (e) {
 											message.error(e instanceof Error ? e.message : "Could not update the setting");
 										}
-									}}
-								/>
-								Mix everyone
-							</span>
+									};
+									const row = (label: string, hint: string, checked: boolean, key: string, on: string, off: string) => (
+										<label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+											<Switch size="small" style={{ marginTop: 2 }} checked={checked} loading={updatingMix}
+												onChange={(v) => save({ [key]: v }, v ? on : off)} />
+											<span>
+												<div style={{ fontSize: 13, fontWeight: 600, color: "#1d1f20" }}>{label}</div>
+												<div style={{ fontSize: 11, color: "rgba(29,31,32,0.55)", lineHeight: 1.4 }}>{hint}</div>
+											</span>
+										</label>
+									);
+									return (
+										<div style={{ display: "flex", flexDirection: "column", gap: 12, width: 280 }}>
+											{row("Balanced teams", "Split each game into the most evenly matched teams (best + weakest vs the middle two). Doesn't change who plays.", st.balanceTeams ?? true, "balanceTeams", "Balanced teams on.", "Balanced teams off.")}
+											{row("Mix everyone", "Prefer players who have shared the court least, so everyone plays with and against everyone.", !!st.mixEveryone, "mixEveryone", "Mixing everyone: new games favour players who haven't met.", "Mix everyone is off.")}
+											{row("Rank matchups", "Group players of similar strength into the same game (Strong with Strong). Equal court time still comes first.", !!st.rankMatchups, "rankMatchups", "Rank matchups on: similar players are grouped together.", "Rank matchups off.")}
+											<div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+												<span style={{ fontSize: 11, color: "rgba(29,31,32,0.45)" }}>{isDefault ? "Using default settings" : "Custom settings"}</span>
+												<Button size="small" disabled={isDefault} loading={updatingMix}
+													onClick={() => save({ ...DEFAULT_QUEUE_SETTINGS }, "Queue settings reset to default.")}>
+													Reset to default
+												</Button>
+											</div>
+										</div>
+									);
+								})()}
+							>
+								<Button size="small" style={{ marginRight: 12, fontSize: 11, height: 28 }}>
+									Queue options
+								</Button>
+							</Popover>
 							<Button
 								size="small"
 								style={{ marginRight: 12, fontSize: 11, height: 28 }}

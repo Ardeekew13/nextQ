@@ -178,6 +178,7 @@ export const DASHBOARD_QUERY = gql`
           queueMode
           mixEveryone
           rankMatchups
+          balanceTeams
         }
         courts {
           id
@@ -214,6 +215,7 @@ export const CLUB_QUERY = gql`
           queueMode
           mixEveryone
           rankMatchups
+          balanceTeams
         }
       }
     }
@@ -244,6 +246,7 @@ export const CLUB_DETAIL_QUERY = gql`
           queueMode
           mixEveryone
           rankMatchups
+          balanceTeams
         }
         courts {
           id
@@ -423,6 +426,7 @@ export const SESSION_DASHBOARD_QUERY = gql`
         queueMode
         mixEveryone
         rankMatchups
+        balanceTeams
         maxConsecutiveGames
       }
       courts {

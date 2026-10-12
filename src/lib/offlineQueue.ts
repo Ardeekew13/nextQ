@@ -12,6 +12,7 @@
 import { QueueMode } from "@/types/enums";
 import { generateNextGame, rankQueue, type QueuePlayer } from "@/lib/queueEngine";
 import { poolSeed, seededRandom } from "@/lib/seededRandom";
+import { blendedStrength } from "@/lib/playerStrength";
 
 export interface SnapshotPlayer {
   id: string;
@@ -30,6 +31,10 @@ export interface SnapshotPlayer {
   partnerHistory: Record<string, number>;
   opponentHistory: Record<string, number>;
   fixedPartnerId?: string | null;
+  skillLevel?: string | null;
+  /** Recent club record (last few completed sessions), used for the strength estimate. */
+  clubWins?: number;
+  clubGames?: number;
 }
 
 export interface SnapshotGame {
@@ -57,6 +62,7 @@ export interface QueueSnapshot {
   maxConsecutiveGames: number;
   mixEveryone?: boolean;
   rankMatchups?: boolean;
+  balanceTeams?: boolean;
   lastGameNumber: number;
   players: SnapshotPlayer[];
   activeGames: SnapshotGame[];
@@ -215,7 +221,12 @@ function toQueuePlayer(p: SnapshotPlayer): QueuePlayer {
     gamesSatOut: p.gamesSatOut,
     partnerHistory: p.partnerHistory,
     opponentHistory: p.opponentHistory,
-    winRate: p.gamesPlayed > 0 ? (p.wins / p.gamesPlayed) * 100 : 0,
+    winRate: blendedStrength({
+      skillLevel: p.skillLevel,
+      club: p.clubGames ? { wins: p.clubWins ?? 0, games: p.clubGames } : null,
+      wins: p.wins,
+      games: p.gamesPlayed,
+    }),
     fixedPartnerId: p.fixedPartnerId ?? undefined,
   };
 }
@@ -226,6 +237,8 @@ function engineOptions(snapshot: QueueSnapshot, state: LocalState) {
     maxConsecutiveGames: snapshot.maxConsecutiveGames ?? 2,
     mixEveryone: snapshot.mixEveryone ?? false,
     rankMatchups: snapshot.rankMatchups ?? false,
+    balanceTeams: snapshot.balanceTeams ?? true,
+    tiebreakSeed: snapshot.sessionId,
     pastGroups: state.pastGroups,
     keepApart: snapshot.keepApart,
     random: seededRandom(poolSeed(state.eligible.map((p) => p.id))),

@@ -14,7 +14,7 @@ import type { GraphQLContext } from "@/graphql/context";
 
 function contextFor(organiserId: string | null): GraphQLContext {
   return {
-    organiser: organiserId ? { sub: organiserId, email: "organiser@test.dev", name: "Test Organiser" } : null,
+    organiser: organiserId ? { sub: organiserId, email: "organiser@test.dev", name: "Test Organiser", role: "ORGANISER" } : null,
     playerNameCache: new Map(),
     csrfToken: "test-csrf-token",
   };
