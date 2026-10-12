@@ -200,7 +200,13 @@ export const sessionResolvers = {
       context: GraphQLContext
     ) => {
       const session = await requireSessionOwner(context, args.id);
-      if (args.input.name !== undefined) session.name = args.input.name.trim();
+      if (args.input.name !== undefined) {
+        const name = args.input.name.trim();
+        if (!name) {
+          throw new GraphQLError("Session name is required.", { extensions: { code: "BAD_USER_INPUT" } });
+        }
+        session.name = name;
+      }
       if (args.input.sessionDate !== undefined) session.sessionDate = args.input.sessionDate;
       if (args.input.startTime !== undefined) session.startTime = args.input.startTime;
       if (args.input.endTime !== undefined) session.endTime = args.input.endTime;

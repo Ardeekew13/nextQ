@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { Tabs, Button, App } from "antd";
+import { Tabs, Button, App, Input, Modal } from "antd";
 import { useQuery, useMutation } from "@apollo/client";
 import {
 	SESSION_DASHBOARD_QUERY,
@@ -12,6 +12,7 @@ import {
 	RESUME_SESSION,
 	FINISH_SESSION,
 	LOGOUT_ORGANISER,
+	UPDATE_SESSION,
 } from "@/graphql/documents/organiser";
 import { OverviewTab } from "@/components/session/OverviewTab";
 import { PlayersTab } from "@/components/session/PlayersTab";
@@ -69,6 +70,9 @@ export default function SessionPage() {
 	const [resumeSession, { loading: resuming }] = useMutation(RESUME_SESSION);
 	const [finishSession, { loading: finishing }] = useMutation(FINISH_SESSION);
 	const [logoutOrganiser, { loading: loggingOut }] = useMutation(LOGOUT_ORGANISER);
+	const [updateSession, { loading: renaming }] = useMutation(UPDATE_SESSION);
+	const [renameOpen, setRenameOpen] = useState(false);
+	const [renameValue, setRenameValue] = useState("");
 
 	const session = data?.session;
 	const completedGamesCount = session?.completedGames?.length ?? 0;
@@ -96,6 +100,25 @@ export default function SessionPage() {
 	const isDraft = session?.status === "DRAFT";
 	const isActive = session?.status === "ACTIVE";
 	const isPaused = session?.status === "PAUSED";
+
+	async function handleRename() {
+		const name = renameValue.trim();
+		if (!name) {
+			message.error("Enter a session name");
+			return;
+		}
+		if (name === session?.name) {
+			setRenameOpen(false);
+			return;
+		}
+		try {
+			await updateSession({ variables: { id: session.id, input: { name } } });
+			message.success("Session renamed");
+			setRenameOpen(false);
+		} catch (err) {
+			message.error(err instanceof Error ? err.message : "Could not rename the session");
+		}
+	}
 
 	async function handleStart() {
 		try {
@@ -334,6 +357,38 @@ export default function SessionPage() {
 				}}>
 					{session?.name ?? "Loading…"}
 				</span>
+				{session && (
+					<Button
+						type="text"
+						size="small"
+						aria-label="Edit session name"
+						title="Edit session name"
+						onClick={() => {
+							setRenameValue(session.name);
+							setRenameOpen(true);
+						}}
+						style={{ marginRight: 12, flexShrink: 0, color: "rgba(29,31,32,0.5)" }}
+					>
+						Edit
+					</Button>
+				)}
+				<Modal
+					open={renameOpen}
+					title="Edit session name"
+					okText="Save"
+					confirmLoading={renaming}
+					onOk={handleRename}
+					onCancel={() => setRenameOpen(false)}
+					destroyOnHidden
+				>
+					<Input
+						autoFocus
+						value={renameValue}
+						maxLength={80}
+						onChange={(e) => setRenameValue(e.target.value)}
+						onPressEnter={handleRename}
+					/>
+				</Modal>
 
 				{/* Live / Paused badge */}
 				{(isActive || isPaused) && (
