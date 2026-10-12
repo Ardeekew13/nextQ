@@ -176,6 +176,8 @@ export const DASHBOARD_QUERY = gql`
         publicUrl
         settings {
           queueMode
+          mixEveryone
+          rankMatchups
         }
         courts {
           id
@@ -210,6 +212,8 @@ export const CLUB_QUERY = gql`
         }
         settings {
           queueMode
+          mixEveryone
+          rankMatchups
         }
       }
     }
@@ -238,6 +242,8 @@ export const CLUB_DETAIL_QUERY = gql`
         publicUrl
         settings {
           queueMode
+          mixEveryone
+          rankMatchups
         }
         courts {
           id
@@ -415,6 +421,8 @@ export const SESSION_DASHBOARD_QUERY = gql`
         pairingMode
         matchingStyle
         queueMode
+        mixEveryone
+        rankMatchups
         maxConsecutiveGames
       }
       courts {
@@ -748,8 +756,8 @@ export const SESSION_QUEUE_SNAPSHOT = gql`
 
 export const FILL_COURT_MANUALLY = gql`
   ${GAME_FIELDS}
-  mutation FillCourtManually($courtId: ID!, $teamAPlayerIds: [ID!]!, $teamBPlayerIds: [ID!]!) {
-    fillCourtManually(courtId: $courtId, teamAPlayerIds: $teamAPlayerIds, teamBPlayerIds: $teamBPlayerIds) {
+  mutation FillCourtManually($courtId: ID!, $teamAPlayerIds: [ID!]!, $teamBPlayerIds: [ID!]!, $allowRepeat: Boolean) {
+    fillCourtManually(courtId: $courtId, teamAPlayerIds: $teamAPlayerIds, teamBPlayerIds: $teamBPlayerIds, allowRepeat: $allowRepeat) {
       ...GameFields
     }
   }

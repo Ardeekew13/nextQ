@@ -24,6 +24,8 @@ const SessionSettingsSchema = new Schema(
     matchingStyle: { type: String, enum: ["BALANCED", "WINNERS_LOSERS", "FIXED_PARTNERS"], default: "BALANCED" },
     queueMode: { type: String, enum: Object.values(QueueMode), default: QueueMode.HYBRID },
     maxConsecutiveGames: { type: Number, default: 2 },
+    mixEveryone: { type: Boolean, default: false },
+    rankMatchups: { type: Boolean, default: false },
   },
   { _id: false }
 );

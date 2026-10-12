@@ -11,6 +11,7 @@ const [nP, nC, nG, gameSec, mode] = [
   Number(process.argv[2] ?? 11), Number(process.argv[3] ?? 1), Number(process.argv[4] ?? 18),
   Number(process.argv[5] ?? 20), (process.argv[6] ?? "BALANCED") as QueueMode,
 ];
+const mix = process.argv[7] === "mix";
 const T0 = Date.UTC(2026, 0, 1, 14, 0, 0);
 const players: (QueuePlayer & { wins: number })[] = Array.from({ length: nP }, (_, i) => ({
   id: `p${String(i + 1).padStart(2, "0")}`, gamesPlayed: 0, wins: 0, consecutiveGames: 0,
@@ -21,10 +22,11 @@ const pastGroups = new Set<string>();
 const games: { a: string[]; b: string[] }[] = [];
 let now = T0 + 60_000;
 const onCourt: { ids: string[]; a: string[]; b: string[]; endsAt: number }[] = [];
-let rng = 12345;
+let rng = Number(process.env.SEED ?? 12345);
 const coin = () => ((rng = (rng * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff) < 0.5;
 
 while (games.length < nG) {
+  Date.now = () => now; // simulated clock, so runs are repeatable
   for (let i = onCourt.length - 1; i >= 0; i--) {
     if (onCourt[i].endsAt <= now) {
       const g = onCourt.splice(i, 1)[0];
@@ -42,7 +44,7 @@ while (games.length < nG) {
   if (onCourt.length < nC) {
     const busy = new Set(onCourt.flatMap((g) => g.ids));
     const pool = players.filter((p) => !busy.has(p.id)).sort((x, y) => +x.queueEnteredAt - +y.queueEnteredAt);
-    const r = generateNextGame(pool, { mode, maxConsecutiveGames: 2, pastGroups, random: seededRandom(poolSeed(pool.map((p) => p.id))) });
+    const r = generateNextGame(pool, { mode, maxConsecutiveGames: 2, pastGroups, mixEveryone: mix, random: seededRandom(poolSeed(pool.map((p) => p.id))) });
     if (r.ok) {
       const ids = r.selected.map((p) => p.id);
       const sel = new Set(ids);
@@ -71,10 +73,11 @@ games.forEach((g, i) => {
 });
 const gp = players.map((p) => p.gamesPlayed);
 const repeats = (m: Map<string, number>) => [...m.values()].filter((v) => v > 1).length;
-console.log(`${nP} players, ${nC} court(s), ${games.length} games, mode ${mode}, ${gameSec}s per game`);
+console.log(`${nP} players, ${nC} court(s), ${games.length} games, mode ${mode}${mix ? " +MIX" : ""}, ${gameSec}s per game`);
 console.log(`games per player: min ${Math.min(...gp)} max ${Math.max(...gp)}  (${players.map((p) => p.gamesPlayed).join(",")})`);
 console.log(`partner pairs repeated: ${repeats(partner)}  (max ${Math.max(...partner.values())}x)`);
 console.log(`partners again in the very next game: ${backToBackPartners}`);
 console.log(`pairs sharing a game 3+ times: ${[...together.values()].filter((v) => v >= 3).length}  (max ${Math.max(...together.values())}x)`);
+console.log(`pairs that never shared a game: ${nP * (nP - 1) / 2 - together.size} of ${nP * (nP - 1) / 2}`);
 console.log(`trios repeated: ${repeats(trio)}`);
 games.slice(-6).forEach((g, i) => console.log(`  game ${games.length - 5 + i}: ${g.a.join("/")} vs ${g.b.join("/")}`));

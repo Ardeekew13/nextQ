@@ -34,6 +34,8 @@ function mergeSettings(
     matchingStyle: string;
     queueMode: string;
     maxConsecutiveGames: number;
+    mixEveryone: boolean;
+    rankMatchups: boolean;
   }> | null
 ): SessionSettings {
   if (!input) return existing;
@@ -46,6 +48,8 @@ function mergeSettings(
     matchingStyle: (input.matchingStyle as SessionSettings["matchingStyle"]) ?? existing.matchingStyle ?? MatchingStyle.BALANCED,
     queueMode: (input.queueMode as SessionSettings["queueMode"]) ?? existing.queueMode ?? QueueMode.HYBRID,
     maxConsecutiveGames: input.maxConsecutiveGames ?? existing.maxConsecutiveGames ?? 2,
+    mixEveryone: input.mixEveryone ?? existing.mixEveryone ?? false,
+    rankMatchups: input.rankMatchups ?? existing.rankMatchups ?? false,
   };
 }
 
@@ -196,7 +200,13 @@ export const sessionResolvers = {
       context: GraphQLContext
     ) => {
       const session = await requireSessionOwner(context, args.id);
-      if (args.input.name !== undefined) session.name = args.input.name.trim();
+      if (args.input.name !== undefined) {
+        const name = args.input.name.trim();
+        if (!name) {
+          throw new GraphQLError("Session name is required.", { extensions: { code: "BAD_USER_INPUT" } });
+        }
+        session.name = name;
+      }
       if (args.input.sessionDate !== undefined) session.sessionDate = args.input.sessionDate;
       if (args.input.startTime !== undefined) session.startTime = args.input.startTime;
       if (args.input.endTime !== undefined) session.endTime = args.input.endTime;
@@ -398,5 +408,7 @@ export const sessionResolvers = {
       parent.queueMode ?? QueueMode.HYBRID,
     maxConsecutiveGames: (parent: { maxConsecutiveGames?: number }) =>
       parent.maxConsecutiveGames ?? 2,
+    mixEveryone: (parent: { mixEveryone?: boolean }) => parent.mixEveryone ?? false,
+    rankMatchups: (parent: { rankMatchups?: boolean }) => parent.rankMatchups ?? false,
   },
 };

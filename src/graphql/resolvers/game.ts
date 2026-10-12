@@ -201,6 +201,8 @@ export const gameResolvers = {
       const result = queueEngineGenerate(eligible, {
         mode: (settings.queueMode ?? QueueMode.HYBRID) as QueueMode,
         maxConsecutiveGames: settings.maxConsecutiveGames ?? 2,
+        mixEveryone: settings.mixEveryone ?? false,
+        rankMatchups: settings.rankMatchups ?? false,
         pastGroups,
         keepApart: (session.separatedGroups ?? []).map((g) => g.playerIds.map(String)),
         random: seededRandom(queuePoolSeed(eligibleDocs)),
@@ -249,7 +251,7 @@ export const gameResolvers = {
 
     fillCourtManually: async (
       _p: unknown,
-      args: { courtId: string; teamAPlayerIds: string[]; teamBPlayerIds: string[] },
+      args: { courtId: string; teamAPlayerIds: string[]; teamBPlayerIds: string[]; allowRepeat?: boolean },
       context: GraphQLContext
     ) => {
       requireOrganiser(context);
@@ -287,7 +289,7 @@ export const gameResolvers = {
         priorGames.map((g) => [...g.teamAPlayerIds, ...g.teamBPlayerIds].map(String).sort().join(":"))
       );
       const currentGroup = allPlayerIds.map(String).sort().join(":");
-      if (pastGroups.has(currentGroup)) {
+      if (!args.allowRepeat && pastGroups.has(currentGroup)) {
         // Check if at least 1 player is new (hasn't played in any completed game)
         const allPlayerDocs = await SessionPlayer.find({ sessionId: court.sessionId });
         const playersWhoHavePlayed = new Set(
@@ -302,6 +304,11 @@ export const gameResolvers = {
         }
       }
 
+      const chosen = new Set(allPlayerIds.map(String));
+      const playersSatOutIds = (await getEligiblePlayers(String(court.sessionId)))
+        .map((d) => String(d._id))
+        .filter((id) => !chosen.has(id));
+
       const lastGame = await Game.findOne({ sessionId: court.sessionId }).sort({ gameNumber: -1 });
       const gameNumber = (lastGame?.gameNumber ?? 0) + 1;
 
@@ -312,12 +319,20 @@ export const gameResolvers = {
         teamAPlayerIds: args.teamAPlayerIds,
         teamBPlayerIds: args.teamBPlayerIds,
         status: GameStatus.QUEUED,
-        playersSatOutIds: [],
+        playersSatOutIds,
       });
 
+      // Same bookkeeping as an auto-generated game: the four get a consecutive game, and everyone
+      // else who was waiting is credited with sitting this one out (so being skipped counts).
       court.activeGameId = game._id;
       court.status = CourtStatus.IN_USE;
-      await court.save();
+      await Promise.all([
+        SessionPlayer.updateMany({ _id: { $in: allPlayerIds } }, { $inc: { consecutiveGames: 1 } }),
+        playersSatOutIds.length > 0
+          ? SessionPlayer.updateMany({ _id: { $in: playersSatOutIds } }, { $set: { consecutiveGames: 0 } })
+          : Promise.resolve(),
+        court.save(),
+      ]);
 
       return game;
     },
@@ -476,6 +491,13 @@ export const gameResolvers = {
 
         if (wasCompleted) {
           await rebuildSessionStatistics(String(session._id), mongooseSession);
+        } else {
+          // The game never finished: give the four their consecutive-game count back.
+          await SessionPlayer.updateMany(
+            { _id: { $in: [...game.teamAPlayerIds, ...game.teamBPlayerIds] }, consecutiveGames: { $gt: 0 } },
+            { $inc: { consecutiveGames: -1 } },
+            { session: mongooseSession }
+          );
         }
         return game;
       });

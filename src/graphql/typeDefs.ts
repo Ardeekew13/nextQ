@@ -82,6 +82,8 @@ export const typeDefs = gql`
     matchingStyle: MatchingStyle!
     queueMode: QueueMode!
     maxConsecutiveGames: Int!
+    mixEveryone: Boolean!
+    rankMatchups: Boolean!
   }
 
   input ScoringSettingsInput {
@@ -98,6 +100,8 @@ export const typeDefs = gql`
     matchingStyle: MatchingStyle
     queueMode: QueueMode
     maxConsecutiveGames: Int
+    mixEveryone: Boolean
+    rankMatchups: Boolean
   }
 
   type User {
@@ -555,7 +559,7 @@ export const typeDefs = gql`
       playersSatOutIds: [ID!]!
       createdAt: Date
     ): Game!
-    fillCourtManually(courtId: ID!, teamAPlayerIds: [ID!]!, teamBPlayerIds: [ID!]!): Game!
+    fillCourtManually(courtId: ID!, teamAPlayerIds: [ID!]!, teamBPlayerIds: [ID!]!, allowRepeat: Boolean): Game!
     updateGameTeams(id: ID!, teamAPlayerIds: [ID!]!, teamBPlayerIds: [ID!]!): Game!
     startGame(id: ID!): Game!
     completeGame(id: ID!, input: CompleteGameInput!): Game!
