@@ -51,6 +51,8 @@ export interface SnapshotGame {
   satOut: string[];
   status: string;
   startedAt?: string | null;
+  /** The device's temporary id, for a game that was made offline and has since synced. */
+  clientId?: string | null;
 }
 
 export interface SnapshotCourt {
@@ -72,6 +74,11 @@ export interface QueueSnapshot {
   players: SnapshotPlayer[];
   activeGames: SnapshotGame[];
   courts: SnapshotCourt[];
+  /** QUEUE_ENGINE_VERSION of the server that took the snapshot. */
+  engineVersion?: string;
+  /** Temporary ids of every offline-made game the server already has. Missing on older
+   * snapshots. */
+  knownClientIds?: string[];
   /** Sorted player ids joined by ":" for every earlier game. */
   pastGroups: string[];
   keepApart: string[][];
@@ -88,6 +95,8 @@ export interface FillOp {
   teamBPlayerIds: string[];
   playersSatOutIds: string[];
   createdAt: string;
+  /** How the line-up was chosen on this device: "AUTO" (the queue) or "TOP_FOUR". */
+  source?: string;
   error?: string;
 }
 
@@ -175,9 +184,16 @@ export function deriveLocalState(snapshot: QueueSnapshot, ops: LocalOp[]): Local
   let activeGames = snapshot.activeGames.map((g) => ({ ...g }));
   const pastGroups = new Set(snapshot.pastGroups);
   let lastGameNumber = snapshot.lastGameNumber;
+  // Actions the server already has are part of the snapshot: never apply them twice.
+  // A synced offline game is known by its temporary id; if it's still on court, results
+  // recorded against that temporary id apply to the server's copy of the game.
+  const known = new Set(snapshot.knownClientIds ?? []);
+  const serverIdOf = new Map<string, string>();
+  for (const g of snapshot.activeGames) if (g.clientId) serverIdOf.set(g.clientId, g.id);
 
   for (const op of ops) {
     if (op.sessionId !== snapshot.sessionId) continue;
+    if (op.kind === "fill" && (known.has(op.localGameId) || serverIdOf.has(op.localGameId))) continue;
     if (op.kind === "fill") {
       const selected = new Set([...op.teamAPlayerIds, ...op.teamBPlayerIds]);
       for (const id of selected) {
@@ -207,9 +223,10 @@ export function deriveLocalState(snapshot: QueueSnapshot, ops: LocalOp[]): Local
       });
       pastGroups.add(groupKey([...selected]));
     } else {
-      const game = activeGames.find((g) => g.id === op.gameId);
+      const gameId = serverIdOf.get(op.gameId) ?? op.gameId;
+      const game = activeGames.find((g) => g.id === gameId);
       if (!game) continue; // already finished on the server, or discarded
-      activeGames = activeGames.filter((g) => g.id !== op.gameId);
+      activeGames = activeGames.filter((g) => g.id !== gameId);
       applyResult(byId, game, op.winningTeam, op.recordedAt);
     }
   }

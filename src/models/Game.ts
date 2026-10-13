@@ -1,5 +1,5 @@
 import mongoose, { type InferSchemaType, type Model } from "mongoose";
-import { GameStatus, WinningTeam } from "@/types/enums";
+import { GameSource, GameStatus, WinningTeam } from "@/types/enums";
 
 const { Schema, model, models } = mongoose;
 
@@ -51,6 +51,29 @@ const GameSchema = new Schema(
      * return the game it already created instead of making a duplicate.
      */
     clientId: { type: String },
+
+    /** How the line-up was first chosen: by the queue, by hand, or "Match top 4". Missing on
+     * games created before this was tracked. Offline games also have a clientId. */
+    source: { type: String, enum: Object.values(GameSource) },
+
+    /** Every change to the teams after the game was created, oldest first: who was on each
+     * team before and after the edit. Lets a "why did these two play again?" question be
+     * answered from the data. */
+    edits: {
+      type: [
+        new Schema(
+          {
+            at: { type: Date, required: true },
+            fromTeamAPlayerIds: [{ type: Schema.Types.ObjectId, ref: "SessionPlayer" }],
+            fromTeamBPlayerIds: [{ type: Schema.Types.ObjectId, ref: "SessionPlayer" }],
+            toTeamAPlayerIds: [{ type: Schema.Types.ObjectId, ref: "SessionPlayer" }],
+            toTeamBPlayerIds: [{ type: Schema.Types.ObjectId, ref: "SessionPlayer" }],
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
   },
   { timestamps: true }
 );

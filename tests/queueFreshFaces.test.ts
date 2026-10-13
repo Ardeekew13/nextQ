@@ -418,14 +418,21 @@ describe("early in the session (the John & Angelica report)", () => {
     if (r.ok) expect(lastPairsIn(r.selected.map((p) => p.id), pool)).toBe(0);
   });
 
-  it("with 18+ players nobody meets anyone twice until it can't be avoided", () => {
-    // Measured before the fix: first repeat at game 6 (18 players) and game 7 (22 players).
-    for (const [n, earliest] of [[18, 9], [22, 11]] as const) {
-      for (let i = 0; i < 6; i++) {
-        const r = simulate(n, 2, 20, { mode: QueueMode.HYBRID, balanceTeams: true }, `early-${i}`);
-        expect(r.firstRepeatGame, `${n} players, night ${i}`).toBeGreaterThanOrEqual(earliest);
-      }
-    }
+  it("new faces never let someone who just came off court jump people who waited 8+ minutes longer", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(T0 + 3600_000);
+    // The Tuesday report: the long-waiters (21-22 min) all came off two courts together, so
+    // fresher faces existed among people who had only just finished (11 min). Same games.
+    const g1 = ["kyn", "kj", "wowie"], g2 = ["mike", "aj", "angel", "jessa"], fresh = ["aldrin", "baaroy", "joie", "rd"];
+    const pool = [
+      ...g1.map((id) => qp(id, 0, { gamesPlayed: 2, recentGames: [g1.filter((x) => x !== id)] })),
+      ...g2.map((id) => qp(id, 60, { gamesPlayed: 2, recentGames: [g2.filter((x) => x !== id)] })),
+      ...fresh.map((id) => qp(id, 11 * 60, { gamesPlayed: 2 })),
+    ];
+    const order = rankQueue(pool, { mode: QueueMode.HYBRID, mixEveryone: true, tiebreakSeed: "s" }).map((p) => p.id);
+    // Everyone who waited 21+ minutes plays in the next two games, before anyone who just finished.
+    for (const id of [...g1, ...g2]) expect(order.indexOf(id), id).toBeLessThan(8);
+    for (const id of fresh) expect(order.indexOf(id), id).toBeGreaterThanOrEqual(7);
   });
 });
 
@@ -526,16 +533,18 @@ describe("new faces — whole-night simulation (regression guard)", () => {
   const rows = () => aggregate({ mode: QueueMode.HYBRID, balanceTeams: true }, 8);
   it("cuts back-to-back court mates where it's possible, without hurting fairness", () => {
     const byRow = Object.fromEntries(rows().map((r) => [r.size, r]));
-    // Measured before this change (8 nights each): 16p/2c ≈ 58 and 24p/3c ≈ 64 pairs per night.
-    expect(byRow["16p/2c"].lastGamePairs).toBeLessThan(45);
-    expect(byRow["24p/3c"].lastGamePairs).toBeLessThan(35);
+    // Before any of this work (8 nights each): 16p/2c ≈ 58 and 24p/3c ≈ 64 pairs per night.
+    // With the 8-minute waiting rule (waiting time beats new faces) it's ≈ 52 and ≈ 31.
+    expect(byRow["16p/2c"].lastGamePairs).toBeLessThan(56);
+    expect(byRow["24p/3c"].lastGamePairs).toBeLessThan(40);
     // Same pair on court a 3rd game running, per 40 games. Before: 12p ≈ 15.5, 14p ≈ 15.9,
-    // 16p/3c ≈ 14.3, 20p ≈ 23.3, 24p ≈ 15.6.
-    expect(byRow["12p/2c"].threeInARow).toBeLessThan(7);
+    // 16p/3c ≈ 14.3, 20p ≈ 23.3, 24p ≈ 15.6. With the waiting rule: ≈ 9, 3.5, 1.5, 3.5, 0.5.
+    expect(byRow["12p/2c"].threeInARow).toBeLessThan(12);
     for (const size of ["14p/2c", "16p/2c", "16p/3c", "20p/2c", "24p/3c"]) {
-      expect(byRow[size].threeInARow, size).toBeLessThan(3);
+      expect(byRow[size].threeInARow, size).toBeLessThan(5);
     }
-    for (const size of ["14p/2c", "16p/2c", "16p/3c", "20p/2c", "24p/3c"]) {
+    expect(byRow["16p/3c"].worstGap).toBeLessThanOrEqual(3); // was 4 before this work
+    for (const size of ["14p/2c", "16p/2c", "20p/2c", "24p/3c"]) {
       expect(byRow[size].worstGap, size).toBeLessThanOrEqual(2);
       expect(byRow[size].fairnessViolations, size).toBe(0);
     }

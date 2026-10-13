@@ -17,6 +17,13 @@ import { QueueMode } from "@/types/enums";
 
 import { seededRandom } from "@/lib/seededRandom";
 
+/**
+ * Bump whenever the queue's picking rules change. The server puts it in the offline snapshot;
+ * a browser still running an older copy sees a mismatch, warns "refresh this page", and lets
+ * the server pick games instead of its out-of-date local copy.
+ */
+export const QUEUE_ENGINE_VERSION = "2026-10-14";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -397,10 +404,24 @@ function unfairSwapAgainst(top: QueuePlayer[], candidate: QueuePlayer[]): number
   const ids = new Set(candidate.map((p) => p.id));
   const added = candidate.filter((p) => !topIds.has(p.id));
   const dropped = top.filter((p) => !ids.has(p.id));
-  let total = 0;
-  for (const a of added) for (const d of dropped) total += Math.max(0, a.gamesPlayed - d.gamesPlayed);
-  return total;
+  let games = 0;
+  let wait = 0;
+  for (const a of added)
+    for (const d of dropped) {
+      games += Math.max(0, a.gamesPlayed - d.gamesPlayed);
+      // Waiting time: someone who joined the queue WAIT_JUMP_LIMIT_MINUTES or more after a
+      // player may not push that player back — not for new faces, not for rank matching.
+      const joinedLaterBy = (a.queueEnteredAt.getTime() - d.queueEnteredAt.getTime()) / 60_000;
+      if (joinedLaterBy >= WAIT_JUMP_LIMIT_MINUTES) wait += 1;
+    }
+  // Games always outweigh waiting time: one game of unfairness (1000) beats any amount of
+  // wait unfairness (at most 16 pairs).
+  return games * 1000 + wait;
 }
+
+/** A player who joined the queue this many minutes (roughly one game) after someone else can
+ * never take that person's spot, whatever new-faces or rank matching would prefer. */
+const WAIT_JUMP_LIMIT_MINUTES = 8;
 
 /** How far down the queue the new-faces preference may look: about the next three games' worth. */
 const FRESH_FACES_SEARCH_WIDTH = 12;
@@ -545,8 +566,8 @@ function selectPlayers(
       // 1-game player who'd waited far longer just because the latter had met the others.
       const mixDefaultTop = selectedList.slice(0, 4);
       const mixViolations = (players: QueuePlayer[]) =>
-        countKeepApartBreaches(players, keepApart) * 1_000_000_000 +
-        countRepeatedTriples(players, pastTriples) * 10_000_000 +
+        countKeepApartBreaches(players, keepApart) * 1e15 +
+        countRepeatedTriples(players, pastTriples) * 1e13 +
         unfairSwapAgainst(mixDefaultTop, players) * 100_000 +
         minPartnerRepeats(players);
       // Standings rank among everyone eligible (1 = best): win rate, then games played.
@@ -586,8 +607,8 @@ function selectPlayers(
       // Rule order: keep-apart groups, then no repeated trio, then FAIRNESS (nobody may replace
       // someone who has played fewer games than they have), then avoiding a repeat partnership.
       const orderedViolations = (players: QueuePlayer[]) =>
-        countKeepApartBreaches(players, keepApart) * 1_000_000_000 +
-        countRepeatedTriples(players, pastTriplesForOrder) * 10_000_000 +
+        countKeepApartBreaches(players, keepApart) * 1e15 +
+        countRepeatedTriples(players, pastTriplesForOrder) * 1e13 +
         unfairSwapAgainst(defaultTop, players) * 100_000 +
         (mode === QueueMode.SMART ? 0 : minPartnerRepeats(players));
       if (violationsOf(defaultTop) > 0) {

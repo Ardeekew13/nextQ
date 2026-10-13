@@ -141,3 +141,46 @@ describe("offline queue", () => {
     expect(ranked.length).toBe(6);
   });
 });
+
+describe("fresh snapshots taken while actions are still syncing", () => {
+  const fillOp = (localGameId: string, teamA: string[], teamB: string[], courtId = "c1"): FillOp => ({
+    kind: "fill", id: `op-${localGameId}`, sessionId: "s1", courtId, localGameId,
+    teamAPlayerIds: teamA, teamBPlayerIds: teamB, playersSatOutIds: [], createdAt: iso(1),
+  });
+
+  it("doesn't duplicate an offline game the server already has, and shows the server's (edited) teams", () => {
+    const snap = snapshot(8);
+    // The server already has the offline game, and an organiser has since swapped p4 for p5.
+    snap.activeGames = [{ id: "real-1", courtId: "c1", gameNumber: 1, teamA: ["p1", "p2"], teamB: ["p3", "p5"], satOut: [], status: "QUEUED", clientId: "local-1" }];
+    snap.knownClientIds = ["local-1"];
+    const state = deriveLocalState(snap, [fillOp("local-1", ["p1", "p2"], ["p3", "p4"])]);
+    expect(state.activeGames).toHaveLength(1);
+    expect(state.activeGames[0].id).toBe("real-1");
+    expect(state.activeGames[0].teamB).toEqual(["p3", "p5"]); // the edit, not the original line-up
+    expect(state.eligible.map((p) => p.id)).toContain("p4"); // swapped out, so waiting again
+  });
+
+  it("doesn't bring back a synced offline game that has already finished on the server", () => {
+    const snap = snapshot(8);
+    snap.knownClientIds = ["local-1"]; // synced, completed, no longer on court
+    const state = deriveLocalState(snap, [fillOp("local-1", ["p1", "p2"], ["p3", "p4"])]);
+    expect(state.activeGames).toHaveLength(0);
+    expect(state.courts.find((c) => c.id === "c1")!.currentGameId).toBeNull();
+  });
+
+  it("applies a not-yet-synced result to the server's copy of a synced offline game", () => {
+    const snap = snapshot(8);
+    snap.activeGames = [{ id: "real-1", courtId: "c1", gameNumber: 1, teamA: ["p1", "p2"], teamB: ["p3", "p4"], satOut: [], status: "QUEUED", clientId: "local-1" }];
+    snap.knownClientIds = ["local-1"];
+    const result: CompleteOp = { kind: "complete", id: "op-r", sessionId: "s1", gameId: "local-1", winningTeam: "A", recordedAt: iso(20) };
+    const state = deriveLocalState(snap, [fillOp("local-1", ["p1", "p2"], ["p3", "p4"]), result]);
+    expect(state.activeGames).toHaveLength(0);
+    expect(state.players.find((p) => p.id === "p1")!.wins).toBe(1);
+  });
+
+  it("still replays everything on an older snapshot without the new fields", () => {
+    const snap = snapshot(8);
+    const state = deriveLocalState(snap, [fillOp("local-1", ["p1", "p2"], ["p3", "p4"])]);
+    expect(state.activeGames.map((g) => g.id)).toEqual(["local-1"]);
+  });
+});

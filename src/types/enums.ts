@@ -31,6 +31,17 @@ export const GameStatus = {
 } as const;
 export type GameStatus = (typeof GameStatus)[keyof typeof GameStatus];
 
+/** How a game's line-up was first chosen. */
+export const GameSource = {
+  /** Picked by the queue (the normal court fill, online or offline). */
+  AUTO: "AUTO",
+  /** Players chosen by hand. */
+  MANUAL: "MANUAL",
+  /** "Match top 4": the four best-ranked waiting players. */
+  TOP_FOUR: "TOP_FOUR",
+} as const;
+export type GameSource = (typeof GameSource)[keyof typeof GameSource];
+
 export const WinningTeam = {
   A: "A",
   B: "B",

@@ -10,7 +10,7 @@ import { recentGameMates } from "@/lib/lastGame";
 import { buildQueueSnapshot } from "@/lib/queueSnapshot";
 import { rebuildSessionStatistics } from "@/lib/stats";
 import { withOptionalTransaction } from "@/lib/transaction";
-import { CourtStatus, GameStatus, WinningTeam, PairingMode, QueueMode, type SessionSettings } from "@/types/enums";
+import { CourtStatus, GameSource, GameStatus, WinningTeam, PairingMode, QueueMode, type SessionSettings } from "@/types/enums";
 import { requireSessionOwner, requireOrganiser } from "../guards";
 import type { GraphQLContext } from "../context";
 import type { HydratedDocument } from "mongoose";
@@ -28,6 +28,11 @@ function toMatchPlayer(doc: HydratedDocument<SessionPlayerDoc>): MatchPlayer {
     partnerHistory: Object.fromEntries(partnerHistory),
     opponentHistory: Object.fromEntries(opponentHistory),
   };
+}
+
+/** A known GameSource value, or `fallback` for anything missing/unknown (older clients). */
+function validSource(value: string | null | undefined, fallback: GameSource): GameSource {
+  return (Object.values(GameSource) as string[]).includes(value ?? "") ? (value as GameSource) : fallback;
 }
 
 async function requireGameOwner(context: GraphQLContext, gameId: string) {
@@ -76,6 +81,7 @@ export const gameResolvers = {
         teamBPlayerIds: string[];
         playersSatOutIds: string[];
         createdAt?: Date | string | null;
+        source?: string | null;
       },
       context: GraphQLContext
     ) => {
@@ -137,6 +143,7 @@ export const gameResolvers = {
             playersSatOutIds: satOut,
             clientId: args.clientGameId,
             createdAt,
+            source: validSource(args.source, GameSource.AUTO),
           });
         } catch (err) {
           const dup = (err as { code?: number }).code === 11000;
@@ -237,6 +244,7 @@ export const gameResolvers = {
         teamBPlayerIds: result.teamB.map((p) => p.id),
         status: GameStatus.QUEUED,
         playersSatOutIds,
+        source: GameSource.AUTO,
       });
 
       // Increment consecutive games for selected players, reset for sat-out players
@@ -261,7 +269,7 @@ export const gameResolvers = {
 
     fillCourtManually: async (
       _p: unknown,
-      args: { courtId: string; teamAPlayerIds: string[]; teamBPlayerIds: string[]; allowRepeat?: boolean },
+      args: { courtId: string; teamAPlayerIds: string[]; teamBPlayerIds: string[]; allowRepeat?: boolean; source?: string | null },
       context: GraphQLContext
     ) => {
       requireOrganiser(context);
@@ -330,6 +338,7 @@ export const gameResolvers = {
         teamBPlayerIds: args.teamBPlayerIds,
         status: GameStatus.QUEUED,
         playersSatOutIds,
+        source: validSource(args.source, GameSource.MANUAL),
       });
 
       // Same bookkeeping as an auto-generated game: the four get a consecutive game, and everyone
@@ -378,6 +387,20 @@ export const gameResolvers = {
       );
       const newTeamIds = new Set(allIds.map(String));
       game.playersSatOutIds = [...priorEligiblePool].filter((id) => !newTeamIds.has(id)) as never[];
+
+      // Keep an audit trail of the change (skip no-op saves that don't change anyone's team).
+      const sameTeams =
+        [...game.teamAPlayerIds].map(String).sort().join() === [...args.teamAPlayerIds].map(String).sort().join() &&
+        [...game.teamBPlayerIds].map(String).sort().join() === [...args.teamBPlayerIds].map(String).sort().join();
+      if (!sameTeams) {
+        game.edits.push({
+          at: new Date(),
+          fromTeamAPlayerIds: [...game.teamAPlayerIds],
+          fromTeamBPlayerIds: [...game.teamBPlayerIds],
+          toTeamAPlayerIds: args.teamAPlayerIds as never[],
+          toTeamBPlayerIds: args.teamBPlayerIds as never[],
+        } as never);
+      }
 
       game.teamAPlayerIds = args.teamAPlayerIds as never[];
       game.teamBPlayerIds = args.teamBPlayerIds as never[];
@@ -539,6 +562,13 @@ export const gameResolvers = {
     },
   },
 
+  GameEdit: {
+    fromTeamA: async (p: { fromTeamAPlayerIds: unknown[] }) => ({ players: await SessionPlayer.find({ _id: { $in: p.fromTeamAPlayerIds } }) }),
+    fromTeamB: async (p: { fromTeamBPlayerIds: unknown[] }) => ({ players: await SessionPlayer.find({ _id: { $in: p.fromTeamBPlayerIds } }) }),
+    toTeamA: async (p: { toTeamAPlayerIds: unknown[] }) => ({ players: await SessionPlayer.find({ _id: { $in: p.toTeamAPlayerIds } }) }),
+    toTeamB: async (p: { toTeamBPlayerIds: unknown[] }) => ({ players: await SessionPlayer.find({ _id: { $in: p.toTeamBPlayerIds } }) }),
+  },
+
   Game: {
     id: (parent: { _id: unknown }) => String(parent._id),
     court: async (parent: { courtId: unknown }) => Court.findById(parent.courtId),
@@ -548,6 +578,9 @@ export const gameResolvers = {
     teamB: async (parent: { teamBPlayerIds: unknown[] }) => ({
       players: await SessionPlayer.find({ _id: { $in: parent.teamBPlayerIds } }),
     }),
+    offline: (parent: { clientId?: string }) => Boolean(parent.clientId),
+    edited: (parent: { edits?: unknown[] }) => (parent.edits?.length ?? 0) > 0,
+    edits: (parent: { edits?: unknown[] }) => parent.edits ?? [],
     losingTeam: (parent: { winningTeam?: string }) => {
       if (!parent.winningTeam) return null;
       return parent.winningTeam === WinningTeam.A ? WinningTeam.B : WinningTeam.A;

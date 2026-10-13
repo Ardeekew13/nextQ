@@ -52,6 +52,14 @@ async function main() {
       teamA: g.teamAPlayerIds.map(String), teamB: g.teamBPlayerIds.map(String),
       satOut: (g.playersSatOutIds ?? []).map(String), winningTeam: g.winningTeam ?? null,
       offline: Boolean((g as { clientId?: string }).clientId),
+      source: g.source ?? null,
+      edits: (g.edits ?? []).map((e) => ({
+        at: e.at,
+        fromTeamA: e.fromTeamAPlayerIds.map(String),
+        fromTeamB: e.fromTeamBPlayerIds.map(String),
+        toTeamA: e.toTeamAPlayerIds.map(String),
+        toTeamB: e.toTeamBPlayerIds.map(String),
+      })),
     })),
     previewOrder: preview.map((d) => ({ id: String(d._id), name: d.name })),
   };
