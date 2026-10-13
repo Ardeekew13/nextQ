@@ -13,6 +13,7 @@ import { QueueMode } from "@/types/enums";
 import { generateNextGame, rankQueue, type QueuePlayer } from "@/lib/queueEngine";
 import { poolSeed, seededRandom } from "@/lib/seededRandom";
 import { blendedStrength } from "@/lib/playerStrength";
+import { RECENT_GAMES_REMEMBERED } from "@/lib/lastGame";
 
 export interface SnapshotPlayer {
   id: string;
@@ -35,6 +36,10 @@ export interface SnapshotPlayer {
   /** Recent club record (last few completed sessions), used for the strength estimate. */
   clubWins?: number;
   clubGames?: number;
+  /** Who this player shared a court with in their most recent game. */
+  lastGameWith?: string[];
+  /** The other three players in each of this player's last few games, newest first. */
+  recentGames?: string[][];
 }
 
 export interface SnapshotGame {
@@ -122,7 +127,13 @@ function groupKey(ids: string[]) {
 }
 
 function clonePlayer(p: SnapshotPlayer): SnapshotPlayer {
-  return { ...p, partnerHistory: { ...p.partnerHistory }, opponentHistory: { ...p.opponentHistory } };
+  return {
+    ...p,
+    partnerHistory: { ...p.partnerHistory },
+    opponentHistory: { ...p.opponentHistory },
+    lastGameWith: p.lastGameWith ? [...p.lastGameWith] : undefined,
+    recentGames: p.recentGames ? p.recentGames.map((g) => [...g]) : undefined,
+  };
 }
 
 function applyResult(
@@ -171,7 +182,13 @@ export function deriveLocalState(snapshot: QueueSnapshot, ops: LocalOp[]): Local
       const selected = new Set([...op.teamAPlayerIds, ...op.teamBPlayerIds]);
       for (const id of selected) {
         const p = byId.get(id);
-        if (p) p.consecutiveGames += 1;
+        if (p) {
+          p.consecutiveGames += 1;
+          const mates = [...selected].filter((other) => other !== id);
+          const earlier = p.recentGames ?? (p.lastGameWith ? [p.lastGameWith] : []);
+          p.lastGameWith = mates;
+          p.recentGames = [mates, ...earlier].slice(0, RECENT_GAMES_REMEMBERED);
+        }
       }
       for (const id of op.playersSatOutIds) {
         const p = byId.get(id);
@@ -228,6 +245,8 @@ function toQueuePlayer(p: SnapshotPlayer): QueuePlayer {
       games: p.gamesPlayed,
     }),
     fixedPartnerId: p.fixedPartnerId ?? undefined,
+    lastGameWith: p.lastGameWith,
+    recentGames: p.recentGames,
   };
 }
 

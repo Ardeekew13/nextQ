@@ -39,6 +39,13 @@ export interface QueuePlayer {
    * the other one forward. This keeps the "always together" guarantee without letting a
    * pair jump ahead of players who'd otherwise be next. */
   fixedPartnerId?: string;
+  /** Ids of the other three players in this player's most recent game. Used to avoid putting
+   * people who just shared a court straight back on one together (partners or opponents). */
+  lastGameWith?: string[];
+  /** The other three players in each of this player's last few games, newest first
+   * (recentGames[0] is the same as lastGameWith). Used to spot a pair stuck together
+   * game after game. */
+  recentGames?: string[][];
 }
 
 export type PlayerQuad = [QueuePlayer, QueuePlayer, QueuePlayer, QueuePlayer];
@@ -254,7 +261,10 @@ function findFoursomeAvoidingRepeatedTrios(
   violationsOf: (players: QueuePlayer[]) => number,
   /** Optional second criterion, compared after violations and before the priority score
    * (used by "mix everyone" to prefer foursomes whose members have met the least). */
-  secondaryOf: (players: QueuePlayer[]) => number = () => 0
+  secondaryOf: (players: QueuePlayer[]) => number = () => 0,
+  /** Keep the first (highest-priority) entry in every candidate foursome, so a preference
+   * can never push the person at the front of the queue back. */
+  anchorFirst: boolean = false
 ): QueuePlayer[] | null {
   const candidates = entries.slice(0, TRIO_SEARCH_WIDTH);
   let best: { players: QueuePlayer[]; violations: number; secondary: number; score: number } | null = null;
@@ -285,7 +295,13 @@ function findFoursomeAvoidingRepeatedTrios(
       chosen.pop();
     }
   }
-  dfs(0, 0, 0);
+  if (anchorFirst && candidates.length > 0) {
+    const first = candidates[0];
+    chosen.push(first);
+    dfs(1, first.kind === "pair" ? 2 : 1, first.score);
+  } else {
+    dfs(0, 0, 0);
+  }
 
   return best ? (best as { players: QueuePlayer[] }).players : null;
 }
@@ -302,6 +318,92 @@ function coPlayTotal(players: QueuePlayer[]): number {
     for (let j = i + 1; j < players.length; j++) total += sharedGames(players[i], players[j]);
   return total;
 }
+
+function recentGamesOf(p: QueuePlayer): string[][] {
+  return p.recentGames ?? (p.lastGameWith ? [p.lastGameWith] : []);
+}
+
+/** How many games in a row (counting back from their latest) these two have shared a court:
+ * 0 = not in their last game, 1 = last game only, 2 = last two games, 3 = last three.
+ * Fixed partners always count as 0 — they're meant to play together. */
+function pairStreak(a: QueuePlayer, b: QueuePlayer): number {
+  if (a.fixedPartnerId === b.id) return 0;
+  const run = (from: QueuePlayer, other: string) => {
+    let n = 0;
+    for (const mates of recentGamesOf(from)) {
+      if (!mates.includes(other)) break;
+      n++;
+    }
+    return n;
+  };
+  return Math.max(run(a, b.id), run(b, a.id));
+}
+
+/** Cost of putting a pair together again, rising steeply with how long they've been stuck
+ * together: once more after one game is mild, a third game running is almost never allowed. */
+function streakCost(streak: number): number {
+  if (streak <= 0) return 0;
+  if (streak === 1) return 1_000;
+  if (streak === 2) return 1_000_000;
+  return 1_000_000_000;
+}
+
+/** Total streak cost over the foursome's six pairs. */
+function pairStreakCost(players: QueuePlayer[]): number {
+  let cost = 0;
+  for (let i = 0; i < players.length; i++)
+    for (let j = i + 1; j < players.length; j++) cost += streakCost(pairStreak(players[i], players[j]));
+  return cost;
+}
+
+/** Only the pairs who'd be together for a THIRD game or more running. */
+function longRunCost(players: QueuePlayer[]): number {
+  let cost = 0;
+  for (let i = 0; i < players.length; i++)
+    for (let j = i + 1; j < players.length; j++) {
+      const s = pairStreak(players[i], players[j]);
+      if (s >= 2) cost += streakCost(s);
+    }
+  return cost;
+}
+
+/** Shared games across the foursome's pairs, ignoring fixed partners (they always play together). */
+function coPlayExcludingFixed(players: QueuePlayer[]): number {
+  let total = 0;
+  for (let i = 0; i < players.length; i++)
+    for (let j = i + 1; j < players.length; j++) {
+      if (players[i].fixedPartnerId === players[j].id) continue;
+      total += sharedGames(players[i], players[j]);
+    }
+  return total;
+}
+
+/**
+ * "New faces" cost of a foursome — lower is fresher. A pair who'd be together for a third
+ * game running is avoided above all, then a second game running, then the foursome whose
+ * members have met least overall is preferred.
+ */
+function freshFacesCost(players: QueuePlayer[]): number {
+  return pairStreakCost(players) + coPlayExcludingFixed(players);
+}
+
+/** How unfair it is to play `candidate` instead of the default `top` four: for every player
+ * pushed out and every player brought in, the number of games the newcomer is ahead by (0 when
+ * the newcomer hasn't played more). 0 = a fair swap (or no swap). Graded rather than yes/no, so
+ * when the rules force SOME unfairness the queue still picks the least unfair option — e.g. one
+ * 2-game player instead of three. */
+function unfairSwapAgainst(top: QueuePlayer[], candidate: QueuePlayer[]): number {
+  const topIds = new Set(top.map((p) => p.id));
+  const ids = new Set(candidate.map((p) => p.id));
+  const added = candidate.filter((p) => !topIds.has(p.id));
+  const dropped = top.filter((p) => !ids.has(p.id));
+  let total = 0;
+  for (const a of added) for (const d of dropped) total += Math.max(0, a.gamesPlayed - d.gamesPlayed);
+  return total;
+}
+
+/** How far down the queue the new-faces preference may look: about the next three games' worth. */
+const FRESH_FACES_SEARCH_WIDTH = 12;
 
 /** The splits of a foursome into two pairs that keep every intact fixed pair together. */
 function legalSplits(players: QueuePlayer[]): Array<{ teamA: PlayerPair; teamB: PlayerPair }> {
@@ -437,9 +539,15 @@ function selectPlayers(
           (e.kind === "pair" ? e.players : [e.player]).every((p) => p.gamesPlayed <= window)
         );
       }
+      // Same rule order as the default path: keep-apart, no repeated trio, then FAIRNESS against
+      // the plain priority-order four (nobody may replace someone who has played fewer games),
+      // then repeat partners. Without the fairness step, mixing let a fresh 2-game player jump a
+      // 1-game player who'd waited far longer just because the latter had met the others.
+      const mixDefaultTop = selectedList.slice(0, 4);
       const mixViolations = (players: QueuePlayer[]) =>
-        countKeepApartBreaches(players, keepApart) * 1000 +
-        countRepeatedTriples(players, pastTriples) * 10 +
+        countKeepApartBreaches(players, keepApart) * 1_000_000_000 +
+        countRepeatedTriples(players, pastTriples) * 10_000_000 +
+        unfairSwapAgainst(mixDefaultTop, players) * 100_000 +
         minPartnerRepeats(players);
       // Standings rank among everyone eligible (1 = best): win rate, then games played.
       const rankOf = new Map<string, number>();
@@ -457,8 +565,11 @@ function selectPlayers(
         return Math.max(...r) - Math.min(...r);
       };
       const mixSecondary = (players: QueuePlayer[]) =>
-        (mixEveryone ? coPlayTotal(players) * 100 : 0) + (rankMatchups ? rankSpread(players) : 0);
-      let mixed = findFoursomeAvoidingRepeatedTrios(windowed, mixViolations, mixSecondary);
+        pairStreakCost(players) * 1_000 +
+        (mixEveryone ? coPlayTotal(players) * 100 : 0) +
+        (rankMatchups ? rankSpread(players) : 0);
+      // The front of the queue always keeps their spot, as in the default path.
+      let mixed = findFoursomeAvoidingRepeatedTrios(windowed, mixViolations, mixSecondary, windowed[0] === entries[0]);
       if (mixed && countKeepApartBreaches(mixed, keepApart) > 0 && pool.length < eligible.length) {
         const inPool = new Set(pool.map((p) => p.id));
         const extras: ScoredEntry[] = eligible
@@ -468,8 +579,22 @@ function selectPlayers(
         mixed = findFoursomeAvoidingRepeatedTrios(widened, mixViolations, mixSecondary) ?? mixed;
       }
       if (mixed) selectedList.splice(0, selectedList.length, ...mixed);
-    } else if (violationsOf(selectedList.slice(0, 4)) > 0) {
-      let alternative = findFoursomeAvoidingRepeatedTrios(entries, violationsOf);
+    } else {
+      // The plain priority-order four — fairness is always judged against this.
+      const defaultTop = selectedList.slice(0, 4);
+      const pastTriplesForOrder = mode === QueueMode.SMART ? new Set<string>() : buildPastTriples(pastGroups);
+      // Rule order: keep-apart groups, then no repeated trio, then FAIRNESS (nobody may replace
+      // someone who has played fewer games than they have), then avoiding a repeat partnership.
+      const orderedViolations = (players: QueuePlayer[]) =>
+        countKeepApartBreaches(players, keepApart) * 1_000_000_000 +
+        countRepeatedTriples(players, pastTriplesForOrder) * 10_000_000 +
+        unfairSwapAgainst(defaultTop, players) * 100_000 +
+        (mode === QueueMode.SMART ? 0 : minPartnerRepeats(players));
+      if (violationsOf(defaultTop) > 0) {
+      // Without the fairness step, dodging a repeat partner could pull in a player two games
+      // ahead of someone who'd waited longest.
+      // Among equally good options, never keep a pair together for a third game running.
+      let alternative = findFoursomeAvoidingRepeatedTrios(entries, orderedViolations, longRunCost);
       // A keep-apart group outranks the consecutive-game pacing limit: if the below-limit
       // pool can't avoid breaking one, widen the search to players who are over the limit.
       if (alternative && countKeepApartBreaches(alternative, keepApart) > 0 && pool.length < eligible.length) {
@@ -478,9 +603,38 @@ function selectPlayers(
           .filter((p) => !inPool.has(p.id) && !p.fixedPartnerId)
           .map((player) => ({ kind: "single" as const, player, score: scoreById.get(player.id)! }));
         const widened = [...entries, ...extras].sort((a, b) => a.score - b.score);
-        alternative = findFoursomeAvoidingRepeatedTrios(widened, violationsOf) ?? alternative;
+        alternative = findFoursomeAvoidingRepeatedTrios(widened, orderedViolations, longRunCost) ?? alternative;
       }
       if (alternative) selectedList.splice(0, selectedList.length, ...alternative);
+      }
+      // Runs after the rule fix above too. Players who finish a game rejoin the queue at the
+      // same moment, so the default four is often three or four people off the same court —
+      // the trio rule splits them up, but that alone happily leaves two of them together.
+      if (mode !== QueueMode.SMART && freshFacesCost(selectedList.slice(0, 4)) > 0) {
+      // New faces: some of the four have already shared a court — maybe in their very last
+      // game. Look a little further down the queue for a
+      // fresher four, with three fairness guards:
+      //   - only the next two games' worth of players (FRESH_FACES_SEARCH_WIDTH) are considered;
+      //   - nobody may replace someone who has played fewer games than they have;
+      //   - the person at the front of the queue always keeps their spot.
+      // If nothing fresher exists (small groups), the default four play as normal.
+      const top = selectedList.slice(0, 4);
+      const maxGames = Math.max(...top.map((p) => p.gamesPlayed));
+      const membersOf = (e: Entry) => (e.kind === "pair" ? e.players : [e.player]);
+      const candidates = entries
+        .filter((e) => membersOf(e).every((p) => p.gamesPlayed <= maxGames))
+        .slice(0, FRESH_FACES_SEARCH_WIDTH);
+      // Same rule order as above, fairness judged against the ORIGINAL priority-order four —
+      // so new faces can never make the game less fair than the rules already forced.
+      const fresher = findFoursomeAvoidingRepeatedTrios(candidates, orderedViolations, freshFacesCost, true);
+      const better =
+        fresher &&
+        (orderedViolations(fresher) < orderedViolations(top) ||
+          (orderedViolations(fresher) === orderedViolations(top) && freshFacesCost(fresher) < freshFacesCost(top)));
+      if (fresher && better) {
+        selectedList.splice(0, selectedList.length, ...fresher);
+      }
+      }
     }
   }
 

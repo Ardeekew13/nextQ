@@ -6,6 +6,7 @@ import { poolSeed, seededRandom } from "@/lib/seededRandom";
 import { rankQueue, generateNextGame as queueEngineGenerateNextGame, type QueuePlayer } from "@/lib/queueEngine";
 import { blendedStrength, normaliseName, type ClubRecord } from "@/lib/playerStrength";
 import { loadClubHistory } from "@/lib/clubHistory";
+import { recentGameMates } from "@/lib/lastGame";
 import type { HydratedDocument } from "mongoose";
 
 /** Players currently locked to a court because they're mid-game (queued or in progress). */
@@ -42,8 +43,10 @@ export async function getEligiblePlayers(
  * blended strength estimate (skill level → club history → tonight), not raw session win rate. */
 export function toQueuePlayer(
   doc: HydratedDocument<SessionPlayerDoc>,
-  clubHistory?: ReadonlyMap<string, ClubRecord>
+  clubHistory?: ReadonlyMap<string, ClubRecord>,
+  recentMates?: ReadonlyMap<string, string[][]>
 ): QueuePlayer {
+  const recent = recentMates?.get(String(doc._id));
   const partnerHistory: Record<string, number> =
     doc.partnerHistory instanceof Map
       ? Object.fromEntries(doc.partnerHistory)
@@ -68,6 +71,8 @@ export function toQueuePlayer(
       games: doc.gamesPlayed,
     }),
     fixedPartnerId: doc.fixedPartnerId ? String(doc.fixedPartnerId) : undefined,
+    lastGameWith: recent?.[0],
+    recentGames: recent,
   };
 }
 
@@ -97,6 +102,8 @@ interface QueueContext {
   seed: string;
   /** Each eligible player's recent club record, keyed by normalised name. */
   clubHistory: Map<string, ClubRecord>;
+  /** Who each player shared a court with in their last few games, newest first. */
+  recentMates: Map<string, string[][]>;
 }
 
 async function loadQueueContext(sessionId: string): Promise<QueueContext> {
@@ -134,6 +141,7 @@ async function loadQueueContext(sessionId: string): Promise<QueueContext> {
     keepApart: (session?.separatedGroups ?? []).map((g) => g.playerIds.map(String)),
     seed: queuePoolSeed(eligibleDocs),
     clubHistory,
+    recentMates: recentGameMates(priorGames),
   };
 }
 
@@ -148,7 +156,7 @@ export async function getQueuePreview(
   const ctx = await loadQueueContext(sessionId);
   if (ctx.eligibleDocs.length === 0) return [];
 
-  const ranked = rankQueue(ctx.eligibleDocs.map((d) => toQueuePlayer(d, ctx.clubHistory)), {
+  const ranked = rankQueue(ctx.eligibleDocs.map((d) => toQueuePlayer(d, ctx.clubHistory, ctx.recentMates)), {
     mode: ctx.mode,
     maxConsecutiveGames: ctx.maxConsecutiveGames,
     mixEveryone: ctx.mixEveryone,
@@ -182,7 +190,7 @@ export async function getNextGamePreview(
   const ctx = await loadQueueContext(sessionId);
   if (ctx.eligibleDocs.length < 4) return null;
 
-  const result = queueEngineGenerateNextGame(ctx.eligibleDocs.map((d) => toQueuePlayer(d, ctx.clubHistory)), {
+  const result = queueEngineGenerateNextGame(ctx.eligibleDocs.map((d) => toQueuePlayer(d, ctx.clubHistory, ctx.recentMates)), {
     mode: ctx.mode,
     maxConsecutiveGames: ctx.maxConsecutiveGames,
     mixEveryone: ctx.mixEveryone,

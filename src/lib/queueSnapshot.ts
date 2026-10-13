@@ -6,6 +6,7 @@ import { GameStatus, QueueMode, type SessionSettings } from "@/types/enums";
 import type { QueueSnapshot } from "@/lib/offlineQueue";
 import { loadClubHistory } from "@/lib/clubHistory";
 import { normaliseName } from "@/lib/playerStrength";
+import { recentGameMates } from "@/lib/lastGame";
 
 function plain(map: unknown): Record<string, number> {
   if (map instanceof Map) return Object.fromEntries(map as Map<string, number>);
@@ -30,6 +31,7 @@ export async function buildQueueSnapshot(sessionId: string): Promise<QueueSnapsh
   const ids = (list: unknown[]) => list.map(String);
   const live = games.filter((g) => g.status === GameStatus.QUEUED || g.status === GameStatus.IN_PROGRESS);
   const past = games.filter((g) => g.status !== GameStatus.CANCELLED).slice(0, 200);
+  const recentMates = recentGameMates(past); // games are newest first
 
   return {
     sessionId,
@@ -59,6 +61,8 @@ export async function buildQueueSnapshot(sessionId: string): Promise<QueueSnapsh
       skillLevel: p.skillLevel ?? null,
       clubWins: clubHistory.get(normaliseName(p.name))?.wins ?? 0,
       clubGames: clubHistory.get(normaliseName(p.name))?.games ?? 0,
+      lastGameWith: recentMates.get(String(p._id))?.[0] ?? [],
+      recentGames: recentMates.get(String(p._id)) ?? [],
     })),
     activeGames: live.map((g) => ({
       id: String(g._id),

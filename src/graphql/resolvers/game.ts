@@ -6,6 +6,7 @@ import { generateGame, type MatchPlayer } from "@/lib/matchmaking";
 import { generateNextGame as queueEngineGenerate, type QueuePlayer } from "@/lib/queueEngine";
 import { getEligiblePlayers, toQueuePlayer, queuePoolSeed, seededRandom } from "@/lib/eligibility";
 import { loadClubHistory } from "@/lib/clubHistory";
+import { recentGameMates } from "@/lib/lastGame";
 import { buildQueueSnapshot } from "@/lib/queueSnapshot";
 import { rebuildSessionStatistics } from "@/lib/stats";
 import { withOptionalTransaction } from "@/lib/transaction";
@@ -195,7 +196,8 @@ export const gameResolvers = {
         session._id,
         eligibleDocs.map((d) => d.name)
       );
-      const eligible: QueuePlayer[] = eligibleDocs.map((d) => toQueuePlayer(d, clubHistory));
+      const recentMates = recentGameMates(priorGames); // priorGames is newest first
+      const eligible: QueuePlayer[] = eligibleDocs.map((d) => toQueuePlayer(d, clubHistory, recentMates));
 
       const settings = session.settings as SessionSettings;
       const pastGroups = new Set(
