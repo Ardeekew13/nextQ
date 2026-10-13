@@ -24,6 +24,7 @@ import {
 	type ScoreEntryValues,
 } from "@/components/ScoreEntryForm";
 import { CourtCard } from "./CourtCard";
+import { GameOriginTags } from "@/components/GameOriginTags";
 import { useOfflineResults } from "@/apollo/OfflineResultsProvider";
 import {
 	deriveLocalState,
@@ -32,7 +33,9 @@ import {
 	rankLocalQueue,
 	type QueueSnapshot,
 } from "@/lib/offlineQueue";
-import { isNetworkFailure, loadPending, loadSnapshot, saveSnapshot } from "@/lib/offlineResults";
+import { QUEUE_ENGINE_VERSION } from "@/lib/queueEngine";
+import { shouldFillOnDevice } from "@/lib/fillLocation";
+import { isNetworkFailure, loadIdMap, loadPending, loadSnapshot, saveSnapshot } from "@/lib/offlineResults";
 import { pickTopFour } from "@/lib/topFour";
 import type { SessionStats } from "@/app/dashboard/sessions/[sessionId]/page";
 
@@ -134,6 +137,22 @@ export function OverviewTab({
 		() => offline.pending.filter((p) => p.sessionId === sessionId),
 		[offline.pending, sessionId],
 	);
+	// Actions the server doesn't have yet. Only these make the screen use the on-device
+	// replay; once everything has synced, the server's own data (including team edits made
+	// online) is shown again.
+	// A failed entry (the server rejected it) never reached the server: it's shown in the
+	// banner with Retry / Discard, but it must not keep the whole session on the device copy.
+	const replayOps = useMemo(() => sessionOps.filter((p) => !p.error), [sessionOps]);
+	const unsyncedOps = useMemo(() => replayOps.filter((p) => !p.synced), [replayOps]);
+	// This browser is running older queue rules than the server: say so, and let the server pick.
+	const outdated = Boolean(snapshot?.engineVersion && snapshot.engineVersion !== QUEUE_ENGINE_VERSION);
+	const hasUnsynced = () => loadPending().some((p) => p.sessionId === sessionId && !p.synced && !p.error);
+	/** Fill on this device only when the server can't do it: no connection, or actions that
+	 * still haven't reached it. A result recorded a moment ago is sent first (usually well under
+	 * a second), so the normal "record result, fill court" flow is picked by the server. */
+	function mustFillHere(): Promise<boolean> {
+		return shouldFillOnDevice({ hasSnapshot: Boolean(snapshot), online: offline.online, hasUnsynced, syncNow: offline.syncNow });
+	}
 
 	useEffect(() => {
 		setSnapshot((cur) => cur ?? loadSnapshot(sessionId));
@@ -142,8 +161,9 @@ export function OverviewTab({
 	useEffect(() => {
 		const raw = snapData?.sessionQueueSnapshot;
 		if (!raw) return;
-		// A snapshot taken while results/games are still waiting would be applied twice.
-		if (loadPending().some((p) => p.sessionId === sessionId)) return;
+		// Always take the fresh snapshot, even mid-sync: the replay skips anything the server
+		// already has (offline games are recognised by their temporary id), so nothing is
+		// applied twice — and the device no longer freezes on an old copy of the session.
 		try {
 			const parsed = JSON.parse(raw) as QueueSnapshot;
 			setSnapshot(parsed);
@@ -157,7 +177,7 @@ export function OverviewTab({
 	const lastDashboard = useRef<unknown>(null);
 	useEffect(() => {
 		if (!data) return;
-		if (lastDashboard.current && lastDashboard.current !== data && offline.online && sessionOps.length === 0) {
+		if (lastDashboard.current && lastDashboard.current !== data && offline.online) {
 			void refetchSnapshot();
 		}
 		lastDashboard.current = data;
@@ -165,8 +185,8 @@ export function OverviewTab({
 	}, [data]);
 
 	const local = useMemo(
-		() => (snapshot && sessionOps.length > 0 ? deriveLocalState(snapshot, sessionOps) : null),
-		[snapshot, sessionOps],
+		() => (snapshot && unsyncedOps.length > 0 ? deriveLocalState(snapshot, replayOps) : null),
+		[snapshot, replayOps, unsyncedOps],
 	);
 
 	const session = useMemo(() => {
@@ -329,8 +349,8 @@ export function OverviewTab({
 		const waitingIds = (session?.queuedPlayers ?? []).map((p: any) => p.id);
 		const playersSatOutIds = waitingIds.filter((pid: string) => ![...teamA, ...teamB].includes(pid));
 		const announce = () => announceMatchup(team([r1, r4]), team([r2, r3]), court.name ?? `Court ${court.courtNumber}`);
-		if (snapshot && (!offline.online || sessionOps.length > 0)) {
-			const localId = offline.fillCourt({ sessionId, courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, playersSatOutIds });
+		if (await mustFillHere()) {
+			const localId = offline.fillCourt({ sessionId, courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, playersSatOutIds, source: "TOP_FOUR" });
 			announce();
 			offerUndo(() => {
 				const op = loadPending().find((o) => o.kind === "fill" && o.localGameId === localId);
@@ -341,7 +361,7 @@ export function OverviewTab({
 		}
 		try {
 			const res = await fillCourtManually({
-				variables: { courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, allowRepeat: true },
+				variables: { courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, allowRepeat: true, source: "TOP_FOUR" },
 			});
 			announce();
 			await refetch();
@@ -354,7 +374,7 @@ export function OverviewTab({
 			}
 		} catch (err) {
 			if (snapshot && isNetworkFailure(err)) {
-				const localId = offline.fillCourt({ sessionId, courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, playersSatOutIds });
+				const localId = offline.fillCourt({ sessionId, courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, playersSatOutIds, source: "TOP_FOUR" });
 				announce();
 				offerUndo(() => {
 					const op = loadPending().find((o) => o.kind === "fill" && o.localGameId === localId);
@@ -375,7 +395,7 @@ export function OverviewTab({
 				message.error("Can't generate games offline until this session has loaded once online.");
 				return;
 			}
-			const state = deriveLocalState(snapshot, sessionOps);
+			const state = deriveLocalState(snapshot, replayOps);
 			const court = state.courts.find((c) => c.id === courtId);
 			if (!court || court.currentGameId) {
 				message.error("That court is already in use.");
@@ -392,12 +412,13 @@ export function OverviewTab({
 				teamAPlayerIds: picked.teamA,
 				teamBPlayerIds: picked.teamB,
 				playersSatOutIds: picked.satOut,
+				source: "AUTO",
 			});
 			const names = new Map(snapshot.players.map((p) => [p.id, p.name]));
 			const team = (ids: string[]) => ({ players: ids.map((id) => ({ name: names.get(id) ?? "" })) });
 			announceMatchup(team(picked.teamA), team(picked.teamB), court.name ?? `Court ${court.courtNumber}`);
 		};
-		if (snapshot && (!offline.online || sessionOps.length > 0)) {
+		if (await mustFillHere()) {
 			fillHere();
 			return;
 		}
@@ -419,13 +440,21 @@ export function OverviewTab({
 		}
 	}
 
+	/** The server's id for a game: offline-made games are shown under their temporary id until
+	 * the screen catches up, but once synced the server id is known and edits can go through. */
+	function serverGameId(id: string): string | null {
+		if (!isLocalGameId(id)) return id;
+		return loadIdMap()[id] ?? null;
+	}
+
 	async function handleUpdateTeams(
-		gameId: string,
+		localOrServerId: string,
 		teamAPlayerIds: string[],
 		teamBPlayerIds: string[],
 	) {
-		if (isLocalGameId(gameId)) {
-			message.warning("This game was made offline. Edit its teams once it has synced.");
+		const gameId = serverGameId(localOrServerId);
+		if (!gameId) {
+			message.warning("This game was made offline and hasn't synced yet. Edit its teams in a moment, once it has.");
 			return;
 		}
 		try {
@@ -471,9 +500,10 @@ export function OverviewTab({
 		}
 	}
 
-	async function handleCancelGame(gameId: string) {
-		if (isLocalGameId(gameId)) {
-			message.warning("This game was made offline. Cancel it once it has synced.");
+	async function handleCancelGame(localOrServerId: string) {
+		const gameId = serverGameId(localOrServerId);
+		if (!gameId) {
+			message.warning("This game was made offline and hasn't synced yet. Cancel it in a moment, once it has.");
 			return;
 		}
 		try {
@@ -632,6 +662,13 @@ export function OverviewTab({
 							Dismiss
 						</button>
 					</div>
+				</div>
+			)}
+
+			{outdated && (
+				<div style={{ background: "#fef2f2", borderBottom: "1px solid #fecaca", padding: "10px 24px", fontSize: 13, color: "#111827" }}>
+					<strong>The queue has been updated.</strong> Refresh this page so games are picked with the latest rules
+					{offline.online ? " (until then the server picks them)." : "."}
 				</div>
 			)}
 
@@ -832,6 +869,7 @@ export function OverviewTab({
 											<strong>Game {g.gameNumber}</strong>
 											{g.court?.name || g.court?.courtNumber ? ` · ${g.court.name || `Court ${g.court.courtNumber}`}` : ""}
 											{g.status !== "COMPLETED" ? ` · ${String(g.status).toLowerCase().replace("_", " ")}` : ""}
+											{" "}<GameOriginTags game={g} />
 											<div style={{ fontWeight: g.winningTeam === "A" ? 700 : 400 }}>
 												{g.winningTeam === "A" ? "Won: " : ""}{renderTeam(g.teamA.players)}
 											</div>

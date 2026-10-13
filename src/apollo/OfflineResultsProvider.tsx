@@ -29,7 +29,13 @@ interface OfflineResultsValue {
     teamAPlayerIds: string[];
     teamBPlayerIds: string[];
     playersSatOutIds: string[];
+    /** How the line-up was chosen: "AUTO" (the queue) or "TOP_FOUR". */
+    source?: string;
   }) => string;
+  /** Sends everything waiting right now and resolves once the server has it (or the
+   * connection fails). Lets a court fill wait for a just-recorded result to land, so the
+   * server can pick the next game instead of this device. */
+  syncNow: () => Promise<void>;
   /** Re-send an entry the server rejected. */
   retry: (id: string) => void;
   /** Drop a queued entry for good (and any results that depend on a dropped game). */
@@ -60,7 +66,7 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const flush = useCallback(async () => {
+  const runFlush = useCallback(async () => {
     if (flushing.current) return;
     flushing.current = true;
     setSyncing(true);
@@ -84,6 +90,7 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
                 teamBPlayerIds: entry.teamBPlayerIds,
                 playersSatOutIds: entry.playersSatOutIds,
                 createdAt: entry.createdAt,
+                source: entry.source ?? null,
               },
             });
             const real = res.data?.syncOfflineGame?.id;
@@ -151,6 +158,23 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
       if (sentAny) void client.refetchQueries({ include: "active" });
     }
   }, [client]);
+
+  // One flush at a time; callers that arrive mid-flush wait for the same one.
+  const flushPromise = useRef<Promise<void> | null>(null);
+  const flush = useCallback((): Promise<void> => {
+    if (flushPromise.current) return flushPromise.current;
+    const run = runFlush().finally(() => {
+      flushPromise.current = null;
+    });
+    flushPromise.current = run;
+    return run;
+  }, [runFlush]);
+
+  const syncNow = useCallback(async () => {
+    await flush();
+    // Anything queued while that flush was running goes too.
+    if (loadPending().some((p) => !p.error && !p.synced)) await flush();
+  }, [flush]);
 
   // Sync when the connection returns, on a timer while anything is waiting, and on load.
   useEffect(() => {
@@ -230,8 +254,8 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ pending, online, syncing, recordResult, fillCourt, retry, discard }),
-    [pending, online, syncing, recordResult, fillCourt, retry, discard]
+    () => ({ pending, online, syncing, recordResult, fillCourt, syncNow, retry, discard }),
+    [pending, online, syncing, recordResult, fillCourt, syncNow, retry, discard]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

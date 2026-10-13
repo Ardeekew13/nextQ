@@ -221,6 +221,22 @@ export const typeDefs = gql`
     teamB: Team!
   }
 
+  """How a game's line-up was first chosen."""
+  enum GameSource {
+    AUTO
+    MANUAL
+    TOP_FOUR
+  }
+
+  """One change to a game's teams after it was created."""
+  type GameEdit {
+    at: Date!
+    fromTeamA: Team!
+    fromTeamB: Team!
+    toTeamA: Team!
+    toTeamB: Team!
+  }
+
   type Game {
     id: ID!
     sessionId: ID!
@@ -236,6 +252,13 @@ export const typeDefs = gql`
     completedAt: Date
     recordedBy: ID
     notes: String
+    """How the line-up was first chosen (null for games from before this was tracked)."""
+    source: GameSource
+    """True when the game was made on the organiser's device while offline."""
+    offline: Boolean!
+    """True when the teams were changed after the game was created."""
+    edited: Boolean!
+    edits: [GameEdit!]!
     createdAt: Date!
     updatedAt: Date!
   }
@@ -570,8 +593,9 @@ export const typeDefs = gql`
       teamBPlayerIds: [ID!]!
       playersSatOutIds: [ID!]!
       createdAt: Date
+      source: GameSource
     ): Game!
-    fillCourtManually(courtId: ID!, teamAPlayerIds: [ID!]!, teamBPlayerIds: [ID!]!, allowRepeat: Boolean): Game!
+    fillCourtManually(courtId: ID!, teamAPlayerIds: [ID!]!, teamBPlayerIds: [ID!]!, allowRepeat: Boolean, source: GameSource): Game!
     updateGameTeams(id: ID!, teamAPlayerIds: [ID!]!, teamBPlayerIds: [ID!]!): Game!
     startGame(id: ID!): Game!
     completeGame(id: ID!, input: CompleteGameInput!): Game!

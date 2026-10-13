@@ -4,6 +4,7 @@ import { Court } from "@/models/Court";
 import { SessionPlayer } from "@/models/SessionPlayer";
 import { GameStatus, QueueMode, type SessionSettings } from "@/types/enums";
 import type { QueueSnapshot } from "@/lib/offlineQueue";
+import { QUEUE_ENGINE_VERSION } from "@/lib/queueEngine";
 import { loadClubHistory } from "@/lib/clubHistory";
 import { normaliseName } from "@/lib/playerStrength";
 import { recentGameMates } from "@/lib/lastGame";
@@ -23,7 +24,7 @@ export async function buildQueueSnapshot(sessionId: string): Promise<QueueSnapsh
     Session.findById(sessionId).select("settings separatedGroups clubId"),
     SessionPlayer.find({ sessionId }),
     Court.find({ sessionId }).sort({ courtNumber: 1 }),
-    Game.find({ sessionId }, { teamAPlayerIds: 1, teamBPlayerIds: 1, playersSatOutIds: 1, courtId: 1, gameNumber: 1, status: 1, startedAt: 1 }).sort({ gameNumber: -1 }),
+    Game.find({ sessionId }, { teamAPlayerIds: 1, teamBPlayerIds: 1, playersSatOutIds: 1, courtId: 1, gameNumber: 1, status: 1, startedAt: 1, clientId: 1 }).sort({ gameNumber: -1 }),
   ]);
 
   const settings = session?.settings as SessionSettings | undefined;
@@ -36,6 +37,7 @@ export async function buildQueueSnapshot(sessionId: string): Promise<QueueSnapsh
   return {
     sessionId,
     takenAt: new Date().toISOString(),
+    engineVersion: QUEUE_ENGINE_VERSION,
     queueMode: (settings?.queueMode ?? QueueMode.HYBRID) as string,
     maxConsecutiveGames: settings?.maxConsecutiveGames ?? 2,
     mixEveryone: settings?.mixEveryone ?? false,
@@ -73,7 +75,11 @@ export async function buildQueueSnapshot(sessionId: string): Promise<QueueSnapsh
       satOut: ids(g.playersSatOutIds ?? []),
       status: g.status,
       startedAt: g.startedAt ? g.startedAt.toISOString() : null,
+      clientId: g.clientId ?? null,
     })),
+    // Every offline-made game the server already has (any status), so the device never replays
+    // an action the server has already applied when it takes a fresh snapshot mid-sync.
+    knownClientIds: games.map((g) => g.clientId).filter((id): id is string => Boolean(id)),
     courts: courts.map((c) => ({ id: String(c._id), courtNumber: c.courtNumber, name: c.name ?? null, status: c.status })),
     pastGroups: past.map((g) => [...g.teamAPlayerIds, ...g.teamBPlayerIds].map(String).sort().join(":")),
     keepApart: (session?.separatedGroups ?? []).map((g) => g.playerIds.map(String)),

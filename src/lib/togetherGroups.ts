@@ -40,9 +40,13 @@ export function findTogetherGroups(
     maxGroups?: number;
     /** Groups the organiser already separated; anything fully inside one is not reported. */
     separated?: ReadonlyArray<ReadonlyArray<string>>;
+    /** Fixed partners: they play together every game by design, so the pair on its own is never
+     * reported. Someone else who keeps landing with them still is. */
+    fixedPairs?: ReadonlyArray<readonly [string, string]>;
   } = {}
 ): TogetherGroup[] {
-  const { minGames = 2, maxGroups = 3, separated = [] } = options;
+  const { minGames = 2, maxGroups = 3, separated = [], fixedPairs = [] } = options;
+  const fixedKeys = new Set(fixedPairs.map(([a, b]) => [a, b].sort().join(":")));
 
   const byKey = new Map<string, TogetherGroup>();
   for (const game of [...games].sort((a, b) => a.gameNumber - b.gameNumber)) {
@@ -62,7 +66,9 @@ export function findTogetherGroups(
   const frequent = [...byKey.values()].filter((g) => g.gamesTogether >= minGames);
 
   const notSeparated = frequent.filter(
-    (g) => !separated.some((sep) => g.playerIds.every((id) => sep.includes(id)))
+    (g) =>
+      !separated.some((sep) => g.playerIds.every((id) => sep.includes(id))) &&
+      !(g.playerIds.length === 2 && fixedKeys.has(g.key))
   );
 
   const maximal = notSeparated.filter(

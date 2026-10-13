@@ -47,6 +47,16 @@ export const GAME_FIELDS = gql`
         name
       }
     }
+    source
+    offline
+    edited
+    edits {
+      at
+      fromTeamA { players { id name } }
+      fromTeamB { players { id name } }
+      toTeamA { players { id name } }
+      toTeamB { players { id name } }
+    }
   }
 `;
 
@@ -737,6 +747,7 @@ export const SYNC_OFFLINE_GAME = gql`
     $teamBPlayerIds: [ID!]!
     $playersSatOutIds: [ID!]!
     $createdAt: Date
+    $source: GameSource
   ) {
     syncOfflineGame(
       sessionId: $sessionId
@@ -746,6 +757,7 @@ export const SYNC_OFFLINE_GAME = gql`
       teamBPlayerIds: $teamBPlayerIds
       playersSatOutIds: $playersSatOutIds
       createdAt: $createdAt
+      source: $source
     ) {
       ...GameFields
     }
@@ -760,8 +772,8 @@ export const SESSION_QUEUE_SNAPSHOT = gql`
 
 export const FILL_COURT_MANUALLY = gql`
   ${GAME_FIELDS}
-  mutation FillCourtManually($courtId: ID!, $teamAPlayerIds: [ID!]!, $teamBPlayerIds: [ID!]!, $allowRepeat: Boolean) {
-    fillCourtManually(courtId: $courtId, teamAPlayerIds: $teamAPlayerIds, teamBPlayerIds: $teamBPlayerIds, allowRepeat: $allowRepeat) {
+  mutation FillCourtManually($courtId: ID!, $teamAPlayerIds: [ID!]!, $teamBPlayerIds: [ID!]!, $allowRepeat: Boolean, $source: GameSource) {
+    fillCourtManually(courtId: $courtId, teamAPlayerIds: $teamAPlayerIds, teamBPlayerIds: $teamBPlayerIds, allowRepeat: $allowRepeat, source: $source) {
       ...GameFields
     }
   }

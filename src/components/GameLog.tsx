@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Typography, Dropdown } from "antd";
+import { GameOriginTags, type GameOriginInfo } from "@/components/GameOriginTags";
 
 const { Text } = Typography;
 
@@ -10,7 +11,7 @@ export interface GameLogPlayer {
   name: string;
 }
 
-export interface GameLogView {
+export interface GameLogView extends GameOriginInfo {
   id: string;
   gameNumber: number;
   winningTeam?: string | null;
@@ -393,6 +394,7 @@ export function GameLog({
                           Voided
                         </span>
                       )}
+                      <GameOriginTags game={game} />
                     </div>
 
                     {/* Length */}
@@ -459,7 +461,7 @@ export interface GameLogPlayer {
   name: string;
 }
 
-export interface GameLogView {
+export interface GameLogView extends GameOriginInfo {
   id: string;
   gameNumber: number;
   winningTeam?: string | null;
