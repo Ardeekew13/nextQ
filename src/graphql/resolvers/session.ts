@@ -352,7 +352,12 @@ export const sessionResolvers = {
           gameNumber: g.gameNumber,
           playerIds: [...g.teamAPlayerIds, ...g.teamBPlayerIds].map(String),
         })),
-        { separated: (parent.separatedGroups ?? []).map((s) => s.playerIds.map(String)) }
+        {
+          separated: (parent.separatedGroups ?? []).map((s) => s.playerIds.map(String)),
+          fixedPairs: (
+            await SessionPlayer.find({ sessionId: parent._id, fixedPartnerId: { $ne: null } }, { fixedPartnerId: 1 })
+          ).map((p) => [String(p._id), String(p.fixedPartnerId)] as const),
+        }
       );
       if (groups.length === 0) return [];
       const players = await SessionPlayer.find({ _id: { $in: groups.flatMap((g) => g.playerIds) } });

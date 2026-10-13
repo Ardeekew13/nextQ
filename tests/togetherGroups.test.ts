@@ -24,3 +24,24 @@ describe("findTogetherGroups", () => {
     expect(findTogetherGroups(games, { separated: [["a", "b"]] })).toHaveLength(0);
   });
 });
+
+describe("fixed partners", () => {
+  const g = (n: number, ids: string[]) => ({ id: `g${n}`, gameNumber: n, playerIds: ids });
+
+  it("never warns about a fixed pair playing together, however often", () => {
+    const games = [g(1, ["joie", "primie", "a", "b"]), g(2, ["joie", "primie", "c", "d"]), g(3, ["joie", "primie", "e", "f"])];
+    const groups = findTogetherGroups(games, { fixedPairs: [["joie", "primie"], ["primie", "joie"]] });
+    expect(groups.map((x) => x.key)).not.toContain("joie:primie");
+  });
+
+  it("still warns when someone else keeps landing with the fixed pair", () => {
+    const games = [g(1, ["joie", "primie", "x", "b"]), g(2, ["joie", "primie", "x", "d"]), g(3, ["joie", "primie", "e", "f"])];
+    const groups = findTogetherGroups(games, { fixedPairs: [["joie", "primie"]] });
+    expect(groups.map((x) => x.key)).toContain("joie:primie:x");
+  });
+
+  it("still warns about a pair that isn't fixed", () => {
+    const games = [g(1, ["gio", "kj", "a", "b"]), g(2, ["gio", "kj", "c", "d"]), g(3, ["gio", "kj", "e", "f"])];
+    expect(findTogetherGroups(games, { fixedPairs: [["joie", "primie"]] }).map((x) => x.key)).toContain("gio:kj");
+  });
+});
