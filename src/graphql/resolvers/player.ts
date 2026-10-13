@@ -5,10 +5,30 @@ import { Game } from "@/models/Game";
 import { ClubMember } from "@/models/ClubMember";
 import { SessionStatus } from "@/types/enums";
 import { getSessionStandingsWithPlayers } from "@/lib/stats";
-import { getPlayerNamesForSession } from "../context";
+import { getPlayerNamesForSession, getClubHistoryForSession } from "../context";
+import { blendedStrength, normaliseName, strengthTier } from "@/lib/playerStrength";
 import { requireSessionOwner, requireOrganiser } from "../guards";
 import { isSameName, isSimilarName } from "@/lib/playerNames";
 import type { GraphQLContext } from "../context";
+
+interface StrengthParent {
+  sessionId: unknown;
+  name: string;
+  skillLevel?: string | null;
+  wins: number;
+  gamesPlayed: number;
+}
+
+/** Same estimate the queue engine uses (see toQueuePlayer in eligibility.ts). */
+async function playerStrength(parent: StrengthParent, context: GraphQLContext): Promise<number> {
+  const history = await getClubHistoryForSession(context, String(parent.sessionId));
+  return blendedStrength({
+    skillLevel: parent.skillLevel,
+    club: history.get(normaliseName(parent.name)),
+    wins: parent.wins,
+    games: parent.gamesPlayed,
+  });
+}
 
 async function requirePlayerOwner(context: GraphQLContext, playerId: string) {
   requireOrganiser(context);
@@ -297,6 +317,9 @@ export const playerResolvers = {
     },
     winRate: (parent: { gamesPlayed: number; wins: number }) =>
       parent.gamesPlayed === 0 ? 0 : (parent.wins / parent.gamesPlayed) * 100,
+    strength: (parent: StrengthParent, _args: unknown, context: GraphQLContext) => playerStrength(parent, context),
+    strengthTier: async (parent: StrengthParent, _args: unknown, context: GraphQLContext) =>
+      strengthTier(await playerStrength(parent, context)),
     partnerHistory: (parent: { sessionId: unknown; partnerHistory: unknown }, _args: unknown, context: GraphQLContext) =>
       historyMapToEntries(context, String(parent.sessionId), parent.partnerHistory as never),
     opponentHistory: (

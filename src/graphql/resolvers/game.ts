@@ -5,6 +5,8 @@ import { SessionPlayer, type SessionPlayerDoc } from "@/models/SessionPlayer";
 import { generateGame, type MatchPlayer } from "@/lib/matchmaking";
 import { generateNextGame as queueEngineGenerate, type QueuePlayer } from "@/lib/queueEngine";
 import { getEligiblePlayers, toQueuePlayer, queuePoolSeed, seededRandom } from "@/lib/eligibility";
+import { loadClubHistory } from "@/lib/clubHistory";
+import { recentGameMates } from "@/lib/lastGame";
 import { buildQueueSnapshot } from "@/lib/queueSnapshot";
 import { rebuildSessionStatistics } from "@/lib/stats";
 import { withOptionalTransaction } from "@/lib/transaction";
@@ -188,8 +190,14 @@ export const gameResolvers = {
         });
       }
 
-      // Build QueuePlayer objects (superset of old MatchPlayer), including win rate
-      const eligible: QueuePlayer[] = eligibleDocs.map(toQueuePlayer);
+      // Build QueuePlayer objects, with strength blended from skill level, club history and tonight.
+      const clubHistory = await loadClubHistory(
+        session.clubId,
+        session._id,
+        eligibleDocs.map((d) => d.name)
+      );
+      const recentMates = recentGameMates(priorGames); // priorGames is newest first
+      const eligible: QueuePlayer[] = eligibleDocs.map((d) => toQueuePlayer(d, clubHistory, recentMates));
 
       const settings = session.settings as SessionSettings;
       const pastGroups = new Set(
@@ -203,6 +211,8 @@ export const gameResolvers = {
         maxConsecutiveGames: settings.maxConsecutiveGames ?? 2,
         mixEveryone: settings.mixEveryone ?? false,
         rankMatchups: settings.rankMatchups ?? false,
+        balanceTeams: settings.balanceTeams ?? true,
+        tiebreakSeed: String(session._id),
         pastGroups,
         keepApart: (session.separatedGroups ?? []).map((g) => g.playerIds.map(String)),
         random: seededRandom(queuePoolSeed(eligibleDocs)),

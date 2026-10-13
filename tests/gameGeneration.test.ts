@@ -14,7 +14,7 @@ function makePlayer(overrides: Partial<QueuePlayer> & { id: string }): QueuePlay
 }
 
 describe("Game Generation - 4-Player Group Prevention", () => {
-  it("prevents the exact same 4 players from being selected again", () => {
+  it("avoids selecting the exact same 4 players again when someone else is waiting", () => {
     const players = [
       makePlayer({ id: "p1", gamesPlayed: 1 }),
       makePlayer({ id: "p2", gamesPlayed: 1 }),
@@ -36,14 +36,20 @@ describe("Game Generation - 4-Player Group Prevention", () => {
     ].sort();
     const pastGroups = new Set([firstGameIds.join(":")]);
 
-    // Second generation - should fail with same 4 (no new player)
+    // Second generation - a 5th player is available, so the exact same 4 must not repeat
     const second = generateNextGame(players, {
       pastGroups,
     });
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    const secondGameIds = [...second.teamA, ...second.teamB].map((p) => p.id).sort();
+    expect(secondGameIds.join(":")).not.toBe(firstGameIds.join(":"));
+  });
 
-    // Since all 4 players from past group are still in eligible list,
-    // and no new players are available to substitute, selection should fail
-    expect(second.ok).toBe(false);
+  it("still produces a game when the only 4 players have already played together (never blocks the court)", () => {
+    const players = ["p1", "p2", "p3", "p4"].map((id) => makePlayer({ id, gamesPlayed: 1 }));
+    const result = generateNextGame(players, { pastGroups: new Set(["p1:p2:p3:p4"]) });
+    expect(result.ok).toBe(true);
   });
 
   it("allows the same 4 players if at least 1 new player is in the group", () => {
@@ -170,25 +176,22 @@ describe("Game Generation - Team Shuffling", () => {
   });
 });
 
-describe("Game Generation - Win Rate Tiebreak", () => {
-  it("prefers the higher win rate among players who've waited the same amount of time", () => {
+describe("Game Generation - Strength never decides who plays next", () => {
+  it("does not give a stronger player the spot among players who've waited the same time", () => {
     const sameArrival = new Date("2026-01-01T00:00:00Z");
+    // Identical on every fairness factor; with a constant tiebreak, input order decides.
     const players = [
-      makePlayer({ id: "low-winrate", queueEnteredAt: sameArrival, winRate: 20 }),
-      makePlayer({ id: "high-winrate", queueEnteredAt: sameArrival, winRate: 90 }),
-      makePlayer({ id: "mid-winrate", queueEnteredAt: sameArrival, winRate: 50 }),
-      makePlayer({ id: "no-winrate", queueEnteredAt: sameArrival }),
-      // A 5th player who arrived a clear wait-bucket (>2min) later should still lose
-      // to all of the above on wait time, however high their win rate.
-      makePlayer({ id: "just-arrived", queueEnteredAt: new Date("2026-01-01T00:03:00Z"), winRate: 100 }),
+      makePlayer({ id: "weak", queueEnteredAt: sameArrival, winRate: 20 }),
+      makePlayer({ id: "mid", queueEnteredAt: sameArrival, winRate: 50 }),
+      makePlayer({ id: "unrated", queueEnteredAt: sameArrival }),
+      makePlayer({ id: "developing", queueEnteredAt: sameArrival, winRate: 30 }),
+      makePlayer({ id: "strong", queueEnteredAt: sameArrival, winRate: 95 }),
     ];
 
-    const result = generateNextGame(players, { mode: "SMART" as const, random: () => 0.5 });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      const ids = result.selected.map((p) => p.id);
-      expect(ids).not.toContain("just-arrived");
-      expect(ids).toContain("high-winrate");
+    for (const mode of ["SMART", "HYBRID", "BALANCED"] as const) {
+      const result = generateNextGame(players, { mode, random: () => 0.5 });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.selected.map((p) => p.id)).not.toContain("strong");
     }
   });
 

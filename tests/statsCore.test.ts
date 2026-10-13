@@ -7,8 +7,6 @@ function game(overrides: Partial<CompletedGameLike>): CompletedGameLike {
   return {
     teamAPlayerIds: ["p1", "p2"],
     teamBPlayerIds: ["p3", "p4"],
-    teamAScore: 11,
-    teamBScore: 7,
     winningTeam: "A",
     playersSatOutIds: [],
     ...overrides,
@@ -16,30 +14,29 @@ function game(overrides: Partial<CompletedGameLike>): CompletedGameLike {
 }
 
 describe("computePlayerStatistics", () => {
-  it("records a completed game: wins, losses, points scored/conceded, and differential", () => {
+  it("records a completed game: games played, wins and losses (scores are no longer tracked)", () => {
     const results = computePlayerStatistics(PLAYER_IDS, [game({})]);
 
     const winner = results.get("p1")!;
     expect(winner.gamesPlayed).toBe(1);
     expect(winner.wins).toBe(1);
     expect(winner.losses).toBe(0);
-    expect(winner.pointsScored).toBe(11);
-    expect(winner.pointsConceded).toBe(7);
-    expect(winner.pointDifferential).toBe(4);
 
     const loser = results.get("p3")!;
+    expect(loser.gamesPlayed).toBe(1);
     expect(loser.wins).toBe(0);
     expect(loser.losses).toBe(1);
-    expect(loser.pointsScored).toBe(7);
-    expect(loser.pointsConceded).toBe(11);
-    expect(loser.pointDifferential).toBe(-4);
+
+    // Only a winner is recorded now; no points fields should appear.
+    expect(winner).not.toHaveProperty("pointsScored");
+    expect(winner).not.toHaveProperty("pointDifferential");
   });
 
   it("computes win rate as wins / gamesPlayed elsewhere (ranking.ts), but tracks the raw counts correctly across multiple games", () => {
     const games = [
-      game({ winningTeam: "A", teamAScore: 11, teamBScore: 5 }),
-      game({ winningTeam: "B", teamAScore: 6, teamBScore: 11 }),
-      game({ winningTeam: "A", teamAScore: 11, teamBScore: 9 }),
+      game({ winningTeam: "A" }),
+      game({ winningTeam: "B" }),
+      game({ winningTeam: "A" }),
     ];
     const results = computePlayerStatistics(PLAYER_IDS, games);
     const p1 = results.get("p1")!;
@@ -79,8 +76,8 @@ describe("computePlayerStatistics", () => {
   });
 
   it("recalculates statistics correctly after a game result is edited", () => {
-    const original = [game({ winningTeam: "A", teamAScore: 11, teamBScore: 9 })];
-    const edited = [game({ winningTeam: "B", teamAScore: 8, teamBScore: 11 })];
+    const original = [game({ winningTeam: "A" })];
+    const edited = [game({ winningTeam: "B" })];
 
     const before = computePlayerStatistics(PLAYER_IDS, original);
     expect(before.get("p1")!.wins).toBe(1);
@@ -92,7 +89,10 @@ describe("computePlayerStatistics", () => {
     expect(after.get("p1")!.wins).toBe(0);
     expect(after.get("p1")!.losses).toBe(1);
     expect(after.get("p3")!.wins).toBe(1);
-    expect(after.get("p1")!.pointsScored).toBe(8);
+    expect(after.get("p3")!.losses).toBe(0);
+    // Streaks are rebuilt too, not carried over from the original result.
+    expect(after.get("p1")!.currentStreak).toBe(-1);
+    expect(after.get("p1")!.longestWinStreak).toBe(0);
   });
 
   it("is unaffected by games that are not present (cancelled games contribute nothing)", () => {

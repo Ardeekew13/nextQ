@@ -3,6 +3,13 @@ import gql from "graphql-tag";
 export const typeDefs = gql`
   scalar Date
 
+  """How the queue currently judges a player (skill level, club history and tonight blended)."""
+  enum StrengthTier {
+    STRONG
+    MID
+    DEVELOPING
+  }
+
   enum SkillLevel {
     NOVICE
     BEGINNER_LOW
@@ -84,6 +91,7 @@ export const typeDefs = gql`
     maxConsecutiveGames: Int!
     mixEveryone: Boolean!
     rankMatchups: Boolean!
+    balanceTeams: Boolean!
   }
 
   input ScoringSettingsInput {
@@ -102,6 +110,7 @@ export const typeDefs = gql`
     maxConsecutiveGames: Int
     mixEveryone: Boolean
     rankMatchups: Boolean
+    balanceTeams: Boolean
   }
 
   type User {
@@ -178,6 +187,9 @@ export const typeDefs = gql`
     wins: Int!
     losses: Int!
     winRate: Float!
+    """Estimated win rate 0-100 used by the queue: skill level, then recent club record, then tonight."""
+    strength: Float!
+    strengthTier: StrengthTier!
     currentStreak: Int!
     longestWinStreak: Int!
     gamesSatOut: Int!
