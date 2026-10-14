@@ -51,7 +51,7 @@ const SKILL_LABEL: Record<string, string> = {
 const TIER_STYLE: Record<string, { label: string; color: string; bg: string }> = {
   STRONG: { label: "Strong", color: "#166534", bg: "#dcfce7" },
   MID: { label: "Mid", color: "#1e40af", bg: "#dbeafe" },
-  DEVELOPING: { label: "Developing", color: "#9a3412", bg: "#ffedd5" },
+  DEVELOPING: { label: "Rising", color: "#9a3412", bg: "#ffedd5" },
 };
 
 function StrengthTag({ tier, strength }: { tier?: string; strength?: number }) {
@@ -472,7 +472,7 @@ export function PlayersTab({
     finally { setImporting(false); }
   }
 
-  const GRID = "48px 1fr 150px 120px 80px 70px 70px 110px 44px";
+  const GRID = "48px 1fr 150px 190px 80px 70px 70px 110px 44px";
 
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>

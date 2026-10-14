@@ -374,6 +374,14 @@ function longRunCost(players: QueuePlayer[]): number {
   return cost;
 }
 
+/** How many of the foursome's pairs would be together for a THIRD game in a row (or more). */
+function thirdInARowPairs(players: QueuePlayer[]): number {
+  let n = 0;
+  for (let i = 0; i < players.length; i++)
+    for (let j = i + 1; j < players.length; j++) if (pairStreak(players[i], players[j]) >= 2) n++;
+  return n;
+}
+
 /** Shared games across the foursome's pairs, ignoring fixed partners (they always play together). */
 function coPlayExcludingFixed(players: QueuePlayer[]): number {
   let total = 0;
@@ -569,6 +577,9 @@ function selectPlayers(
         countKeepApartBreaches(players, keepApart) * 1e15 +
         countRepeatedTriples(players, pastTriples) * 1e13 +
         unfairSwapAgainst(mixDefaultTop, players) * 100_000 +
+        // Never a third game in a row for the same pair: below fair game counts (a games unit
+        // is 1e8 here), above the 8-minute waiting rule (1e5 per case).
+        thirdInARowPairs(players) * 10_000_000 +
         minPartnerRepeats(players);
       // Standings rank among everyone eligible (1 = best): win rate, then games played.
       const rankOf = new Map<string, number>();
@@ -610,6 +621,9 @@ function selectPlayers(
         countKeepApartBreaches(players, keepApart) * 1e15 +
         countRepeatedTriples(players, pastTriplesForOrder) * 1e13 +
         unfairSwapAgainst(defaultTop, players) * 100_000 +
+        // Never a third game in a row for the same pair: below fair game counts (a games unit
+        // is 1e8 here), above the 8-minute waiting rule (1e5 per case). Not in strict SMART.
+        (mode === QueueMode.SMART ? 0 : thirdInARowPairs(players) * 10_000_000) +
         (mode === QueueMode.SMART ? 0 : minPartnerRepeats(players));
       if (violationsOf(defaultTop) > 0) {
       // Without the fairness step, dodging a repeat partner could pull in a player two games
