@@ -17,7 +17,7 @@ import {
 } from "@/graphql/documents/organiser";
 import { DEFAULT_QUEUE_SETTINGS } from "@/types/enums";
 import { useMutation, useQuery } from "@apollo/client";
-import { placeGameOnCourt, shouldShowDeviceCopy } from "@/lib/courtDisplay";
+import { placeGameOnCourt, shouldShowDeviceCopy, slowToSync } from "@/lib/courtDisplay";
 import { App, Button, Empty, Input, Modal, Popover, Switch, Typography } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -35,7 +35,8 @@ import {
 	type QueueSnapshot,
 } from "@/lib/offlineQueue";
 import { QUEUE_ENGINE_VERSION } from "@/lib/queueEngine";
-import { shouldFillOnDevice } from "@/lib/fillLocation";
+import { fillOnDevice } from "@/lib/fillLocation";
+import { loadAutoFill, saveAutoFill } from "@/lib/autoFill";
 import { isNetworkFailure, loadIdMap, loadPending, loadSnapshot, saveSnapshot } from "@/lib/offlineResults";
 import { pickTopFour } from "@/lib/topFour";
 import type { SessionStats } from "@/app/dashboard/sessions/[sessionId]/page";
@@ -147,12 +148,33 @@ export function OverviewTab({
 	// This browser is running older queue rules than the server: say so, and let the server pick.
 	const outdated = Boolean(snapshot?.engineVersion && snapshot.engineVersion !== QUEUE_ENGINE_VERSION);
 	const hasUnsynced = () => loadPending().some((p) => p.sessionId === sessionId && !p.synced && !p.error);
-	/** Fill on this device only when the server can't do it: no connection, or actions that
-	 * still haven't reached it. A result recorded a moment ago is sent first (usually well under
-	 * a second), so the normal "record result, fill court" flow is picked by the server. */
+	// When this device last received a fresh snapshot from the server (0 = only the copy saved
+	// from an earlier visit so far).
+	const snapshotReceivedAt = useRef(0);
+	/** Local-first: the next game is picked on this device and shown at once, then checked by
+	 * the server in the background — unless the device's copy is old or runs older queue rules,
+	 * in which case the server picks (see fillOnDevice). */
 	function mustFillHere(): Promise<boolean> {
-		return shouldFillOnDevice({ hasSnapshot: Boolean(snapshot), online: offline.online, hasUnsynced, syncNow: offline.syncNow });
+		return fillOnDevice({
+			hasSnapshot: Boolean(snapshot),
+			online: offline.online,
+			outdated,
+			snapshotAgeMs: snapshotReceivedAt.current ? Date.now() - snapshotReceivedAt.current : Infinity,
+			hasUnsynced,
+			syncNow: offline.syncNow,
+		});
 	}
+	const [autoFill, setAutoFill] = useState(true);
+	useEffect(() => setAutoFill(loadAutoFill()), []);
+	// Re-check every second while something is unsent, so a slow sync shows up (and clears).
+	const [clock, setClock] = useState(() => Date.now());
+	const hasUnsent = sessionOps.some((p) => !p.synced && !p.error);
+	useEffect(() => {
+		if (!hasUnsent) return;
+		const t = window.setInterval(() => setClock(Date.now()), 1000);
+		return () => window.clearInterval(t);
+	}, [hasUnsent]);
+	const slowSyncs = slowToSync(sessionOps, clock);
 
 	useEffect(() => {
 		setSnapshot((cur) => cur ?? loadSnapshot(sessionId));
@@ -168,6 +190,7 @@ export function OverviewTab({
 			const parsed = JSON.parse(raw) as QueueSnapshot;
 			setSnapshot(parsed);
 			saveSnapshot(parsed);
+			snapshotReceivedAt.current = Date.now();
 		} catch {
 			/* keep the previous snapshot */
 		}
@@ -329,6 +352,20 @@ export function OverviewTab({
 		});
 	}
 
+	/** Undo a game made on this device: drop it if it hasn't been sent yet, otherwise cancel the
+	 * copy the server saved (games are usually sent within a second now). */
+	async function undoDeviceFill(localId: string) {
+		const op = loadPending().find((o) => o.kind === "fill" && o.localGameId === localId);
+		if (op && !op.synced && !op.error) {
+			offline.discard(op.id);
+			return;
+		}
+		const realId = loadIdMap()[localId];
+		if (!realId) throw new Error("Couldn't find that game. Cancel it from its court instead.");
+		await cancelGame({ variables: { id: realId } });
+		await refetch();
+	}
+
 	async function handleMatchTopFour() {
 		const court = (session?.courts ?? []).find((c: any) => c.status === "AVAILABLE" && !c.currentGame);
 		if (!court) {
@@ -353,11 +390,7 @@ export function OverviewTab({
 		if (await mustFillHere()) {
 			const localId = offline.fillCourt({ sessionId, courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, playersSatOutIds, source: "TOP_FOUR" });
 			announce();
-			offerUndo(() => {
-				const op = loadPending().find((o) => o.kind === "fill" && o.localGameId === localId);
-				if (!op) throw new Error("It already synced. Cancel the game from its court instead.");
-				offline.discard(op.id);
-			});
+			offerUndo(() => undoDeviceFill(localId));
 			return;
 		}
 		try {
@@ -378,48 +411,52 @@ export function OverviewTab({
 			if (snapshot && isNetworkFailure(err)) {
 				const localId = offline.fillCourt({ sessionId, courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, playersSatOutIds, source: "TOP_FOUR" });
 				announce();
-				offerUndo(() => {
-					const op = loadPending().find((o) => o.kind === "fill" && o.localGameId === localId);
-					if (!op) throw new Error("It already synced. Cancel the game from its court instead.");
-					offline.discard(op.id);
-				});
+				offerUndo(() => undoDeviceFill(localId));
 				return;
 			}
 			message.error(err instanceof Error ? err.message : "Could not match the top 4");
 		}
 	}
 
-	async function handleGenerate(courtId: string) {
-		// Generated on this device whenever the connection is down or earlier actions are still
-		// waiting to sync (the server doesn't know about them yet).
-		const fillHere = () => {
-			if (!snapshot) {
-				message.error("Can't generate games offline until this session has loaded once online.");
-				return;
-			}
-			const state = deriveLocalState(snapshot, replayOps);
-			const court = state.courts.find((c) => c.id === courtId);
-			if (!court || court.currentGameId) {
-				message.error("That court is already in use.");
-				return;
-			}
-			const picked = generateLocalGame(snapshot, state);
-			if (!picked.ok) {
-				message.error(picked.reason);
-				return;
-			}
-			offline.fillCourt({
-				sessionId,
-				courtId,
-				teamAPlayerIds: picked.teamA,
-				teamBPlayerIds: picked.teamB,
-				playersSatOutIds: picked.satOut,
-				source: "AUTO",
-			});
-			const names = new Map(snapshot.players.map((p) => [p.id, p.name]));
-			const team = (ids: string[]) => ({ players: ids.map((id) => ({ name: names.get(id) ?? "" })) });
-			announceMatchup(team(picked.teamA), team(picked.teamB), court.name ?? `Court ${court.courtNumber}`);
-		};
+	/** Picks the next game for a court on this device, puts it on the court at once (the on-device
+	 * copy), announces it, and queues it to be saved on the server in the background. Returns
+	 * false (after telling the organiser why, unless `quiet`) when no game can be made. */
+	function fillOnThisDevice(courtId: string, quiet = false): boolean {
+		if (!snapshot) {
+			if (!quiet) message.error("Can't generate games offline until this session has loaded once online.");
+			return false;
+		}
+		// Read straight from storage: includes a result recorded a moment ago in this same click.
+		const ops = loadPending().filter((p) => p.sessionId === sessionId && !p.error);
+		const state = deriveLocalState(snapshot, ops);
+		const court = state.courts.find((c) => c.id === courtId);
+		if (!court || court.currentGameId) {
+			if (!quiet) message.error("That court is already in use.");
+			return false;
+		}
+		const picked = generateLocalGame(snapshot, state);
+		if (!picked.ok) {
+			if (!quiet) message.error(picked.reason);
+			return false;
+		}
+		offline.fillCourt({
+			sessionId,
+			courtId,
+			teamAPlayerIds: picked.teamA,
+			teamBPlayerIds: picked.teamB,
+			playersSatOutIds: picked.satOut,
+			source: "AUTO",
+		});
+		const names = new Map(snapshot.players.map((p) => [p.id, p.name]));
+		const team = (ids: string[]) => ({ players: ids.map((id) => ({ name: names.get(id) ?? "" })) });
+		announceMatchup(team(picked.teamA), team(picked.teamB), court.name ?? `Court ${court.courtNumber}`);
+		return true;
+	}
+
+	/** Fills a court with the next game from the queue. `quiet` (auto-fill after a result): no
+	 * error messages when it can't — the court simply stays open for a manual fill. */
+	async function handleGenerate(courtId: string, quiet = false) {
+		const fillHere = () => void fillOnThisDevice(courtId, quiet);
 		if (await mustFillHere()) {
 			fillHere();
 			return;
@@ -441,6 +478,7 @@ export function OverviewTab({
 				fillHere();
 				return;
 			}
+			if (quiet) return;
 			message.error(
 				err instanceof Error ? err.message : "Could not generate a game",
 			);
@@ -487,6 +525,12 @@ export function OverviewTab({
 			notes: values.notes,
 		});
 		setScoreGame(null);
+		// Auto-fill: the next game goes straight onto the freed court, picked on this device with
+		// the same queue rules as the server, and both are synced in the background. Skipped
+		// (the court just stays open) when the device's copy can't be trusted or there aren't
+		// four players waiting.
+		const courtId = scoreGame.court?.id;
+		if (autoFill && courtId && session?.status === "ACTIVE") void handleGenerate(courtId, true);
 	}
 
 	async function handleRecordResult(game: any, _winner: "A" | "B") {
@@ -680,7 +724,8 @@ export function OverviewTab({
 			)}
 
 			{/* ── Offline / waiting-to-sync status ── */}
-			{(!offline.online || sessionOps.some((p) => !p.synced)) && (
+			{/* Online, results and fills sync within a second: only say so when one is slow. */}
+			{(!offline.online || slowSyncs > 0) && (
 				<div
 					style={{
 						background: offline.online ? "#f0fdf4" : "#fff7ed",
@@ -702,7 +747,7 @@ export function OverviewTab({
 					) : (
 						<>
 							{offline.syncing ? "Syncing" : "Waiting to sync"}{" "}
-							<strong>{sessionOps.filter((p) => !p.synced && !p.error).length} saved action(s)</strong>…
+							<strong>{sessionOps.filter((p) => !p.synced && !p.error).length} saved action(s)</strong>… The screen is up to date; the server will catch up.
 						</>
 					)}
 				</div>
@@ -953,6 +998,18 @@ export function OverviewTab({
 									);
 									return (
 										<div style={{ display: "flex", flexDirection: "column", gap: 12, width: 280 }}>
+											<label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+												<Switch size="small" style={{ marginTop: 2 }} checked={autoFill}
+													onChange={(v) => {
+														setAutoFill(v);
+														saveAutoFill(v);
+														message.success(v ? "Courts fill automatically after each result." : "Auto-fill is off: fill courts yourself.");
+													}} />
+												<span>
+													<div style={{ fontSize: 13, fontWeight: 600, color: "#1d1f20" }}>Auto-fill after result</div>
+													<div style={{ fontSize: 11, color: "rgba(29,31,32,0.55)", lineHeight: 1.4 }}>Recording a result puts the next game from the queue on that court straight away. Saved on this device.</div>
+												</span>
+											</label>
 											{row("Balanced teams", "Split each game into the most evenly matched teams (best + weakest vs the middle two). Doesn't change who plays.", st.balanceTeams ?? true, "balanceTeams", "Balanced teams on.", "Balanced teams off.")}
 											{row("Mix everyone", "Prefer players who have shared the court least, so everyone plays with and against everyone.", !!st.mixEveryone, "mixEveryone", "Mixing everyone: new games favour players who haven't met.", "Mix everyone is off.")}
 											{row("Rank matchups", "Group players of similar strength into the same game (Strong with Strong). Equal court time still comes first.", !!st.rankMatchups, "rankMatchups", "Rank matchups on: similar players are grouped together.", "Rank matchups off.")}

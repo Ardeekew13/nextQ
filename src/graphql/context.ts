@@ -5,6 +5,8 @@ import { SessionPlayer } from "@/models/SessionPlayer";
 import { Session } from "@/models/Session";
 import { loadClubHistory } from "@/lib/clubHistory";
 import type { ClubRecord } from "@/lib/playerStrength";
+import { Court } from "@/models/Court";
+import { createBatchLoader, type BatchLoader } from "@/lib/batchLoader";
 
 export interface GraphQLContext {
   organiser: AuthTokenPayload | null;
@@ -12,13 +14,42 @@ export interface GraphQLContext {
   csrfToken: string;
   /** Per-request cache of each session's players' recent club records (keyed by session id). */
   clubHistoryCache?: Map<string, Promise<Map<string, ClubRecord>>>;
+  /** Per-request batched lookups (one query for all the games' players / courts). */
+  loaders?: RequestLoaders;
+}
+
+export interface RequestLoaders {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  player: BatchLoader<any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  court: BatchLoader<any>;
+}
+
+export function createLoaders(): RequestLoaders {
+  return {
+    player: createBatchLoader((ids) => SessionPlayer.find({ _id: { $in: ids } }), (p) => String(p._id)),
+    court: createBatchLoader((ids) => Court.find({ _id: { $in: ids } }), (c) => String(c._id)),
+  };
+}
+
+/** Players by id, in that order, batched per request when a context with loaders is given. */
+export async function loadPlayers(context: GraphQLContext | undefined, ids: readonly unknown[] | undefined) {
+  if (!ids?.length) return [];
+  if (context?.loaders) return context.loaders.player.loadMany(ids);
+  return SessionPlayer.find({ _id: { $in: ids } });
+}
+
+export async function loadCourt(context: GraphQLContext | undefined, id: unknown) {
+  if (!id) return null;
+  if (context?.loaders) return (await context.loaders.court.load(String(id))) ?? null;
+  return Court.findById(id);
 }
 
 export async function createContext(): Promise<GraphQLContext> {
   await connectToDatabase();
   const organiser = await getSessionFromCookies();
   const csrfToken = await getCSRFToken();
-  return { organiser, playerNameCache: new Map(), csrfToken, clubHistoryCache: new Map() };
+  return { organiser, playerNameCache: new Map(), csrfToken, clubHistoryCache: new Map(), loaders: createLoaders() };
 }
 
 /** Per-request cached club history for every player in a session, used for strength tags. */

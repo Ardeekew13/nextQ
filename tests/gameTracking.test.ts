@@ -64,6 +64,9 @@ describe("team edits are logged", () => {
     const G = (gameResolvers as any).Game;
     expect(G.offline({ clientId: "local-1" })).toBe(true);
     expect(G.offline({})).toBe(false);
+    // Local-first: picked on the device while online — has a clientId but isn't "offline".
+    expect(G.offline({ clientId: "local-2", createdOffline: false })).toBe(false);
+    expect(G.offline({ clientId: "local-3", createdOffline: true })).toBe(true);
     expect(G.edited({ edits: [{}] })).toBe(true);
     expect(G.edited({ edits: [] })).toBe(false);
     expect(G.edits({})).toEqual([]);

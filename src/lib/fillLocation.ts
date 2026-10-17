@@ -25,3 +25,29 @@ export async function shouldFillOnDevice(opts: {
   }
   return opts.hasUnsynced();
 }
+
+/** A queue snapshot younger than this is trusted for an instant fill on this device. The
+ * dashboard refreshes it on every reload (at least every 20 s while the page is open). */
+export const FRESH_SNAPSHOT_MS = 60_000;
+
+/**
+ * Local-first fill: pick the next game on this device (instant, like recording a result) and
+ * let the server check it in the background, whenever the device's copy of the session can be
+ * trusted. Falls back to `shouldFillOnDevice` (server picks) when this browser runs older queue
+ * rules than the server, or its copy is old and nothing is waiting to sync.
+ */
+export async function fillOnDevice(opts: {
+  hasSnapshot: boolean;
+  online: boolean;
+  /** This browser's queue rules differ from the server's. */
+  outdated: boolean;
+  /** How long ago this device received its current snapshot (Infinity if never this visit). */
+  snapshotAgeMs: number;
+  hasUnsynced: () => boolean;
+  syncNow: () => Promise<void>;
+}): Promise<boolean> {
+  if (!opts.hasSnapshot) return false;
+  if (!opts.online) return true;
+  if (!opts.outdated && opts.snapshotAgeMs <= FRESH_SNAPSHOT_MS) return true;
+  return shouldFillOnDevice(opts);
+}

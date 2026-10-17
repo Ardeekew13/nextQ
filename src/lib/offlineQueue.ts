@@ -97,6 +97,9 @@ export interface FillOp {
   createdAt: string;
   /** How the line-up was chosen on this device: "AUTO" (the queue) or "TOP_FOUR". */
   source?: string;
+  /** Made with no connection (games are picked on the device online too). Missing on older
+   * entries, which were all made offline. */
+  madeOffline?: boolean;
   error?: string;
 }
 

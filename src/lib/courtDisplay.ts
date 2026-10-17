@@ -19,6 +19,22 @@ export function shouldShowDeviceCopy(input: {
   return input.hasSnapshot && input.ops.some((p) => !p.error);
 }
 
+/** Online, an action normally reaches the server within a second, so "Syncing…" is only worth
+ * showing for one that has been waiting longer than this. */
+export const SLOW_SYNC_MS = 5_000;
+
+/** Unsent (not failed) actions that have been waiting longer than SLOW_SYNC_MS. */
+export function slowToSync(
+  ops: ReadonlyArray<{ synced?: boolean; error?: string; kind: string; createdAt?: string; recordedAt?: string }>,
+  now: number
+): number {
+  return ops.filter((p) => {
+    if (p.synced || p.error) return false;
+    const at = Date.parse((p.kind === "fill" ? p.createdAt : p.recordedAt) ?? "");
+    return !Number.isFinite(at) || now - at > SLOW_SYNC_MS;
+  }).length;
+}
+
 /**
  * Puts a game the server just created on its court in the Apollo cache, so the court shows the
  * line-up the moment the mutation returns (when the announcement is spoken) instead of after

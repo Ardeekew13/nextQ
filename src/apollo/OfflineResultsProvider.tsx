@@ -9,6 +9,7 @@ import {
   loadIdMap,
   loadPending,
   newPendingId,
+  nextToSend,
   pruneSynced,
   saveIdMap,
   savePending,
@@ -47,6 +48,9 @@ const Ctx = createContext<OfflineResultsValue | null>(null);
 
 const RETRY_INTERVAL_MS = 15_000;
 
+/** Local→server game ids kept after syncing, newest last. */
+const RECENT_IDS_KEPT = 20;
+
 export function OfflineResultsProvider({ children }: { children: ReactNode }) {
   const client = useApolloClient();
   const [pending, setPending] = useState<PendingOp[]>([]);
@@ -76,9 +80,13 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
       savePending(loadPending().map((p) => (p.id === id ? ({ ...p, ...patch } as PendingOp) : p)));
     try {
       // Oldest first, one at a time: a game is created before its result, and results land
-      // in the order they were recorded.
-      for (const entry of loadPending()) {
-        if (entry.error || entry.synced) continue;
+      // in the order they were recorded. Re-read after each send so anything queued meanwhile
+      // (e.g. the auto-filled game right after its court's result) goes in this same sync.
+      const tried = new Set<string>();
+      for (;;) {
+        const entry = nextToSend(loadPending(), tried);
+        if (!entry) break;
+        tried.add(entry.id);
         try {
           if (entry.kind === "fill") {
             const res = await client.mutate({
@@ -92,6 +100,7 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
                 playersSatOutIds: entry.playersSatOutIds,
                 createdAt: entry.createdAt,
                 source: entry.source ?? null,
+                createdOffline: entry.madeOffline ?? null,
               },
             });
             const real = res.data?.syncOfflineGame?.id;
@@ -151,7 +160,11 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
         savePending(keep);
         const mapped = loadIdMap();
         const liveLocal = new Set(keep.flatMap((p) => (p.kind === "fill" ? [p.localGameId] : isLocalGameId(p.gameId) ? [p.gameId] : [])));
-        saveIdMap(Object.fromEntries(Object.entries(mapped).filter(([k]) => liveLocal.has(k))));
+        // Also keep the most recent ones, so "Undo" right after a fill can still find the
+        // server's copy of a game that has already synced.
+        const entries = Object.entries(mapped);
+        const recent = new Set(entries.slice(-RECENT_IDS_KEPT).map(([k]) => k));
+        saveIdMap(Object.fromEntries(entries.filter(([k]) => liveLocal.has(k) || recent.has(k))));
       }
     } finally {
       flushing.current = false;
@@ -217,7 +230,15 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
       const localGameId = newLocalGameId();
       savePending([
         ...loadPending(),
-        { kind: "fill", id: newPendingId(), localGameId, createdAt: new Date().toISOString(), ...input },
+        {
+          kind: "fill",
+          id: newPendingId(),
+          localGameId,
+          createdAt: new Date().toISOString(),
+          // Made on this device either way (local-first); only flagged "offline" when it really was.
+          madeOffline: typeof navigator !== "undefined" && !navigator.onLine,
+          ...input,
+        },
       ]);
       void flush();
       return localGameId;

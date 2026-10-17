@@ -584,7 +584,7 @@ export const typeDefs = gql`
     deleteCourt(id: ID!): Boolean!
 
     generateNextGame(sessionId: ID!, courtId: ID!): Game!
-    "Saves a game that was generated offline in the browser. Idempotent on clientGameId."
+    "Saves a game picked in the browser (local-first, or offline). Idempotent on clientGameId. createdOffline: made with no connection (defaults to true for older clients)."
     syncOfflineGame(
       sessionId: ID!
       courtId: ID!
@@ -594,6 +594,7 @@ export const typeDefs = gql`
       playersSatOutIds: [ID!]!
       createdAt: Date
       source: GameSource
+      createdOffline: Boolean
     ): Game!
     fillCourtManually(courtId: ID!, teamAPlayerIds: [ID!]!, teamBPlayerIds: [ID!]!, allowRepeat: Boolean, source: GameSource): Game!
     updateGameTeams(id: ID!, teamAPlayerIds: [ID!]!, teamBPlayerIds: [ID!]!): Game!
