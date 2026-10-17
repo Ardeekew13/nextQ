@@ -1,0 +1,21 @@
+name: CI
+# Type-check, test and build every push and pull request, so a broken commit is caught before
+# Vercel deploys it. In GitHub: Settings → Branches → protect `main` → require "CI / check".
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit -p .
+      - run: npm test
+      - run: npm run build

@@ -29,6 +29,9 @@ export default defineConfig({
     env: {
       MONGODB_URI: E2E_MONGODB_URI,
       JWT_SECRET: E2E_JWT_SECRET,
+      // Tests fire requests much faster than people do: don't rate limit them.
+      RATE_LIMIT_ORGANISER_MAX: "1000000",
+      RATE_LIMIT_PUBLIC_MAX: "1000000",
       NEXT_PUBLIC_APP_URL: E2E_BASE_URL,
     },
   },
