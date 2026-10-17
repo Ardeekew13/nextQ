@@ -1,6 +1,12 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // This folder is the app's root, even if another package-lock.json sits higher up (e.g. in
+  // the user's home folder on Windows), which otherwise makes Next.js guess the wrong root.
+  turbopack: { root: path.dirname(fileURLToPath(import.meta.url)) },
   transpilePackages: ["antd", "@ant-design/icons"],
   headers: async () => [
     {

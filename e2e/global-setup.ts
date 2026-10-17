@@ -6,7 +6,8 @@ import { E2E_JWT_SECRET, E2E_MONGODB_URI, E2E_PASSWORD, assertSafeDatabase } fro
 /** Seeds the e2e database (organiser, club, active session, courts, players) before the run. */
 export default function globalSetup() {
   assertSafeDatabase(E2E_MONGODB_URI);
-  const out = execFileSync("npx", ["tsx", "scripts/seed.ts"], {
+  // Run tsx through Node itself: "npx" can't be spawned directly on Windows (it's npx.cmd).
+  const out = execFileSync(process.execPath, ["--import", "tsx", "scripts/seed.ts"], {
     cwd: process.cwd(),
     encoding: "utf-8",
     env: {
