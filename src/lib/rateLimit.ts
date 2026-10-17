@@ -64,13 +64,12 @@ export function createRateLimiter(windowMs = RATE_LIMIT_WINDOW_MS) {
   return {
     /** Counts one request; false when this bucket is over its limit for the current window. */
     hit(key: string, max: number, now = Date.now()): boolean {
-      if (store.size > MAX_BUCKETS) {
-        for (const [k, v] of store) if (v.resetAt <= now) store.delete(k);
-        // Still too many (a flood of made-up cookies): forget the oldest buckets.
-        for (const k of store.keys()) {
-          if (store.size <= MAX_BUCKETS) break;
-          store.delete(k);
-        }
+      // Least recently used buckets sit at the front: drop expired ones from there, and while a
+      // flood (made-up cookies) has too many, the oldest ones. Stops at the first live bucket,
+      // so this stays cheap on every request.
+      for (const [k, v] of store) {
+        if (v.resetAt > now && store.size <= MAX_BUCKETS) break;
+        store.delete(k);
       }
       const entry = store.get(key);
       if (!entry || entry.resetAt <= now) {

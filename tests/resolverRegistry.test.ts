@@ -9,7 +9,8 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/db", () => ({ connectToDatabase: vi.fn() }));
 
 describe("resolver registry", () => {
-  it("registers every type resolver from every module under its own name", async () => {
+  // Importing every resolver module (and mongoose models) can take a few seconds cold.
+  it("registers every type resolver from every module under its own name", { timeout: 30_000 }, async () => {
     const { resolvers } = await import("@/graphql/resolvers");
     const modules = await Promise.all([
       import("@/graphql/resolvers/auth").then((m) => m.authResolvers),
@@ -29,7 +30,7 @@ describe("resolver registry", () => {
     }
   });
 
-  it("every registered type exists in the schema", async () => {
+  it("every registered type exists in the schema", { timeout: 30_000 }, async () => {
     const { resolvers } = await import("@/graphql/resolvers");
     const { typeDefs } = await import("@/graphql/typeDefs");
     const sdl = typeof typeDefs === "string" ? typeDefs : (typeDefs as { loc?: { source: { body: string } } }).loc?.source.body ?? "";
