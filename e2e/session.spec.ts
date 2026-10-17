@@ -62,7 +62,7 @@ test("record a result: the next game is on the court at once (auto-fill), and sa
   const gate = new Promise<void>((r) => (release = r));
   await page.route("**/api/graphql", async (route) => {
     await gate;
-    await route.continue();
+    await route.continue().catch(() => {}); // may already be handed back after unrouteAll
   });
 
   await page.getByRole("button", { name: "Record Result" }).first().click();
@@ -74,7 +74,7 @@ test("record a result: the next game is on the court at once (auto-fill), and sa
 
   // Let the background sync through: it's saved, and still there after a reload.
   release();
-  await page.unroute("**/api/graphql");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
   await waitForSynced(page);
   await page.reload();
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(games);
@@ -127,7 +127,8 @@ test("Match top 4 can be undone", async ({ page }) => {
 
   await page.getByRole("button", { name: "Match top 4" }).click();
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(2);
-  await page.getByRole("button", { name: "Undo" }).click();
+  // The Undo in the "Top 4 match started" message (the game log has "Undo result" buttons too).
+  await page.locator(".ant-message").getByRole("button", { name: "Undo" }).click();
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(1);
 
   // The same four can be matched again after an undo (and after they've played).

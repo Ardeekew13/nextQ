@@ -67,12 +67,18 @@ test("intermittent: requests fail at random and the signal drops between actions
   let n = 0;
   await page.route("**/api/graphql", async (route) => {
     n++;
-    if (n % 3 === 0) return route.abort("failed"); // lost on the way
-    if (n % 3 === 1) {
-      await route.fetch().catch(() => {}); // the server gets it…
-      return route.abort("failed"); // …but the answer never comes back
+    // (Errors are ignored: a request still in flight when the flaky network is switched off
+    // below is handed back to the browser, and touching its route again would throw.)
+    try {
+      if (n % 3 === 0) return await route.abort("failed"); // lost on the way
+      if (n % 3 === 1) {
+        await route.fetch().catch(() => {}); // the server gets it…
+        return await route.abort("failed"); // …but the answer never comes back
+      }
+      return await route.continue();
+    } catch {
+      /* already handed back */
     }
-    return route.continue();
   });
 
   for (let i = 0; i < 4; i++) {
@@ -84,7 +90,7 @@ test("intermittent: requests fail at random and the signal drops between actions
   const seen = await courtLineups(page);
 
   // Signal is good again.
-  await page.unroute("**/api/graphql");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
   await waitForSynced(page, 60_000);
   await page.reload();
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(games);
