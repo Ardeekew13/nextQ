@@ -49,3 +49,16 @@ export async function waitForSynced(page: Page, timeout = 30_000) {
     { timeout }
   );
 }
+
+/** Who is on each court right now, as shown on screen (one sorted, comma-joined list per court;
+ * "" for an open court). */
+export async function courtLineups(page: Page): Promise<string[]> {
+  return page.getByTestId("court-card").evaluateAll((cards) =>
+    cards.map((card) =>
+      [...card.querySelectorAll('[data-testid="court-player"]')]
+        .map((el) => (el.textContent ?? "").trim())
+        .sort()
+        .join(",")
+    )
+  );
+}

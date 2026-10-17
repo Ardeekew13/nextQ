@@ -87,9 +87,12 @@ export function OverviewTab({
 	onStats?: (s: SessionStats) => void;
 }) {
 	const { message, modal } = App.useApp();
-	const { data, loading, error, refetch } = useQuery(SESSION_DASHBOARD_QUERY, {
+	const { data: liveData, previousData, loading, error, refetch } = useQuery(SESSION_DASHBOARD_QUERY, {
 		variables: { id: sessionId },
 	});
+	// On a flaky connection a background refresh can fail: keep showing the last good data
+	// instead of replacing the whole dashboard with the error.
+	const data = liveData ?? previousData;
 
 	const [generateNextGame, { loading: generating }] =
 		useMutation(GENERATE_NEXT_GAME);
@@ -322,7 +325,7 @@ export function OverviewTab({
 	}, [session, checkedIn, onCourt, gamesDone, longestWaitMins, onStats]);
 
 	if (loading && !data) return null;
-	if (error) return <Empty description={error.message} />;
+	if (error && !data) return <Empty description={error.message} />;
 	if (!session) return <Empty description="Session not found" />;
 
 	// On deck: next 4 from queue

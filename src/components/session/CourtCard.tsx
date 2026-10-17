@@ -135,7 +135,7 @@ export function CourtCard({
 	const teamsValid = editTeamA.length === 2 && editTeamB.length === 2;
 
 	return (
-		<div style={{ border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff", overflow: "hidden" }}>
+		<div data-testid="court-card" style={{ border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff", overflow: "hidden" }}>
 
 			{/* ── Court header ── */}
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 18px 10px" }}>
@@ -252,7 +252,7 @@ export function CourtCard({
 							<div>
 								<div style={{ fontSize: 9, fontWeight: 700, color: "#e11d74", textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 5 }}>TEAM A</div>
 								{game.teamA.players.map((p: any) => (
-									<div key={p.id} style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", color: "#1d1f20", lineHeight: 1.3, textTransform: "uppercase" }}>
+									<div key={p.id} data-testid="court-player" style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", color: "#1d1f20", lineHeight: 1.3, textTransform: "uppercase" }}>
 										{p.name}
 									</div>
 								))}
@@ -265,7 +265,7 @@ export function CourtCard({
 							<div style={{ textAlign: "right" }}>
 								<div style={{ fontSize: 9, fontWeight: 700, color: "#e11d74", textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 5 }}>TEAM B</div>
 								{game.teamB.players.map((p: any) => (
-									<div key={p.id} style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", color: "#1d1f20", lineHeight: 1.3, textTransform: "uppercase" }}>
+									<div key={p.id} data-testid="court-player" style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", color: "#1d1f20", lineHeight: 1.3, textTransform: "uppercase" }}>
 										{p.name}
 									</div>
 								))}
