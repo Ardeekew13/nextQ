@@ -42,6 +42,17 @@ export function savePending(list: PendingOp[]): void {
   window.dispatchEvent(new Event(PENDING_CHANGED_EVENT));
 }
 
+/**
+ * Drops entries the server already has, once nothing else in their session still needs them:
+ * a session that is still sending something keeps its synced entries so the on-device replay
+ * stays consistent. A failed entry doesn't hold a session back (it is never replayed), so it
+ * can't leave synced entries — and the on-device copy — hanging around for good.
+ */
+export function pruneSynced(all: PendingOp[]): PendingOp[] {
+  const stillSending = new Set(all.filter((p) => !p.synced && !p.error).map((p) => p.sessionId));
+  return all.filter((p) => !p.synced || stillSending.has(p.sessionId));
+}
+
 export function newPendingId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }

@@ -17,6 +17,7 @@ import {
 } from "@/graphql/documents/organiser";
 import { DEFAULT_QUEUE_SETTINGS } from "@/types/enums";
 import { useMutation, useQuery } from "@apollo/client";
+import { placeGameOnCourt, shouldShowDeviceCopy } from "@/lib/courtDisplay";
 import { App, Button, Empty, Input, Modal, Popover, Switch, Typography } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -143,7 +144,6 @@ export function OverviewTab({
 	// A failed entry (the server rejected it) never reached the server: it's shown in the
 	// banner with Retry / Discard, but it must not keep the whole session on the device copy.
 	const replayOps = useMemo(() => sessionOps.filter((p) => !p.error), [sessionOps]);
-	const unsyncedOps = useMemo(() => replayOps.filter((p) => !p.synced), [replayOps]);
 	// This browser is running older queue rules than the server: say so, and let the server pick.
 	const outdated = Boolean(snapshot?.engineVersion && snapshot.engineVersion !== QUEUE_ENGINE_VERSION);
 	const hasUnsynced = () => loadPending().some((p) => p.sessionId === sessionId && !p.synced && !p.error);
@@ -184,9 +184,10 @@ export function OverviewTab({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [data]);
 
+	const showDeviceCopy = shouldShowDeviceCopy({ hasSnapshot: Boolean(snapshot), ops: sessionOps });
 	const local = useMemo(
-		() => (snapshot && unsyncedOps.length > 0 ? deriveLocalState(snapshot, replayOps) : null),
-		[snapshot, replayOps, unsyncedOps],
+		() => (snapshot && showDeviceCopy ? deriveLocalState(snapshot, replayOps) : null),
+		[snapshot, replayOps, showDeviceCopy],
 	);
 
 	const session = useMemo(() => {
@@ -362,6 +363,7 @@ export function OverviewTab({
 		try {
 			const res = await fillCourtManually({
 				variables: { courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, allowRepeat: true, source: "TOP_FOUR" },
+				update: (cache, { data }) => placeGameOnCourt(cache, sessionId, court.id, data?.fillCourtManually),
 			});
 			announce();
 			await refetch();
@@ -423,7 +425,12 @@ export function OverviewTab({
 			return;
 		}
 		try {
-			const result = await generateNextGame({ variables: { sessionId: session.id, courtId } });
+			// The game goes on its court straight from the mutation's answer, so the court shows the
+			// line-up as it's announced; the full dashboard refresh follows in the background.
+			const result = await generateNextGame({
+				variables: { sessionId: session.id, courtId },
+				update: (cache, { data }) => placeGameOnCourt(cache, session.id, courtId, data?.generateNextGame),
+			});
 			const game = result.data?.generateNextGame;
 			if (game?.teamA && game?.teamB) {
 				announceMatchup(game.teamA, game.teamB, game.court?.name ?? `Court ${game.court?.courtNumber}`);
@@ -1043,17 +1050,17 @@ export function OverviewTab({
 								onFill={handleGenerate}
 								resultState={(() => {
 									if (local) return undefined;
-									const p = offline.pending.find((x) => x.kind === "complete" && x.gameId === court.currentGame?.id);
+									const p = offline.pending.find((x) => x.kind === "complete" && !x.synced && x.gameId === court.currentGame?.id);
 									if (!p) return undefined;
 									return p.error ? "failed" : !offline.online ? "offline" : "saving";
 								})()}
-								resultError={local ? undefined : offline.pending.find((x) => x.kind === "complete" && x.gameId === court.currentGame?.id)?.error}
+								resultError={local ? undefined : offline.pending.find((x) => x.kind === "complete" && !x.synced && x.gameId === court.currentGame?.id)?.error}
 								onRetryResult={() => {
-									const p = offline.pending.find((x) => x.kind === "complete" && x.gameId === court.currentGame?.id);
+									const p = offline.pending.find((x) => x.kind === "complete" && !x.synced && x.gameId === court.currentGame?.id);
 									if (p) offline.retry(p.id);
 								}}
 								onDiscardResult={() => {
-									const p = offline.pending.find((x) => x.kind === "complete" && x.gameId === court.currentGame?.id);
+									const p = offline.pending.find((x) => x.kind === "complete" && !x.synced && x.gameId === court.currentGame?.id);
 									if (p) offline.discard(p.id);
 								}}
 								onRecordResult={handleRecordResult}

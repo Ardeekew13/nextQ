@@ -9,6 +9,7 @@ import {
   loadIdMap,
   loadPending,
   newPendingId,
+  pruneSynced,
   saveIdMap,
   savePending,
   type PendingOp,
@@ -131,7 +132,9 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
       // Show the server's fresh state BEFORE dropping the on-device replay. Clearing first
       // would flash the old server data (the finished game back on its court) until the
       // refetch lands.
-      if (sentAny) {
+      // Also when an earlier sync sent everything but couldn't refresh (the connection dropped
+      // right after): until the screen has the server's new state, the device copy stays.
+      if (sentAny || loadPending().some((p) => p.synced)) {
         try {
           await client.refetchQueries({ include: ["SessionDashboard"] });
         } catch {
@@ -143,8 +146,7 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
       // A session whose every entry has reached the server no longer needs the replay:
       // clear it so the next snapshot is the plain server state.
       const all = loadPending();
-      const blocked = new Set(all.filter((p) => !p.synced).map((p) => p.sessionId));
-      const keep = all.filter((p) => !p.synced || blocked.has(p.sessionId));
+      const keep = pruneSynced(all);
       if (keep.length !== all.length) {
         savePending(keep);
         const mapped = loadIdMap();
@@ -187,7 +189,8 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
     window.addEventListener("offline", goOffline);
     void flush();
     const timer = window.setInterval(() => {
-      if (loadPending().some((p) => !p.error && !p.synced)) void flush();
+      // Retry anything unsent, and finish a sync whose refresh didn't get through.
+      if (loadPending().some((p) => (!p.error && !p.synced) || p.synced)) void flush();
     }, RETRY_INTERVAL_MS);
     return () => {
       window.removeEventListener("online", goOnline);
