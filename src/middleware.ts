@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createRateLimiter, isRateLimited, rateLimitConfig, rateLimitKey } from "@/lib/rateLimit";
+import { createRateLimiter, isRateLimited, rateLimitBuckets, rateLimitConfig } from "@/lib/rateLimit";
 
 const limiter = createRateLimiter();
-const limits = rateLimitConfig(process.env);
+// Named one by one so they're available wherever the middleware runs (edge included).
+const limits = rateLimitConfig({
+  RATE_LIMIT_ORGANISER_MAX: process.env.RATE_LIMIT_ORGANISER_MAX,
+  RATE_LIMIT_PUBLIC_MAX: process.env.RATE_LIMIT_PUBLIC_MAX,
+  RATE_LIMIT_IP_CEILING: process.env.RATE_LIMIT_IP_CEILING,
+});
 const AUTH_COOKIE = process.env.AUTH_COOKIE_NAME || "nextq_session";
 
 export function middleware(request: NextRequest) {
   if (isRateLimited(request.nextUrl.pathname)) {
-    const { key, max } = rateLimitKey(
+    const buckets = rateLimitBuckets(
       {
         authCookie: request.cookies.get(AUTH_COOKIE)?.value,
         forwardedFor: request.headers.get("x-forwarded-for"),
@@ -15,7 +20,9 @@ export function middleware(request: NextRequest) {
       },
       limits
     );
-    if (!limiter.hit(key, max)) {
+    // Count against every bucket (no short-circuit), then refuse if any is over.
+    const allowed = buckets.map(({ key, max }) => limiter.hit(key, max)).every(Boolean);
+    if (!allowed) {
       return new NextResponse("Too many requests", { status: 429, headers: { "Retry-After": "60" } });
     }
   }

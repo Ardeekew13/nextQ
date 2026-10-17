@@ -38,6 +38,9 @@ interface OfflineResultsValue {
    * connection fails). Lets a court fill wait for a just-recorded result to land, so the
    * server can pick the next game instead of this device. */
   syncNow: () => Promise<void>;
+  /** Whether this entry's request may be on its way to the server right now (then wait for
+   * syncNow before deciding it wasn't sent). */
+  isSending: (id: string) => boolean;
   /** Re-send an entry the server rejected. */
   retry: (id: string) => void;
   /** Drop a queued entry for good (and any results that depend on a dropped game). */
@@ -57,6 +60,8 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
   const [online, setOnline] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const flushing = useRef(false);
+  /** Id of the entry whose request is on its way to the server right now. */
+  const sendingId = useRef<string | null>(null);
 
   // Load what's already queued (e.g. from before a refresh) and track changes.
   useEffect(() => {
@@ -87,6 +92,7 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
         const entry = nextToSend(loadPending(), tried);
         if (!entry) break;
         tried.add(entry.id);
+        sendingId.current = entry.id;
         try {
           if (entry.kind === "fill") {
             const res = await client.mutate({
@@ -167,6 +173,7 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
         saveIdMap(Object.fromEntries(entries.filter(([k]) => liveLocal.has(k) || recent.has(k))));
       }
     } finally {
+      sendingId.current = null;
       flushing.current = false;
       setSyncing(false);
       // Refresh everything else (and take a new queue snapshot now that nothing is pending).
@@ -263,9 +270,9 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
           )
         );
       }
-      void flush();
+      void syncNow(); // after any sync already running (it may have skipped this entry)
     },
-    [flush]
+    [syncNow]
   );
 
   const discard = useCallback((id: string) => {
@@ -277,9 +284,10 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const isSending = useCallback((id: string) => sendingId.current === id, []);
   const value = useMemo(
-    () => ({ pending, online, syncing, recordResult, fillCourt, syncNow, retry, discard }),
-    [pending, online, syncing, recordResult, fillCourt, syncNow, retry, discard]
+    () => ({ pending, online, syncing, recordResult, fillCourt, syncNow, isSending, retry, discard }),
+    [pending, online, syncing, recordResult, fillCourt, syncNow, isSending, retry, discard]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -31,3 +31,21 @@ export async function activeSessionId(page: Page): Promise<string> {
   if (!id) throw new Error(`No active session found: ${JSON.stringify(body)}`);
   return id;
 }
+
+/** Waits until everything this browser recorded has reached the server (the on-device queue
+ * of results and games is empty). The "Syncing…" banner only shows for slow syncs now, so it
+ * can't be used for this. */
+export async function waitForSynced(page: Page, timeout = 30_000) {
+  await page.waitForFunction(
+    () => {
+      try {
+        const list = JSON.parse(window.localStorage.getItem("nextq.pendingResults.v1") ?? "[]");
+        return Array.isArray(list) && list.length === 0;
+      } catch {
+        return false;
+      }
+    },
+    null,
+    { timeout }
+  );
+}

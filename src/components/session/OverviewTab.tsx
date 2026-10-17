@@ -16,10 +16,10 @@ import {
 	CLUB_DETAIL_QUERY,
 } from "@/graphql/documents/organiser";
 import { DEFAULT_QUEUE_SETTINGS } from "@/types/enums";
-import { useMutation, useQuery } from "@apollo/client";
+import { useApolloClient, useMutation, useQuery } from "@apollo/client";
 import { placeGameOnCourt, shouldShowDeviceCopy, slowToSync } from "@/lib/courtDisplay";
 import { App, Button, Empty, Input, Modal, Popover, Switch, Typography } from "antd";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	ScoreEntryForm,
 	type ScoreEntryValues,
@@ -35,7 +35,7 @@ import {
 	type QueueSnapshot,
 } from "@/lib/offlineQueue";
 import { QUEUE_ENGINE_VERSION } from "@/lib/queueEngine";
-import { fillOnDevice } from "@/lib/fillLocation";
+import { fillOnDevice, snapshotMatchesServer } from "@/lib/fillLocation";
 import { loadAutoFill, saveAutoFill } from "@/lib/autoFill";
 import { isNetworkFailure, loadIdMap, loadPending, loadSnapshot, saveSnapshot } from "@/lib/offlineResults";
 import { pickTopFour } from "@/lib/topFour";
@@ -130,11 +130,31 @@ export function OverviewTab({
 	// connection is down) the courts, queue and next-game preview are derived locally by
 	// replaying what the organiser did on top of the last server snapshot.
 	const [snapshot, setSnapshot] = useState<QueueSnapshot | null>(null);
-	const { data: snapData, refetch: refetchSnapshot } = useQuery(SESSION_QUEUE_SNAPSHOT, {
-		variables: { sessionId },
-		fetchPolicy: "network-only",
-		errorPolicy: "ignore",
-	});
+	const apollo = useApolloClient();
+	// When this device last received a snapshot from the server (0 = none yet this visit, or
+	// it's known to be behind). Set on every completed fetch, even when nothing changed.
+	const snapshotReceivedAt = useRef(0);
+	const refreshSnapshot = useCallback(async () => {
+		try {
+			const res = await apollo.query({
+				query: SESSION_QUEUE_SNAPSHOT,
+				variables: { sessionId },
+				fetchPolicy: "network-only",
+				errorPolicy: "ignore",
+			});
+			const raw = res.data?.sessionQueueSnapshot;
+			if (!raw) return;
+			// Always take the fresh snapshot, even mid-sync: the replay skips anything the server
+			// already has (offline games are recognised by their temporary id), so nothing is
+			// applied twice — and the device no longer freezes on an old copy of the session.
+			const parsed = JSON.parse(raw) as QueueSnapshot;
+			setSnapshot(parsed);
+			saveSnapshot(parsed);
+			snapshotReceivedAt.current = Date.now();
+		} catch {
+			/* offline or a bad answer: keep the previous snapshot */
+		}
+	}, [apollo, sessionId]);
 	const sessionOps = useMemo(
 		() => offline.pending.filter((p) => p.sessionId === sessionId),
 		[offline.pending, sessionId],
@@ -148,17 +168,28 @@ export function OverviewTab({
 	// This browser is running older queue rules than the server: say so, and let the server pick.
 	const outdated = Boolean(snapshot?.engineVersion && snapshot.engineVersion !== QUEUE_ENGINE_VERSION);
 	const hasUnsynced = () => loadPending().some((p) => p.sessionId === sessionId && !p.synced && !p.error);
-	// When this device last received a fresh snapshot from the server (0 = only the copy saved
-	// from an earlier visit so far).
-	const snapshotReceivedAt = useRef(0);
 	/** Local-first: the next game is picked on this device and shown at once, then checked by
 	 * the server in the background — unless the device's copy is old or runs older queue rules,
 	 * in which case the server picks (see fillOnDevice). */
 	function mustFillHere(): Promise<boolean> {
+		const server = data?.session;
+		const matchesServer =
+			!!snapshot &&
+			!!server &&
+			snapshotMatchesServer(snapshot, {
+				activeGameIds: (server.activeGames ?? []).map((g: any) => g.id),
+				availablePlayerIds: (server.players ?? []).filter((p: any) => p.checkedIn && p.active).map((p: any) => p.id),
+			});
+		// Behind the server (e.g. a game it just saved isn't in it yet): fetch a new one for next time.
+		if (snapshot && server && !matchesServer && offline.online) {
+			snapshotReceivedAt.current = 0;
+			void refreshSnapshot();
+		}
 		return fillOnDevice({
 			hasSnapshot: Boolean(snapshot),
 			online: offline.online,
 			outdated,
+			matchesServer,
 			snapshotAgeMs: snapshotReceivedAt.current ? Date.now() - snapshotReceivedAt.current : Infinity,
 			hasUnsynced,
 			syncNow: offline.syncNow,
@@ -180,28 +211,21 @@ export function OverviewTab({
 		setSnapshot((cur) => cur ?? loadSnapshot(sessionId));
 	}, [sessionId]);
 
+	// Fetch on open, keep it fresh every 20 s while online (so a quiet stretch between games
+	// doesn't make it "old"), and whenever the dashboard changes.
 	useEffect(() => {
-		const raw = snapData?.sessionQueueSnapshot;
-		if (!raw) return;
-		// Always take the fresh snapshot, even mid-sync: the replay skips anything the server
-		// already has (offline games are recognised by their temporary id), so nothing is
-		// applied twice — and the device no longer freezes on an old copy of the session.
-		try {
-			const parsed = JSON.parse(raw) as QueueSnapshot;
-			setSnapshot(parsed);
-			saveSnapshot(parsed);
-			snapshotReceivedAt.current = Date.now();
-		} catch {
-			/* keep the previous snapshot */
-		}
-	}, [snapData, sessionId]);
-
-	// Keep the snapshot in step with the dashboard whenever it reloads.
+		void refreshSnapshot();
+	}, [refreshSnapshot]);
+	useEffect(() => {
+		if (!offline.online) return;
+		const t = window.setInterval(() => void refreshSnapshot(), 20_000);
+		return () => window.clearInterval(t);
+	}, [offline.online, refreshSnapshot]);
 	const lastDashboard = useRef<unknown>(null);
 	useEffect(() => {
 		if (!data) return;
 		if (lastDashboard.current && lastDashboard.current !== data && offline.online) {
-			void refetchSnapshot();
+			void refreshSnapshot();
 		}
 		lastDashboard.current = data;
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -355,9 +379,15 @@ export function OverviewTab({
 	/** Undo a game made on this device: drop it if it hasn't been sent yet, otherwise cancel the
 	 * copy the server saved (games are usually sent within a second now). */
 	async function undoDeviceFill(localId: string) {
-		const op = loadPending().find((o) => o.kind === "fill" && o.localGameId === localId);
-		if (op && !op.synced && !op.error) {
-			offline.discard(op.id);
+		const find = () => loadPending().find((o) => o.kind === "fill" && o.localGameId === localId);
+		let op = find();
+		// Its request may be in flight: let it land, then cancel the copy the server saved.
+		if (op && !op.synced && !op.error && offline.isSending(op.id)) {
+			await offline.syncNow();
+			op = find();
+		}
+		if (op && !op.synced) {
+			offline.discard(op.id); // never reached the server (or it refused it)
 			return;
 		}
 		const realId = loadIdMap()[localId];
@@ -394,6 +424,7 @@ export function OverviewTab({
 			return;
 		}
 		try {
+			snapshotReceivedAt.current = 0;
 			const res = await fillCourtManually({
 				variables: { courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, allowRepeat: true, source: "TOP_FOUR" },
 				update: (cache, { data }) => placeGameOnCourt(cache, sessionId, court.id, data?.fillCourtManually),
@@ -464,6 +495,7 @@ export function OverviewTab({
 		try {
 			// The game goes on its court straight from the mutation's answer, so the court shows the
 			// line-up as it's announced; the full dashboard refresh follows in the background.
+			snapshotReceivedAt.current = 0; // a server-picked game: the snapshot needs refreshing
 			const result = await generateNextGame({
 				variables: { sessionId: session.id, courtId },
 				update: (cache, { data }) => placeGameOnCourt(cache, session.id, courtId, data?.generateNextGame),
@@ -506,6 +538,7 @@ export function OverviewTab({
 			await updateGameTeams({
 				variables: { id: gameId, teamAPlayerIds, teamBPlayerIds },
 			});
+			snapshotReceivedAt.current = 0; // the server's copy changed: refresh before picking on the device
 			refetch();
 		} catch (err) {
 			message.error(

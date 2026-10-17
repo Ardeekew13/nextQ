@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { activeSessionId, login } from "./helpers";
+import { activeSessionId, login, waitForSynced } from "./helpers";
 
 test("session overview shows courts and the waiting queue", async ({ page }) => {
   await login(page);
@@ -23,6 +23,7 @@ test("works offline: record a result, the court auto-fills, then syncs when back
 
   await context.setOffline(true);
   await expect(page.getByText("You're offline.")).toBeVisible();
+  const before = await page.locator("body").innerText();
 
   // Record the running game's result: auto-fill puts the next game on that court at once,
   // with no connection.
@@ -30,12 +31,13 @@ test("works offline: record a result, the court auto-fills, then syncs when back
   await page.getByRole("dialog").getByText("Team A").first().click();
   await expect(page.getByRole("dialog")).toBeHidden();
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(1);
+  expect(await page.locator("body").innerText()).not.toEqual(before); // a new line-up is on court
 
 
   // Back online: everything syncs and the game is still there after a reload.
   await context.setOffline(false);
   await expect(page.getByText("You're offline.")).toBeHidden();
-  await expect(page.getByText(/saved action/)).toBeHidden({ timeout: 30_000 });
+  await waitForSynced(page);
   await page.reload();
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(1);
 });
@@ -70,7 +72,7 @@ test("record a result: the next game is on the court at once (auto-fill), and sa
   // Let the background sync through: it's saved, and still there after a reload.
   release();
   await page.unroute("**/api/graphql");
-  await expect(page.getByText(/saved action/)).toBeHidden({ timeout: 30_000 });
+  await waitForSynced(page);
   await page.reload();
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(games);
 });
@@ -93,7 +95,7 @@ test("auto-fill can be turned off in Queue options", async ({ page }) => {
   // Fill it by hand to leave the session as it was for the next tests.
   await page.getByRole("button", { name: "Fill Court" }).first().click();
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(games);
-  await expect(page.getByText(/saved action/)).toBeHidden({ timeout: 30_000 });
+  await waitForSynced(page);
 });
 
 test("Match top 4 fills the open court with the best-ranked waiting players", async ({ page }) => {

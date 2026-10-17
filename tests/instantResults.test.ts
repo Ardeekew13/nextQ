@@ -3,12 +3,12 @@
  * at once (like pickleq.app), and are checked and saved by the server in the background.
  */
 import { describe, expect, it, vi } from "vitest";
-import { FRESH_SNAPSHOT_MS, fillOnDevice } from "@/lib/fillLocation";
+import { FRESH_SNAPSHOT_MS, fillOnDevice, snapshotMatchesServer } from "@/lib/fillLocation";
 import { deriveLocalState, generateLocalGame, type LocalOp, type QueueSnapshot, type SnapshotPlayer } from "@/lib/offlineQueue";
 import { nextToSend, type PendingOp } from "@/lib/offlineResults";
 
 describe("fillOnDevice: when the next game is picked on this device", () => {
-  const base = { hasSnapshot: true, online: true, outdated: false, hasUnsynced: () => false };
+  const base = { hasSnapshot: true, online: true, outdated: false, matchesServer: true, hasUnsynced: () => false };
   it("online with a fresh copy of the session: instantly on the device, no waiting for the network", async () => {
     const syncNow = vi.fn(async () => {});
     expect(await fillOnDevice({ ...base, snapshotAgeMs: 5_000, syncNow })).toBe(true);
@@ -25,12 +25,39 @@ describe("fillOnDevice: when the next game is picked on this device", () => {
     expect(await fillOnDevice({ ...base, snapshotAgeMs: Infinity, hasUnsynced: () => waiting, syncNow })).toBe(false);
     expect(syncNow).toHaveBeenCalledOnce();
   });
+  it("a recent copy that is behind the server (missing a game it just saved): the server picks", async () => {
+    expect(await fillOnDevice({ ...base, matchesServer: false, snapshotAgeMs: 1_000, syncNow: async () => {} })).toBe(false);
+  });
   it("this browser runs older queue rules than the server: the server picks", async () => {
     expect(await fillOnDevice({ ...base, outdated: true, snapshotAgeMs: 1_000, syncNow: async () => {} })).toBe(false);
   });
   it("offline: on the device; no copy at all: the server", async () => {
     expect(await fillOnDevice({ ...base, online: false, snapshotAgeMs: Infinity, syncNow: async () => {} })).toBe(true);
     expect(await fillOnDevice({ ...base, hasSnapshot: false, snapshotAgeMs: 0, syncNow: async () => {} })).toBe(false);
+  });
+});
+
+describe("snapshotMatchesServer", () => {
+  const snapshot = {
+    activeGames: [{ id: "g1" }],
+    players: [
+      { id: "a", checkedIn: true, active: true },
+      { id: "b", checkedIn: true, active: true },
+      { id: "c", checkedIn: false, active: true },
+    ],
+  };
+  it("agrees when the same games run and the same players are available", () => {
+    expect(snapshotMatchesServer(snapshot, { activeGameIds: ["g1"], availablePlayerIds: ["b", "a"] })).toBe(true);
+  });
+  it("a game the server saved a moment ago isn't in the snapshot yet", () => {
+    expect(snapshotMatchesServer(snapshot, { activeGameIds: ["g1", "g2"], availablePlayerIds: ["a", "b"] })).toBe(false);
+  });
+  it("a game has finished on the server", () => {
+    expect(snapshotMatchesServer(snapshot, { activeGameIds: [], availablePlayerIds: ["a", "b"] })).toBe(false);
+  });
+  it("someone checked in or out since", () => {
+    expect(snapshotMatchesServer(snapshot, { activeGameIds: ["g1"], availablePlayerIds: ["a", "b", "c"] })).toBe(false);
+    expect(snapshotMatchesServer(snapshot, { activeGameIds: ["g1"], availablePlayerIds: ["a"] })).toBe(false);
   });
 });
 
