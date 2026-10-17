@@ -18,7 +18,17 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        // Use a browser that's already installed instead of Playwright's own download (handy when
+        // `npx playwright install` can't download): E2E_BROWSER=msedge (always on Windows) or chrome.
+        ...(process.env.E2E_BROWSER ? { channel: process.env.E2E_BROWSER } : {}),
+      },
+    },
+  ],
   webServer: {
     // Own dev server on its own port with the test database, so it can't touch the one you
     // use day to day.
@@ -32,6 +42,7 @@ export default defineConfig({
       // Tests fire requests much faster than people do: don't rate limit them.
       RATE_LIMIT_ORGANISER_MAX: "1000000",
       RATE_LIMIT_PUBLIC_MAX: "1000000",
+      RATE_LIMIT_IP_CEILING: "1000000",
       NEXT_PUBLIC_APP_URL: E2E_BASE_URL,
     },
   },
