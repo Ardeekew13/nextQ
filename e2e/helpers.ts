@@ -72,10 +72,18 @@ async function gql(page: Page, query: string, variables: Record<string, unknown>
 
 /**
  * Puts the session in the same state before every test: exactly one game running (on the first
- * court), the other court open. Tests share one database and some leave it differently
+ * court), the other court open, and the support prompt already seen. Tests share one database and some leave it differently
  * (e.g. a test that fails halfway), which would otherwise break every test after it.
  */
 export async function resetToOneGame(page: Page, sessionId: string) {
+  // The one-time "Enjoying the session so far?" prompt would cover the page mid-test.
+  await page.addInitScript((id) => {
+    try {
+      window.localStorage.setItem(`support-prompt-mid-${id}`, "1");
+    } catch {
+      /* ignore */
+    }
+  }, sessionId);
   const data = await gql(page, "query($id: ID!){ session(id: $id){ courts { id courtNumber currentGame { id } } } }", { id: sessionId });
   const courts = [...data.session.courts].sort((a: { courtNumber: number }, b: { courtNumber: number }) => a.courtNumber - b.courtNumber);
   for (const c of courts) {
