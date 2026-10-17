@@ -53,6 +53,12 @@ export function pruneSynced(all: PendingOp[]): PendingOp[] {
   return all.filter((p) => !p.synced || stillSending.has(p.sessionId));
 }
 
+/** The next entry a sync should send: the oldest that isn't sent, failed, or already tried in
+ * this sync. Read fresh each time, so entries queued during a sync go out in the same one. */
+export function nextToSend(all: PendingOp[], tried: ReadonlySet<string>): PendingOp | undefined {
+  return all.find((p) => !p.error && !p.synced && !tried.has(p.id));
+}
+
 export function newPendingId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }

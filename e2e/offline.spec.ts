@@ -1,0 +1,100 @@
+/**
+ * No internet and intermittent internet, in a real browser against the real server.
+ * Each test ends with the session as it found it shape-wise (same number of games on court),
+ * and checks that after a reload the server shows exactly what the organiser saw.
+ */
+import { expect, test, type Page } from "@playwright/test";
+import { activeSessionId, courtLineups, login, resetToOneGame, waitForSynced } from "./helpers";
+
+async function openSession(page: Page) {
+  await login(page);
+  const id = await activeSessionId(page);
+  await resetToOneGame(page, id);
+  const snapshot = page.waitForResponse(
+    (r) => r.url().includes("/api/graphql") && (r.request().postData() ?? "").includes("sessionQueueSnapshot")
+  );
+  await page.goto(`/dashboard/sessions/${id}`);
+  await snapshot;
+  await expect(page.getByRole("button", { name: "Record Result" }).first()).toBeVisible();
+}
+
+async function recordFirstResult(page: Page, team: "Team A" | "Team B" = "Team A") {
+  await page.getByRole("button", { name: "Record Result" }).first().click();
+  await page.getByRole("dialog").getByText(team).first().click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+}
+
+test("no internet: several results with auto-fill, a refresh while offline, then everything syncs", async ({ page, context }) => {
+  await openSession(page);
+  const games = await page.getByRole("button", { name: "Record Result" }).count();
+
+  await context.setOffline(true);
+  await expect(page.getByText("You're offline.")).toBeVisible();
+  for (const team of ["Team A", "Team B", "Team A"] as const) {
+    const before = await courtLineups(page);
+    await recordFirstResult(page, team);
+    // Auto-fill: still the same number of games, with a new line-up on court.
+    await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(games);
+    expect(await courtLineups(page)).not.toEqual(before);
+  }
+  const seen = await courtLineups(page);
+
+  // The page is reloaded with no connection (tablet slept, browser restarted…): the app is gone,
+  // only what it saved on the device remains. Nothing may be lost.
+  const sessionUrl = page.url();
+  await page.goto("about:blank");
+  await page.goto(sessionUrl).catch(() => {}); // no connection: the browser shows its error page
+  await context.setOffline(false);
+  await page.goto(sessionUrl);
+  await waitForSynced(page);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(games);
+  expect(await courtLineups(page)).toEqual(seen);
+});
+
+test("intermittent: requests fail at random and the signal drops between actions, nothing is lost or doubled", async ({ page, context }) => {
+  await openSession(page);
+  const games = await page.getByRole("button", { name: "Record Result" }).count();
+  const completed = async () => {
+    const res = await page.request.post("/api/graphql", {
+      data: { query: "query($id: ID!){ session(id: $id){ completedGames { id } } }", variables: { id: page.url().split("/").pop() } },
+    });
+    return ((await res.json())?.data?.session?.completedGames ?? []).length as number;
+  };
+  const doneBefore = await completed();
+
+  // Flaky network: some requests never arrive, some arrive but the answer is lost.
+  let n = 0;
+  await page.route("**/api/graphql", async (route) => {
+    n++;
+    // (Errors are ignored: a request still in flight when the flaky network is switched off
+    // below is handed back to the browser, and touching its route again would throw.)
+    try {
+      if (n % 3 === 0) return await route.abort("failed"); // lost on the way
+      if (n % 3 === 1) {
+        await route.fetch().catch(() => {}); // the server gets it…
+        return await route.abort("failed"); // …but the answer never comes back
+      }
+      return await route.continue();
+    } catch {
+      /* already handed back */
+    }
+  });
+
+  for (let i = 0; i < 4; i++) {
+    if (i % 2 === 1) await context.setOffline(true); // signal drops for this one
+    await recordFirstResult(page, i % 2 ? "Team B" : "Team A");
+    await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(games);
+    await context.setOffline(false);
+  }
+  const seen = await courtLineups(page);
+
+  // Signal is good again.
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await waitForSynced(page, 60_000);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(games);
+  expect(await courtLineups(page)).toEqual(seen);
+  // Exactly 4 more finished games on the server: no result lost, none saved twice.
+  expect(await completed()).toBe(doneBefore + 4);
+});

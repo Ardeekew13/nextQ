@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { InMemoryCache, gql } from "@apollo/client";
-import { placeGameOnCourt, shouldShowDeviceCopy } from "@/lib/courtDisplay";
+import { placeGameOnCourt, shouldShowDeviceCopy, slowToSync } from "@/lib/courtDisplay";
 import { pruneSynced, type PendingOp } from "@/lib/offlineResults";
 
 describe("shouldShowDeviceCopy: no flash of old server data after recording a result", () => {
@@ -100,5 +100,19 @@ describe("placeGameOnCourt: the court shows the line-up as soon as it's announce
     placeGameOnCourt(cache, "s1", "c1", game);
     placeGameOnCourt(cache, "s1", "c1", game);
     expect(cache.readQuery<any>({ query: QUERY, variables: { id: "s1" } })!.session.activeGames).toHaveLength(1);
+  });
+});
+
+describe("slowToSync: the 'Syncing…' banner only for a slow sync", () => {
+  const at = (ms: number) => new Date(ms).toISOString();
+  it("ignores actions sent a moment ago, sent ones and failed ones", () => {
+    const now = 100_000;
+    expect(slowToSync([{ kind: "complete", recordedAt: at(now - 1_000) }], now)).toBe(0);
+    expect(slowToSync([{ kind: "fill", createdAt: at(now - 60_000), synced: true }], now)).toBe(0);
+    expect(slowToSync([{ kind: "fill", createdAt: at(now - 60_000), error: "x" }], now)).toBe(0);
+  });
+  it("counts ones still waiting after a few seconds", () => {
+    const now = 100_000;
+    expect(slowToSync([{ kind: "complete", recordedAt: at(now - 6_000) }, { kind: "fill", createdAt: at(now - 9_000) }], now)).toBe(2);
   });
 });

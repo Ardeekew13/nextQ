@@ -1,17 +1,19 @@
 import { expect, test } from "@playwright/test";
-import { activeSessionId, login } from "./helpers";
+import { activeSessionId, login, resetToOneGame, waitForSynced } from "./helpers";
 
 test("session overview shows courts and the waiting queue", async ({ page }) => {
   await login(page);
   const id = await activeSessionId(page);
+  await resetToOneGame(page, id);
   await page.goto(`/dashboard/sessions/${id}`);
   await expect(page.getByText("Waiting Queue")).toBeVisible();
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(1);
 });
 
-test("works offline: record a result, fill a court, then syncs when back online", async ({ page, context }) => {
+test("works offline: record a result, the court auto-fills, then syncs when back online", async ({ page, context }) => {
   await login(page);
   const id = await activeSessionId(page);
+  await resetToOneGame(page, id);
 
   // Load once online so the queue snapshot is on the device.
   const snapshot = page.waitForResponse(
@@ -23,27 +25,87 @@ test("works offline: record a result, fill a court, then syncs when back online"
 
   await context.setOffline(true);
   await expect(page.getByText("You're offline.")).toBeVisible();
+  const before = await page.locator("body").innerText();
 
-  // Record the running game's result: the court frees up immediately.
+  // Record the running game's result: auto-fill puts the next game on that court at once,
+  // with no connection.
   await page.getByRole("button", { name: "Record Result" }).click();
   await page.getByRole("dialog").getByText("Team A").first().click();
-  await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(0);
-
-  // Fill a court with no connection: a game appears on it.
-  await page.getByRole("button", { name: "Fill Court" }).first().click();
+  await expect(page.getByRole("dialog")).toBeHidden();
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(1);
+  expect(await page.locator("body").innerText()).not.toEqual(before); // a new line-up is on court
+
 
   // Back online: everything syncs and the game is still there after a reload.
   await context.setOffline(false);
   await expect(page.getByText("You're offline.")).toBeHidden();
-  await expect(page.getByText(/saved action/)).toBeHidden({ timeout: 30_000 });
+  await waitForSynced(page);
   await page.reload();
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(1);
+});
+
+test("record a result: the next game is on the court at once (auto-fill), and saved", async ({ page }) => {
+  await login(page);
+  const id = await activeSessionId(page);
+  await resetToOneGame(page, id);
+  const snapshot = page.waitForResponse(
+    (r) => r.url().includes("/api/graphql") && (r.request().postData() ?? "").includes("sessionQueueSnapshot")
+  );
+  await page.goto(`/dashboard/sessions/${id}`);
+  await snapshot;
+  await expect(page.getByRole("button", { name: "Record Result" }).first()).toBeVisible();
+  const games = await page.getByRole("button", { name: "Record Result" }).count();
+  const before = await page.locator("body").innerText();
+
+  // Hold every server request, to prove nothing on screen waits for the network.
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  await page.route("**/api/graphql", async (route) => {
+    await gate;
+    await route.continue().catch(() => {}); // may already be handed back after unrouteAll
+  });
+
+  await page.getByRole("button", { name: "Record Result" }).first().click();
+  await page.getByRole("dialog").getByText("Team A").first().click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+  // A new game is already on that court while every request is still held.
+  await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(games, { timeout: 2_000 });
+  expect(await page.locator("body").innerText()).not.toEqual(before);
+
+  // Let the background sync through: it's saved, and still there after a reload.
+  release();
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await waitForSynced(page);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(games);
+});
+
+test("auto-fill can be turned off in Queue options", async ({ page }) => {
+  await login(page);
+  const id = await activeSessionId(page);
+  await resetToOneGame(page, id);
+  await page.goto(`/dashboard/sessions/${id}`);
+  await expect(page.getByRole("button", { name: "Record Result" }).first()).toBeVisible();
+  const games = await page.getByRole("button", { name: "Record Result" }).count();
+  await page.getByRole("button", { name: "Queue options" }).click();
+  await page.getByText("Auto-fill after result").click();
+  await expect(page.getByText("Auto-fill is off")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Record Result" }).first().click();
+  await page.getByRole("dialog").getByText("Team A").first().click();
+  await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(games - 1);
+
+  // Fill it by hand to leave the session as it was for the next tests.
+  await page.getByRole("button", { name: "Fill Court" }).first().click();
+  await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(games);
+  await waitForSynced(page);
 });
 
 test("Match top 4 fills the open court with the best-ranked waiting players", async ({ page }) => {
   await login(page);
   const id = await activeSessionId(page);
+  await resetToOneGame(page, id);
   await page.goto(`/dashboard/sessions/${id}`);
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(1);
 
@@ -59,12 +121,14 @@ test("Match top 4 fills the open court with the best-ranked waiting players", as
 test("Match top 4 can be undone", async ({ page }) => {
   await login(page);
   const id = await activeSessionId(page);
+  await resetToOneGame(page, id);
   await page.goto(`/dashboard/sessions/${id}`);
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(1);
 
   await page.getByRole("button", { name: "Match top 4" }).click();
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(2);
-  await page.getByRole("button", { name: "Undo" }).click();
+  // The Undo in the "Top 4 match started" message (the game log has "Undo result" buttons too).
+  await page.locator(".ant-message").getByRole("button", { name: "Undo" }).click();
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(1);
 
   // The same four can be matched again after an undo (and after they've played).

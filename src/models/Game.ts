@@ -52,6 +52,10 @@ const GameSchema = new Schema(
      */
     clientId: { type: String },
 
+    /** Picked in the browser with no connection. Device-picked games made online (local-first
+     * fills) have a clientId but this is false. Missing on games saved before it existed. */
+    createdOffline: { type: Boolean },
+
     /** How the line-up was first chosen: by the queue, by hand, or "Match top 4". Missing on
      * games created before this was tracked. Offline games also have a clientId. */
     source: { type: String, enum: Object.values(GameSource) },

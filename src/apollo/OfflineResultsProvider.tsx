@@ -3,18 +3,18 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useApolloClient } from "@apollo/client";
 import { COMPLETE_GAME, SYNC_OFFLINE_GAME } from "@/graphql/documents/organiser";
+import { syncPending } from "@/lib/offlineSync";
 import {
   PENDING_CHANGED_EVENT,
   isNetworkFailure,
   loadIdMap,
   loadPending,
   newPendingId,
-  pruneSynced,
   saveIdMap,
   savePending,
   type PendingOp,
 } from "@/lib/offlineResults";
-import { isLocalGameId, newLocalGameId } from "@/lib/offlineQueue";
+import { newLocalGameId } from "@/lib/offlineQueue";
 
 interface OfflineResultsValue {
   pending: PendingOp[];
@@ -37,6 +37,9 @@ interface OfflineResultsValue {
    * connection fails). Lets a court fill wait for a just-recorded result to land, so the
    * server can pick the next game instead of this device. */
   syncNow: () => Promise<void>;
+  /** Whether this entry's request may be on its way to the server right now (then wait for
+   * syncNow before deciding it wasn't sent). */
+  isSending: (id: string) => boolean;
   /** Re-send an entry the server rejected. */
   retry: (id: string) => void;
   /** Drop a queued entry for good (and any results that depend on a dropped game). */
@@ -53,6 +56,8 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
   const [online, setOnline] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const flushing = useRef(false);
+  /** Id of the entry whose request is on its way to the server right now. */
+  const sendingId = useRef<string | null>(null);
 
   // Load what's already queued (e.g. from before a refresh) and track changes.
   useEffect(() => {
@@ -72,88 +77,49 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
     flushing.current = true;
     setSyncing(true);
     let sentAny = false;
-    const update = (id: string, patch: Partial<PendingOp>) =>
-      savePending(loadPending().map((p) => (p.id === id ? ({ ...p, ...patch } as PendingOp) : p)));
     try {
-      // Oldest first, one at a time: a game is created before its result, and results land
-      // in the order they were recorded.
-      for (const entry of loadPending()) {
-        if (entry.error || entry.synced) continue;
-        try {
-          if (entry.kind === "fill") {
-            const res = await client.mutate({
-              mutation: SYNC_OFFLINE_GAME,
-              variables: {
-                sessionId: entry.sessionId,
-                courtId: entry.courtId,
-                clientGameId: entry.localGameId,
-                teamAPlayerIds: entry.teamAPlayerIds,
-                teamBPlayerIds: entry.teamBPlayerIds,
-                playersSatOutIds: entry.playersSatOutIds,
-                createdAt: entry.createdAt,
-                source: entry.source ?? null,
-              },
-            });
-            const real = res.data?.syncOfflineGame?.id;
-            if (real) saveIdMap({ ...loadIdMap(), [entry.localGameId]: real });
-          } else {
-            const realId = isLocalGameId(entry.gameId) ? loadIdMap()[entry.gameId] : entry.gameId;
-            if (!realId) {
-              update(entry.id, { error: "The game this result belongs to was not saved." });
-              continue;
-            }
-            await client.mutate({
-              mutation: COMPLETE_GAME,
-              variables: {
-                id: realId,
-                input: { winningTeam: entry.winningTeam, notes: entry.notes, recordedAt: entry.recordedAt },
-              },
-            });
-          }
-          update(entry.id, { synced: true });
-          sentAny = true;
-        } catch (err) {
-          if (isNetworkFailure(err)) break; // still offline: stop, keep everything queued
-          const message = err instanceof Error ? err.message : "Could not save";
-          update(entry.id, { error: message });
-          // Results for a game that never got saved can't be sent either.
-          if (entry.kind === "fill") {
-            savePending(
-              loadPending().map((p) =>
-                p.kind === "complete" && p.gameId === entry.localGameId && !p.synced
-                  ? { ...p, error: "The game this result belongs to was not saved." }
-                  : p
-              )
-            );
-          }
-        }
-      }
-
-      // Show the server's fresh state BEFORE dropping the on-device replay. Clearing first
-      // would flash the old server data (the finished game back on its court) until the
-      // refetch lands.
-      // Also when an earlier sync sent everything but couldn't refresh (the connection dropped
-      // right after): until the screen has the server's new state, the device copy stays.
-      if (sentAny || loadPending().some((p) => p.synced)) {
-        try {
+      const outcome = await syncPending({
+        load: loadPending,
+        save: savePending,
+        loadIdMap,
+        saveIdMap,
+        isNetworkFailure,
+        onSending: (id) => {
+          sendingId.current = id;
+        },
+        sendFill: async (entry) => {
+          const res = await client.mutate({
+            mutation: SYNC_OFFLINE_GAME,
+            variables: {
+              sessionId: entry.sessionId,
+              courtId: entry.courtId,
+              clientGameId: entry.localGameId,
+              teamAPlayerIds: entry.teamAPlayerIds,
+              teamBPlayerIds: entry.teamBPlayerIds,
+              playersSatOutIds: entry.playersSatOutIds,
+              createdAt: entry.createdAt,
+              source: entry.source ?? null,
+              createdOffline: entry.madeOffline ?? null,
+            },
+          });
+          return res.data?.syncOfflineGame?.id;
+        },
+        sendResult: async (entry, serverGameId) => {
+          await client.mutate({
+            mutation: COMPLETE_GAME,
+            variables: {
+              id: serverGameId,
+              input: { winningTeam: entry.winningTeam, notes: entry.notes, recordedAt: entry.recordedAt },
+            },
+          });
+        },
+        refresh: async () => {
           await client.refetchQueries({ include: ["SessionDashboard"] });
-        } catch {
-          /* offline again: keep the replay, try on the next flush */
-          return;
-        }
-      }
-
-      // A session whose every entry has reached the server no longer needs the replay:
-      // clear it so the next snapshot is the plain server state.
-      const all = loadPending();
-      const keep = pruneSynced(all);
-      if (keep.length !== all.length) {
-        savePending(keep);
-        const mapped = loadIdMap();
-        const liveLocal = new Set(keep.flatMap((p) => (p.kind === "fill" ? [p.localGameId] : isLocalGameId(p.gameId) ? [p.gameId] : [])));
-        saveIdMap(Object.fromEntries(Object.entries(mapped).filter(([k]) => liveLocal.has(k))));
-      }
+        },
+      });
+      sentAny = outcome.sentAny;
     } finally {
+      sendingId.current = null;
       flushing.current = false;
       setSyncing(false);
       // Refresh everything else (and take a new queue snapshot now that nothing is pending).
@@ -217,7 +183,15 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
       const localGameId = newLocalGameId();
       savePending([
         ...loadPending(),
-        { kind: "fill", id: newPendingId(), localGameId, createdAt: new Date().toISOString(), ...input },
+        {
+          kind: "fill",
+          id: newPendingId(),
+          localGameId,
+          createdAt: new Date().toISOString(),
+          // Made on this device either way (local-first); only flagged "offline" when it really was.
+          madeOffline: typeof navigator !== "undefined" && !navigator.onLine,
+          ...input,
+        },
       ]);
       void flush();
       return localGameId;
@@ -242,9 +216,9 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
           )
         );
       }
-      void flush();
+      void syncNow(); // after any sync already running (it may have skipped this entry)
     },
-    [flush]
+    [syncNow]
   );
 
   const discard = useCallback((id: string) => {
@@ -256,9 +230,10 @@ export function OfflineResultsProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const isSending = useCallback((id: string) => sendingId.current === id, []);
   const value = useMemo(
-    () => ({ pending, online, syncing, recordResult, fillCourt, syncNow, retry, discard }),
-    [pending, online, syncing, recordResult, fillCourt, syncNow, retry, discard]
+    () => ({ pending, online, syncing, recordResult, fillCourt, syncNow, isSending, retry, discard }),
+    [pending, online, syncing, recordResult, fillCourt, syncNow, isSending, retry, discard]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

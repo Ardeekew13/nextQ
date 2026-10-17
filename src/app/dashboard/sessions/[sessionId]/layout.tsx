@@ -38,9 +38,11 @@ export default function SessionLayout({ children }: { children: ReactNode }) {
   } | null>(null);
 
   // Layout only needs header-level data (name, status, publicUrl)
-  const { data, loading, error, refetch } = useQuery(SESSION_HEADER_QUERY, {
+  const { data: liveData, previousData, loading, error, refetch } = useQuery(SESSION_HEADER_QUERY, {
     variables: { id: params.sessionId },
   });
+  // A failed background refresh (flaky Wi-Fi) keeps the last good header, not an error page.
+  const data = liveData ?? previousData;
 
   // Used only after finishSession to grab podium for the celebration modal
   const { refetch: refetchFull } = useQuery(SESSION_DASHBOARD_QUERY, {
@@ -149,7 +151,7 @@ export default function SessionLayout({ children }: { children: ReactNode }) {
   }, [session?.status, session?.id, session?.publicUrl]);
 
   if (loading && !data) return <Skeleton active />;
-  if (error) return <Typography.Text type="danger">{error.message}</Typography.Text>;
+  if (error && !data) return <Typography.Text type="danger">{error.message}</Typography.Text>;
   if (!session) return <Typography.Text>Session not found.</Typography.Text>;
 
   return (

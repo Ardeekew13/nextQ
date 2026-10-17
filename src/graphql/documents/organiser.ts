@@ -748,6 +748,7 @@ export const SYNC_OFFLINE_GAME = gql`
     $playersSatOutIds: [ID!]!
     $createdAt: Date
     $source: GameSource
+    $createdOffline: Boolean
   ) {
     syncOfflineGame(
       sessionId: $sessionId
@@ -758,6 +759,7 @@ export const SYNC_OFFLINE_GAME = gql`
       playersSatOutIds: $playersSatOutIds
       createdAt: $createdAt
       source: $source
+      createdOffline: $createdOffline
     ) {
       ...GameFields
     }

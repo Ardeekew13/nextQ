@@ -22,7 +22,7 @@ import { seededRandom } from "@/lib/seededRandom";
  * a browser still running an older copy sees a mismatch, warns "refresh this page", and lets
  * the server pick games instead of its out-of-date local copy.
  */
-export const QUEUE_ENGINE_VERSION = "2026-10-14";
+export const QUEUE_ENGINE_VERSION = "2026-10-18";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -374,6 +374,14 @@ function longRunCost(players: QueuePlayer[]): number {
   return cost;
 }
 
+/** How many of the foursome's pairs would be together for a THIRD game in a row (or more). */
+function thirdInARowPairs(players: QueuePlayer[]): number {
+  let n = 0;
+  for (let i = 0; i < players.length; i++)
+    for (let j = i + 1; j < players.length; j++) if (pairStreak(players[i], players[j]) >= 2) n++;
+  return n;
+}
+
 /** Shared games across the foursome's pairs, ignoring fixed partners (they always play together). */
 function coPlayExcludingFixed(players: QueuePlayer[]): number {
   let total = 0;
@@ -425,6 +433,66 @@ const WAIT_JUMP_LIMIT_MINUTES = 8;
 
 /** How far down the queue the new-faces preference may look: about the next three games' worth. */
 const FRESH_FACES_SEARCH_WIDTH = 12;
+
+/** At most this many "catching-up" players (well behind on games, e.g. a group that checked in
+ * late) share a game, so a late group is mixed in with everyone instead of playing each other. */
+const MAX_CATCH_UP_PER_GAME = 2;
+
+/** A late group's very first game may hold 3 of them (with 1 regular): they've never played each
+ * other yet, and it gets e.g. 6 newcomers on court in two games instead of three. From their
+ * second game on, the cap of 2 applies. */
+const NEWCOMER_FIRST_GAME_CAP = 3;
+
+/** Going over the catch-up cap, or two catching-up players meeting again, outranks fair game
+ * counts (a games unit is 1e8) but not the hard rules (keep-apart 1e15, repeated trio 1e13). */
+const CATCH_UP_WEIGHT = 1e10;
+
+/** Never a third game in a row for the same pair: may cost at most one game of fairness
+ * (a games unit is 1e8), and outranks the 8-minute waiting rule (1e5 per case). */
+const THIRD_IN_A_ROW_WEIGHT = 1.5e8;
+
+/** How many catching-up players this game may hold: 3 if none of them has played yet, else 2. */
+function catchUpCap(catchingUp: QueuePlayer[]): number {
+  return catchingUp.length > 0 && catchingUp.every((p) => p.gamesPlayed === 0)
+    ? NEWCOMER_FIRST_GAME_CAP
+    : MAX_CATCH_UP_PER_GAME;
+}
+
+/**
+ * Players who are catching up, HYBRID only (BALANCED is strict "fewest games first", SMART strict
+ * arrival order): 2+ games behind most of the waiting pool (measured against the 75th
+ * percentile, so a big late group can't drag the reference down), or a group of 3+ newcomers —
+ * no games yet and checked in after someone else had already finished a game (so the players
+ * still waiting for their first game at the start of the night don't count). Empty when there
+ * aren't enough other players to mix them with.
+ */
+function catchingUpIds(pool: QueuePlayer[], mode: QueueMode): Set<string> {
+  if (mode !== QueueMode.HYBRID || pool.length < 4) return new Set();
+  const games = pool.map((p) => p.gamesPlayed).sort((a, b) => a - b);
+  const reference = games[Math.floor(0.75 * (games.length - 1))];
+  const firstBackAt = Math.min(...pool.filter((p) => p.gamesPlayed > 0).map((p) => p.queueEnteredAt.getTime()));
+  const isNewcomer = (p: QueuePlayer) => p.gamesPlayed === 0 && p.queueEnteredAt.getTime() > firstBackAt;
+  const newcomerGroup = pool.filter(isNewcomer).length > MAX_CATCH_UP_PER_GAME;
+  const behind = new Set(
+    pool.filter((p) => p.gamesPlayed <= reference - 2 || (newcomerGroup && isNewcomer(p))).map((p) => p.id)
+  );
+  if (pool.length - behind.size < 4 - MAX_CATCH_UP_PER_GAME) return new Set();
+  return behind;
+}
+
+/** How badly a foursome bunches catching-up players: each one over the cap, plus each pair of
+ * them who have already played together (fixed partners excepted), weighted. 0 = well mixed. */
+function catchUpBunching(players: QueuePlayer[], behind: ReadonlySet<string>): number {
+  if (behind.size === 0) return 0;
+  const inGame = players.filter((p) => behind.has(p.id));
+  let n = Math.max(0, inGame.length - catchUpCap(inGame));
+  for (let i = 0; i < inGame.length; i++)
+    for (let j = i + 1; j < inGame.length; j++) {
+      if (inGame[i].fixedPartnerId === inGame[j].id) continue;
+      if (sharedGames(inGame[i], inGame[j]) > 0) n++;
+    }
+  return n * CATCH_UP_WEIGHT;
+}
 
 /** The splits of a foursome into two pairs that keep every intact fixed pair together. */
 function legalSplits(players: QueuePlayer[]): Array<{ teamA: PlayerPair; teamB: PlayerPair }> {
@@ -517,15 +585,32 @@ function selectPlayers(
 
   entries.sort((a, b) => a.score - b.score);
 
+  const behind = catchingUpIds(pool, mode);
   const selectedList: QueuePlayer[] = [];
-  for (const entry of entries) {
-    if (selectedList.length >= 4) break;
+  const skipped: Entry[] = [];
+  const take = (entry: Entry) => {
     if (entry.kind === "pair") {
-      if (selectedList.length > 2) continue; // no room for both — leave the pair for next round
+      if (selectedList.length > 2) return; // no room for both — leave the pair for next round
       selectedList.push(entry.players[0], entry.players[1]);
     } else {
       selectedList.push(entry.player);
     }
+  };
+  for (const entry of entries) {
+    if (selectedList.length >= 4) break;
+    // Catching-up players are mixed in: at most 2 per game (3 in a late group's first game).
+    const members = entry.kind === "pair" ? entry.players : [entry.player];
+    const behindAfter = [...selectedList, ...members].filter((p) => behind.has(p.id));
+    if (members.some((p) => behind.has(p.id)) && behindAfter.length > catchUpCap(behindAfter)) {
+      skipped.push(entry);
+      continue;
+    }
+    take(entry);
+  }
+  // Not enough others to mix with: fill up with the skipped catching-up players after all.
+  for (const entry of skipped) {
+    if (selectedList.length >= 4) break;
+    take(entry);
   }
 
   // Variety rules, applied when the priority order would break one:
@@ -542,6 +627,7 @@ function selectPlayers(
     const violationsOf = (players: QueuePlayer[]) =>
       countKeepApartBreaches(players, keepApart) * 1000 +
       countRepeatedTriples(players, pastTriples) * 10 +
+      (catchUpBunching(players, behind) > 0 ? 1 : 0) +
       (mode === QueueMode.SMART ? 0 : minPartnerRepeats(players));
     if ((mixEveryone || rankMatchups) && mode !== QueueMode.SMART) {
       // Mix everyone: among players who aren't more than one game ahead of whoever has played
@@ -569,6 +655,8 @@ function selectPlayers(
         countKeepApartBreaches(players, keepApart) * 1e15 +
         countRepeatedTriples(players, pastTriples) * 1e13 +
         unfairSwapAgainst(mixDefaultTop, players) * 100_000 +
+        catchUpBunching(players, behind) +
+        thirdInARowPairs(players) * THIRD_IN_A_ROW_WEIGHT +
         minPartnerRepeats(players);
       // Standings rank among everyone eligible (1 = best): win rate, then games played.
       const rankOf = new Map<string, number>();
@@ -610,6 +698,9 @@ function selectPlayers(
         countKeepApartBreaches(players, keepApart) * 1e15 +
         countRepeatedTriples(players, pastTriplesForOrder) * 1e13 +
         unfairSwapAgainst(defaultTop, players) * 100_000 +
+        catchUpBunching(players, behind) +
+        // Not in strict SMART.
+        (mode === QueueMode.SMART ? 0 : thirdInARowPairs(players) * THIRD_IN_A_ROW_WEIGHT) +
         (mode === QueueMode.SMART ? 0 : minPartnerRepeats(players));
       if (violationsOf(defaultTop) > 0) {
       // Without the fairness step, dodging a repeat partner could pull in a player two games

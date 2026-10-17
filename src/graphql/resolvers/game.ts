@@ -12,7 +12,7 @@ import { rebuildSessionStatistics } from "@/lib/stats";
 import { withOptionalTransaction } from "@/lib/transaction";
 import { CourtStatus, GameSource, GameStatus, WinningTeam, PairingMode, QueueMode, type SessionSettings } from "@/types/enums";
 import { requireSessionOwner, requireOrganiser } from "../guards";
-import type { GraphQLContext } from "../context";
+import { loadCourt, loadPlayers, type GraphQLContext } from "../context";
 import type { HydratedDocument } from "mongoose";
 
 function toMatchPlayer(doc: HydratedDocument<SessionPlayerDoc>): MatchPlayer {
@@ -82,6 +82,7 @@ export const gameResolvers = {
         playersSatOutIds: string[];
         createdAt?: Date | string | null;
         source?: string | null;
+        createdOffline?: boolean | null;
       },
       context: GraphQLContext
     ) => {
@@ -142,6 +143,8 @@ export const gameResolvers = {
             status: GameStatus.QUEUED,
             playersSatOutIds: satOut,
             clientId: args.clientGameId,
+            // Older clients only sent games made offline; newer ones say so explicitly.
+            createdOffline: args.createdOffline ?? true,
             createdAt,
             source: validSource(args.source, GameSource.AUTO),
           });
@@ -563,22 +566,23 @@ export const gameResolvers = {
   },
 
   GameEdit: {
-    fromTeamA: async (p: { fromTeamAPlayerIds: unknown[] }) => ({ players: await SessionPlayer.find({ _id: { $in: p.fromTeamAPlayerIds } }) }),
-    fromTeamB: async (p: { fromTeamBPlayerIds: unknown[] }) => ({ players: await SessionPlayer.find({ _id: { $in: p.fromTeamBPlayerIds } }) }),
-    toTeamA: async (p: { toTeamAPlayerIds: unknown[] }) => ({ players: await SessionPlayer.find({ _id: { $in: p.toTeamAPlayerIds } }) }),
-    toTeamB: async (p: { toTeamBPlayerIds: unknown[] }) => ({ players: await SessionPlayer.find({ _id: { $in: p.toTeamBPlayerIds } }) }),
+    fromTeamA: async (p: { fromTeamAPlayerIds: unknown[] }, _a: unknown, ctx: GraphQLContext) => ({ players: await loadPlayers(ctx, p.fromTeamAPlayerIds) }),
+    fromTeamB: async (p: { fromTeamBPlayerIds: unknown[] }, _a: unknown, ctx: GraphQLContext) => ({ players: await loadPlayers(ctx, p.fromTeamBPlayerIds) }),
+    toTeamA: async (p: { toTeamAPlayerIds: unknown[] }, _a: unknown, ctx: GraphQLContext) => ({ players: await loadPlayers(ctx, p.toTeamAPlayerIds) }),
+    toTeamB: async (p: { toTeamBPlayerIds: unknown[] }, _a: unknown, ctx: GraphQLContext) => ({ players: await loadPlayers(ctx, p.toTeamBPlayerIds) }),
   },
 
   Game: {
     id: (parent: { _id: unknown }) => String(parent._id),
-    court: async (parent: { courtId: unknown }) => Court.findById(parent.courtId),
-    teamA: async (parent: { teamAPlayerIds: unknown[] }) => ({
-      players: await SessionPlayer.find({ _id: { $in: parent.teamAPlayerIds } }),
+    court: async (parent: { courtId: unknown }, _a: unknown, ctx: GraphQLContext) => loadCourt(ctx, parent.courtId),
+    teamA: async (parent: { teamAPlayerIds: unknown[] }, _a: unknown, ctx: GraphQLContext) => ({
+      players: await loadPlayers(ctx, parent.teamAPlayerIds),
     }),
-    teamB: async (parent: { teamBPlayerIds: unknown[] }) => ({
-      players: await SessionPlayer.find({ _id: { $in: parent.teamBPlayerIds } }),
+    teamB: async (parent: { teamBPlayerIds: unknown[] }, _a: unknown, ctx: GraphQLContext) => ({
+      players: await loadPlayers(ctx, parent.teamBPlayerIds),
     }),
-    offline: (parent: { clientId?: string }) => Boolean(parent.clientId),
+    // Made with no connection. Games saved before createdOffline existed: any device-made game.
+    offline: (parent: { clientId?: string; createdOffline?: boolean }) => parent.createdOffline ?? Boolean(parent.clientId),
     edited: (parent: { edits?: unknown[] }) => (parent.edits?.length ?? 0) > 0,
     edits: (parent: { edits?: unknown[] }) => parent.edits ?? [],
     losingTeam: (parent: { winningTeam?: string }) => {

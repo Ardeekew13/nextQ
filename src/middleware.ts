@@ -1,48 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createRateLimiter, isRateLimited, rateLimitBuckets, rateLimitConfig } from "@/lib/rateLimit";
 
-interface RateLimitStore {
-  [key: string]: { count: number; resetTime: number };
-}
-
-const rateLimitStore: RateLimitStore = {};
-const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const RATE_LIMIT_MAX_REQUESTS = 100; // per minute per IP
-
-function cleanupExpiredEntries() {
-  const now = Date.now();
-  for (const key in rateLimitStore) {
-    if (rateLimitStore[key].resetTime < now) {
-      delete rateLimitStore[key];
-    }
-  }
-}
-
-function checkRateLimit(ip: string): boolean {
-  cleanupExpiredEntries();
-  const now = Date.now();
-  const key = ip;
-
-  if (!rateLimitStore[key]) {
-    rateLimitStore[key] = { count: 1, resetTime: now + RATE_LIMIT_WINDOW };
-    return true;
-  }
-
-  const entry = rateLimitStore[key];
-  if (entry.resetTime < now) {
-    entry.count = 1;
-    entry.resetTime = now + RATE_LIMIT_WINDOW;
-    return true;
-  }
-
-  entry.count += 1;
-  return entry.count <= RATE_LIMIT_MAX_REQUESTS;
-}
+const limiter = createRateLimiter();
+// Named one by one so they're available wherever the middleware runs (edge included).
+const limits = rateLimitConfig({
+  RATE_LIMIT_ORGANISER_MAX: process.env.RATE_LIMIT_ORGANISER_MAX,
+  RATE_LIMIT_PUBLIC_MAX: process.env.RATE_LIMIT_PUBLIC_MAX,
+  RATE_LIMIT_IP_CEILING: process.env.RATE_LIMIT_IP_CEILING,
+});
+const AUTH_COOKIE = process.env.AUTH_COOKIE_NAME || "nextq_session";
 
 export function middleware(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
-
-  if (!checkRateLimit(ip)) {
-    return new NextResponse("Too many requests", { status: 429 });
+  if (isRateLimited(request.nextUrl.pathname)) {
+    const buckets = rateLimitBuckets(
+      {
+        authCookie: request.cookies.get(AUTH_COOKIE)?.value,
+        forwardedFor: request.headers.get("x-forwarded-for"),
+        realIp: request.headers.get("x-real-ip"),
+      },
+      limits
+    );
+    // The per-IP ceiling first: once it's over, stop there (no new per-cookie bucket, so
+    // made-up cookies can't flood the store), then the request's own bucket.
+    const [own, ceiling] = buckets;
+    if (!limiter.hit(ceiling.key, ceiling.max) || !limiter.hit(own.key, own.max)) {
+      return new NextResponse("Too many requests", { status: 429, headers: { "Retry-After": "60" } });
+    }
   }
 
   const response = NextResponse.next();

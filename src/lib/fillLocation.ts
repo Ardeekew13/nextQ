@@ -25,3 +25,48 @@ export async function shouldFillOnDevice(opts: {
   }
   return opts.hasUnsynced();
 }
+
+/** A queue snapshot younger than this is trusted for an instant fill on this device. The
+ * dashboard refreshes it on every reload (at least every 20 s while the page is open). */
+export const FRESH_SNAPSHOT_MS = 60_000;
+
+/**
+ * Local-first fill: pick the next game on this device (instant, like recording a result) and
+ * let the server check it in the background, whenever the device's copy of the session can be
+ * trusted. Falls back to `shouldFillOnDevice` (server picks) when this browser runs older queue
+ * rules than the server, or its copy is old and nothing is waiting to sync.
+ */
+export async function fillOnDevice(opts: {
+  hasSnapshot: boolean;
+  online: boolean;
+  /** This browser's queue rules differ from the server's. */
+  outdated: boolean;
+  /** The snapshot agrees with the dashboard's latest server data (see snapshotMatchesServer). */
+  matchesServer: boolean;
+  /** How long ago this device received its current snapshot (Infinity if never this visit). */
+  snapshotAgeMs: number;
+  hasUnsynced: () => boolean;
+  syncNow: () => Promise<void>;
+}): Promise<boolean> {
+  if (!opts.hasSnapshot) return false;
+  if (!opts.online) return true;
+  if (!opts.outdated && opts.matchesServer && opts.snapshotAgeMs <= FRESH_SNAPSHOT_MS) return true;
+  return shouldFillOnDevice(opts);
+}
+
+/**
+ * Whether the device's snapshot agrees with the server's latest dashboard data on what matters
+ * for picking a game: which games are running and who is available. A snapshot can be recent
+ * and still miss a game the server saved a moment ago (its refresh hadn't landed yet); picking
+ * from it would put players who are already on another court into the new game.
+ */
+export function snapshotMatchesServer(
+  snapshot: { activeGames: Array<{ id: string }>; players: Array<{ id: string; checkedIn: boolean; active: boolean }> },
+  server: { activeGameIds: string[]; availablePlayerIds: string[] }
+): boolean {
+  const same = (a: string[], b: string[]) => a.length === b.length && new Set([...a, ...b]).size === a.length;
+  return (
+    same(snapshot.activeGames.map((g) => g.id), server.activeGameIds) &&
+    same(snapshot.players.filter((p) => p.checkedIn && p.active).map((p) => p.id), server.availablePlayerIds)
+  );
+}
