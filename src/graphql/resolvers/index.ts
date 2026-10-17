@@ -38,6 +38,6 @@ export const resolvers = {
   SessionPlayer: playerResolvers.SessionPlayer,
   PlayerStatistics: playerResolvers.PlayerStatistics,
   Court: courtResolvers.Court,
-  Game: gameResolvers.Game,
+  Game: gameResolvers.GameEdit,
   ClubMember: clubMemberResolvers.ClubMember,
 };
