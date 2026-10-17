@@ -40,8 +40,8 @@ describe("rate limiting at a venue (everyone on one Wi-Fi)", () => {
     const cfg = { ...config, ipCeiling: 50 };
     let refused = 0;
     for (let i = 0; i < 60; i++) {
-      const buckets = rateLimitBuckets({ authCookie: `fake-${i}`, forwardedFor: "198.51.100.9" }, cfg);
-      if (!buckets.map((b) => limiter.hit(b.key, b.max, 0)).every(Boolean)) refused++;
+      const [own, ceiling] = rateLimitBuckets({ authCookie: `fake-${i}`, forwardedFor: "198.51.100.9" }, cfg);
+      if (!limiter.hit(ceiling.key, ceiling.max, 0) || !limiter.hit(own.key, own.max, 0)) refused++;
     }
     expect(refused).toBe(10);
   });
@@ -50,5 +50,14 @@ describe("rate limiting at a venue (everyone on one Wi-Fi)", () => {
     for (let i = 0; i < 20_050; i++) limiter.hit(`k${i}`, 5, 0);
     // The newest key still works normally.
     expect(limiter.hit("k20049", 5, 0)).toBe(true);
+  });
+  it("a busy bucket survives eviction: a flood of new keys can't reset an IP that is over its ceiling", () => {
+    const limiter = createRateLimiter();
+    for (let i = 0; i < 6; i++) limiter.hit("all:attacker", 5, 0);
+    expect(limiter.hit("all:attacker", 5, 0)).toBe(false);
+    for (let i = 0; i < 9_999; i++) limiter.hit(`idle${i}`, 5, 0);
+    limiter.hit("all:attacker", 5, 0); // still in use: moves to the newest end
+    for (let i = 0; i < 50; i++) limiter.hit(`new${i}`, 5, 0); // pushes the store over its cap
+    expect(limiter.hit("all:attacker", 5, 0)).toBe(false);
   });
 });

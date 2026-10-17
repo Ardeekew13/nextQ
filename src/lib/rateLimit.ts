@@ -78,6 +78,9 @@ export function createRateLimiter(windowMs = RATE_LIMIT_WINDOW_MS) {
         return true;
       }
       entry.count += 1;
+      // Most recently used last, so a flood evicts idle buckets rather than busy ones.
+      store.delete(key);
+      store.set(key, entry);
       return entry.count <= max;
     },
   };

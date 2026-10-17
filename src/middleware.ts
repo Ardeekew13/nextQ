@@ -20,9 +20,10 @@ export function middleware(request: NextRequest) {
       },
       limits
     );
-    // Count against every bucket (no short-circuit), then refuse if any is over.
-    const allowed = buckets.map(({ key, max }) => limiter.hit(key, max)).every(Boolean);
-    if (!allowed) {
+    // The per-IP ceiling first: once it's over, stop there (no new per-cookie bucket, so
+    // made-up cookies can't flood the store), then the request's own bucket.
+    const [own, ceiling] = buckets;
+    if (!limiter.hit(ceiling.key, ceiling.max) || !limiter.hit(own.key, own.max)) {
       return new NextResponse("Too many requests", { status: 429, headers: { "Retry-After": "60" } });
     }
   }

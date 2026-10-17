@@ -134,7 +134,14 @@ export function OverviewTab({
 	// When this device last received a snapshot from the server (0 = none yet this visit, or
 	// it's known to be behind). Set on every completed fetch, even when nothing changed.
 	const snapshotReceivedAt = useRef(0);
+	// Guards against a late answer: one requested before the server's copy changed (see
+	// markSnapshotStale), or overtaken by a newer request, is ignored.
+	const snapshotGen = useRef(0);
+	const snapshotSeq = useRef(0);
+	const snapshotAccepted = useRef(0);
 	const refreshSnapshot = useCallback(async () => {
+		const seq = ++snapshotSeq.current;
+		const gen = snapshotGen.current;
 		try {
 			const res = await apollo.query({
 				query: SESSION_QUEUE_SNAPSHOT,
@@ -148,6 +155,8 @@ export function OverviewTab({
 			// already has (offline games are recognised by their temporary id), so nothing is
 			// applied twice — and the device no longer freezes on an old copy of the session.
 			const parsed = JSON.parse(raw) as QueueSnapshot;
+			if (gen !== snapshotGen.current || seq < snapshotAccepted.current || parsed.sessionId !== sessionId) return;
+			snapshotAccepted.current = seq;
 			setSnapshot(parsed);
 			saveSnapshot(parsed);
 			snapshotReceivedAt.current = Date.now();
@@ -155,6 +164,12 @@ export function OverviewTab({
 			/* offline or a bad answer: keep the previous snapshot */
 		}
 	}, [apollo, sessionId]);
+	/** The server's copy is changing (a game it picks, a team edit): don't pick on this device
+	 * until a snapshot requested after this point has arrived. */
+	function markSnapshotStale() {
+		snapshotGen.current += 1;
+		snapshotReceivedAt.current = 0;
+	}
 	const sessionOps = useMemo(
 		() => offline.pending.filter((p) => p.sessionId === sessionId),
 		[offline.pending, sessionId],
@@ -182,7 +197,7 @@ export function OverviewTab({
 			});
 		// Behind the server (e.g. a game it just saved isn't in it yet): fetch a new one for next time.
 		if (snapshot && server && !matchesServer && offline.online) {
-			snapshotReceivedAt.current = 0;
+			markSnapshotStale();
 			void refreshSnapshot();
 		}
 		return fillOnDevice({
@@ -424,7 +439,7 @@ export function OverviewTab({
 			return;
 		}
 		try {
-			snapshotReceivedAt.current = 0;
+			markSnapshotStale();
 			const res = await fillCourtManually({
 				variables: { courtId: court.id, teamAPlayerIds: teamA, teamBPlayerIds: teamB, allowRepeat: true, source: "TOP_FOUR" },
 				update: (cache, { data }) => placeGameOnCourt(cache, sessionId, court.id, data?.fillCourtManually),
@@ -495,7 +510,7 @@ export function OverviewTab({
 		try {
 			// The game goes on its court straight from the mutation's answer, so the court shows the
 			// line-up as it's announced; the full dashboard refresh follows in the background.
-			snapshotReceivedAt.current = 0; // a server-picked game: the snapshot needs refreshing
+			markSnapshotStale(); // the server is picking: wait for a snapshot that includes its game
 			const result = await generateNextGame({
 				variables: { sessionId: session.id, courtId },
 				update: (cache, { data }) => placeGameOnCourt(cache, session.id, courtId, data?.generateNextGame),
@@ -538,7 +553,8 @@ export function OverviewTab({
 			await updateGameTeams({
 				variables: { id: gameId, teamAPlayerIds, teamBPlayerIds },
 			});
-			snapshotReceivedAt.current = 0; // the server's copy changed: refresh before picking on the device
+			markSnapshotStale(); // the server's copy changed: refresh before picking on the device
+			void refreshSnapshot();
 			refetch();
 		} catch (err) {
 			message.error(
