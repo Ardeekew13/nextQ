@@ -40,6 +40,9 @@ export interface LateResult {
   latePairedGames: number;
   /** most games any two late arrivals shared */
   maxSharedByTwoLate: number;
+  /** games with 3 or more late arrivals in them, not counting their very first game (where
+   * 3 newcomers who have never played each other may start together) */
+  lateBunchedGames: number;
   /** games where some pair is together for a 3rd game in a row (fixed partners excluded) */
   threeInARow: number;
   /** longest any checked-in player waited between games (minutes), originals only, after the first late check-in */
@@ -47,7 +50,18 @@ export interface LateResult {
   log: string[];
 }
 
-export function runLateScenario(opts: Partial<QueueEngineOptions>, seed = "late", totalGames = 32): LateResult {
+/** Late groups: minutes after "most have N games" and how many check in together. */
+export type LateGroups = Array<{ afterMin: number; count: number }>;
+const DEFAULT_GROUPS: LateGroups = [{ afterMin: 1, count: 2 }, { afterMin: 11, count: 1 }, { afterMin: 21, count: 1 }];
+
+export function runLateScenario(
+  opts: Partial<QueueEngineOptions>,
+  seed = "late",
+  totalGames = 32,
+  groups: LateGroups = DEFAULT_GROUPS,
+  /** Late groups are scheduled once 12 of the 16 have played at least this many games. */
+  arriveWhenGames = 2
+): LateResult {
   vi.useFakeTimers();
   const rnd = seededRandom(seed);
   let clock = T0;
@@ -58,7 +72,7 @@ export function runLateScenario(opts: Partial<QueueEngineOptions>, seed = "late"
   });
   const players: P[] = Array.from({ length: 16 }, (_, i) => mk(`p${i + 1}`, T0 + i * 20_000));
   const pending: Array<{ at: number; ids: string[] }> = [];
-  const lateIds = ["late1", "late2", "late3", "late4"];
+  const lateIds = Array.from({ length: groups.reduce((n, g) => n + g.count, 0) }, (_, i) => `late${i + 1}`);
   let lateScheduled = false;
   let firstLateAt = Infinity;
   const pastGroups = new Set<string>();
@@ -145,10 +159,15 @@ export function runLateScenario(opts: Partial<QueueEngineOptions>, seed = "late"
       lastEnd.set(id, clock);
     }
     // Once most have 2-3 games, schedule the late arrivals: 2 now, 1 in ~10 min, 1 in ~20 min.
-    if (!lateScheduled && players.filter((p) => p.gamesPlayed >= 2).length >= 12) {
+    if (!lateScheduled && players.filter((p) => p.gamesPlayed >= arriveWhenGames).length >= 12) {
       lateScheduled = true;
-      firstLateAt = clock + 1 * MIN;
-      pending.push({ at: clock + 1 * MIN, ids: ["late1", "late2"] }, { at: clock + 11 * MIN, ids: ["late3"] }, { at: clock + 21 * MIN, ids: ["late4"] });
+      firstLateAt = clock + Math.min(...groups.map((g) => g.afterMin)) * MIN;
+      let next = 0;
+      for (const g of groups) {
+        pending.push({ at: clock + g.afterMin * MIN, ids: lateIds.slice(next, next + g.count) });
+        next += g.count;
+      }
+      pending.sort((a, b) => a.at - b.at);
     }
     fill();
   }
@@ -171,7 +190,7 @@ export function runLateScenario(opts: Partial<QueueEngineOptions>, seed = "late"
     }).length;
     return p.gamesPlayed + onNow(p.id) - gamesBefore;
   });
-  const lateGames = log.filter((l) => l.startsWith("#")).map((l) => (l.match(/late\d/g) ?? []));
+  const lateGames = log.filter((l) => l.startsWith("#")).map((l) => (l.match(/late\d+/g) ?? []));
   let latePairedGames = 0;
   const shared = new Map<string, number>();
   for (const ids of lateGames) {
@@ -188,6 +207,10 @@ export function runLateScenario(opts: Partial<QueueEngineOptions>, seed = "late"
     maxSharedByTwoLate: Math.max(0, ...shared.values()),
     longestOriginalWait: Math.round(longestOriginalWait),
     threeInARow,
+    lateBunchedGames: log
+      .filter((l) => l.startsWith("#"))
+      .map((l) => [...l.matchAll(/late\d+\((\d+)\)/g)].map((m) => Number(m[1])))
+      .filter((counts) => counts.length >= 3 && counts.some((n) => n > 0)).length,
     log,
   };
 }
@@ -222,5 +245,54 @@ describe("late check-ins: 2 together, then 1, then 1 more, while most have 2-3 g
       for (const l of r.late) expect(l.gamesAtEnd).toBeGreaterThanOrEqual(6);
       expect(r.originalsAtEnd.max - r.originalsAtEnd.min).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+// ── A late GROUP is mixed in with everyone while it catches up, not played as its own group ──
+const clubSetup = { mode: QueueMode.HYBRID, mixEveryone: true, balanceTeams: true };
+
+describe("a late group catches up mixed in with everyone (Hybrid + Mix everyone)", () => {
+  // Measured before this rule (same nights): 7 late -> 15 games with 3+ of them, two late
+  // players sharing up to 4 games, and pairs put together for a 3rd game in a row.
+  for (const [count, maxBunched, maxFirstWait] of [[2, 0, 15], [3, 2, 15], [7, 8, 30]] as const) {
+    it(`${count} checking in together when most have 2 games`, () => {
+      const runs = Array.from({ length: 10 }, (_, i) => runLateScenario(clubSetup, `grp-${i}`, 36, [{ afterMin: 1, count }], 2));
+      expect(runs.reduce((n, r) => n + r.lateBunchedGames, 0), "games with 3+ late players").toBeLessThanOrEqual(maxBunched);
+      expect(Math.max(...runs.map((r) => r.maxSharedByTwoLate)), "games two late players share").toBeLessThanOrEqual(3);
+      expect(runs.reduce((n, r) => n + r.threeInARow, 0), "3 in a row").toBe(0);
+      for (const r of runs) {
+        for (const l of r.late) {
+          // Catching up: since arriving, every late player played at least as many games as
+          // any regular did in the same time.
+          expect(l.gamesSinceArrival, `${l.id} caught up`).toBeGreaterThanOrEqual(r.originalsGamesSinceFirstLate.max);
+          expect(l.minutesToFirstGame, `${l.id} first game`).toBeLessThanOrEqual(maxFirstWait);
+        }
+        expect(r.originalsAtEnd.max - r.originalsAtEnd.min, "regulars stay level").toBeLessThanOrEqual(2);
+      }
+    });
+  }
+});
+
+describe("a late group that checks in early (others have 1 game)", () => {
+  const runs = Array.from({ length: 30 }, (_, i) => runLateScenario(clubSetup, `early-${i}`, 36, [{ afterMin: 1, count: 6 }], 1));
+  it("is spread across games, not played as its own group", () => {
+    // Before the rule: 70 games over these 30 nights had 3+ of the group (first games aside).
+    expect(runs.reduce((a, r) => a + r.lateBunchedGames, 0)).toBeLessThanOrEqual(25);
+    expect(Math.max(...runs.map((r) => r.maxSharedByTwoLate))).toBeLessThanOrEqual(3);
+  });
+  it("never puts a pair together three games in a row (was 27 times)", () => {
+    expect(runs.reduce((a, r) => a + r.threeInARow, 0)).toBe(0);
+  });
+  it("gets all 6 on court within two games (3 newcomers may share their first game)", () => {
+    for (const r of runs) {
+      expect(Math.max(...r.late.map((l) => l.minutesToFirstGame))).toBeLessThanOrEqual(16);
+      expect(Math.min(...r.late.map((l) => l.gamesAtEnd))).toBeGreaterThanOrEqual(6);
+      expect(r.originalsAtEnd.max - r.originalsAtEnd.min).toBeLessThanOrEqual(1);
+    }
+  });
+  it("a group of 5: no third game in a row either", () => {
+    const five = Array.from({ length: 30 }, (_, i) => runLateScenario(clubSetup, `early-${i}`, 36, [{ afterMin: 1, count: 5 }], 1));
+    expect(five.reduce((a, r) => a + r.threeInARow, 0)).toBe(0);
+    expect(Math.max(...five.map((r) => r.maxSharedByTwoLate))).toBeLessThanOrEqual(4);
   });
 });
