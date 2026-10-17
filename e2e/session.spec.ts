@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { activeSessionId, login, waitForSynced } from "./helpers";
+import { activeSessionId, login, resetToOneGame, waitForSynced } from "./helpers";
 
 test("session overview shows courts and the waiting queue", async ({ page }) => {
   await login(page);
   const id = await activeSessionId(page);
+  await resetToOneGame(page, id);
   await page.goto(`/dashboard/sessions/${id}`);
   await expect(page.getByText("Waiting Queue")).toBeVisible();
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(1);
@@ -12,6 +13,7 @@ test("session overview shows courts and the waiting queue", async ({ page }) => 
 test("works offline: record a result, the court auto-fills, then syncs when back online", async ({ page, context }) => {
   await login(page);
   const id = await activeSessionId(page);
+  await resetToOneGame(page, id);
 
   // Load once online so the queue snapshot is on the device.
   const snapshot = page.waitForResponse(
@@ -45,6 +47,7 @@ test("works offline: record a result, the court auto-fills, then syncs when back
 test("record a result: the next game is on the court at once (auto-fill), and saved", async ({ page }) => {
   await login(page);
   const id = await activeSessionId(page);
+  await resetToOneGame(page, id);
   const snapshot = page.waitForResponse(
     (r) => r.url().includes("/api/graphql") && (r.request().postData() ?? "").includes("sessionQueueSnapshot")
   );
@@ -80,6 +83,7 @@ test("record a result: the next game is on the court at once (auto-fill), and sa
 test("auto-fill can be turned off in Queue options", async ({ page }) => {
   await login(page);
   const id = await activeSessionId(page);
+  await resetToOneGame(page, id);
   await page.goto(`/dashboard/sessions/${id}`);
   await expect(page.getByRole("button", { name: "Record Result" }).first()).toBeVisible();
   const games = await page.getByRole("button", { name: "Record Result" }).count();
@@ -101,6 +105,7 @@ test("auto-fill can be turned off in Queue options", async ({ page }) => {
 test("Match top 4 fills the open court with the best-ranked waiting players", async ({ page }) => {
   await login(page);
   const id = await activeSessionId(page);
+  await resetToOneGame(page, id);
   await page.goto(`/dashboard/sessions/${id}`);
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(1);
 
@@ -116,6 +121,7 @@ test("Match top 4 fills the open court with the best-ranked waiting players", as
 test("Match top 4 can be undone", async ({ page }) => {
   await login(page);
   const id = await activeSessionId(page);
+  await resetToOneGame(page, id);
   await page.goto(`/dashboard/sessions/${id}`);
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(1);
 

@@ -4,11 +4,12 @@
  * and checks that after a reload the server shows exactly what the organiser saw.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { activeSessionId, courtLineups, login, waitForSynced } from "./helpers";
+import { activeSessionId, courtLineups, login, resetToOneGame, waitForSynced } from "./helpers";
 
 async function openSession(page: Page) {
   await login(page);
   const id = await activeSessionId(page);
+  await resetToOneGame(page, id);
   const snapshot = page.waitForResponse(
     (r) => r.url().includes("/api/graphql") && (r.request().postData() ?? "").includes("sessionQueueSnapshot")
   );
@@ -38,10 +39,13 @@ test("no internet: several results with auto-fill, a refresh while offline, then
   }
   const seen = await courtLineups(page);
 
-  // The page is reloaded with no connection (tablet slept, browser restarted…): nothing is lost.
-  await page.reload().catch(() => {}); // offline reload may show the browser's error page
+  // The page is reloaded with no connection (tablet slept, browser restarted…): the app is gone,
+  // only what it saved on the device remains. Nothing may be lost.
+  const sessionUrl = page.url();
+  await page.goto("about:blank");
+  await page.goto(sessionUrl).catch(() => {}); // no connection: the browser shows its error page
   await context.setOffline(false);
-  await page.goto(page.url());
+  await page.goto(sessionUrl);
   await waitForSynced(page);
   await page.reload();
   await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(games);

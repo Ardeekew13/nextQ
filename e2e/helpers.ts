@@ -62,3 +62,24 @@ export async function courtLineups(page: Page): Promise<string[]> {
     )
   );
 }
+
+async function gql(page: Page, query: string, variables: Record<string, unknown>) {
+  const res = await page.request.post("/api/graphql", { data: { query, variables } });
+  const body = await res.json();
+  if (body.errors?.length) throw new Error(`GraphQL: ${JSON.stringify(body.errors)}`);
+  return body.data;
+}
+
+/**
+ * Puts the session in the same state before every test: exactly one game running (on the first
+ * court), the other court open. Tests share one database and some leave it differently
+ * (e.g. a test that fails halfway), which would otherwise break every test after it.
+ */
+export async function resetToOneGame(page: Page, sessionId: string) {
+  const data = await gql(page, "query($id: ID!){ session(id: $id){ courts { id courtNumber currentGame { id } } } }", { id: sessionId });
+  const courts = [...data.session.courts].sort((a: { courtNumber: number }, b: { courtNumber: number }) => a.courtNumber - b.courtNumber);
+  for (const c of courts) {
+    if (c.currentGame) await gql(page, "mutation($id: ID!){ cancelGame(id: $id){ id } }", { id: c.currentGame.id });
+  }
+  await gql(page, "mutation($s: ID!, $c: ID!){ generateNextGame(sessionId: $s, courtId: $c){ id } }", { s: sessionId, c: courts[0].id });
+}
