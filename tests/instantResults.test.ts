@@ -28,6 +28,28 @@ describe("fillOnDevice: when the next game is picked on this device", () => {
   it("a recent copy that is behind the server (missing a game it just saved): the server picks", async () => {
     expect(await fillOnDevice({ ...base, matchesServer: false, snapshotAgeMs: 1_000, syncNow: async () => {} })).toBe(false);
   });
+  it("old or behind copy: fetches a fresh one and picks on the device (no slow server fill)", async () => {
+    const syncNow = vi.fn(async () => {});
+    const refresh = vi.fn(async () => true);
+    expect(await fillOnDevice({ ...base, matchesServer: false, snapshotAgeMs: 1_000, syncNow, refresh })).toBe(true);
+    expect(await fillOnDevice({ ...base, snapshotAgeMs: Infinity, syncNow, refresh })).toBe(true);
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(syncNow).not.toHaveBeenCalled();
+  });
+  it("a fresh copy that is current isn't re-fetched", async () => {
+    const refresh = vi.fn(async () => true);
+    expect(await fillOnDevice({ ...base, snapshotAgeMs: 1_000, syncNow: async () => {}, refresh })).toBe(true);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+  it("the fresh copy doesn't come (slow or failed): the server picks", async () => {
+    expect(await fillOnDevice({ ...base, matchesServer: false, snapshotAgeMs: 1_000, syncNow: async () => {}, refresh: async () => false })).toBe(false);
+    expect(await fillOnDevice({ ...base, matchesServer: false, snapshotAgeMs: 1_000, syncNow: async () => {}, refresh: async () => { throw new Error("x"); } })).toBe(false);
+  });
+  it("older queue rules: never picks on the device, even with a fresh copy", async () => {
+    const refresh = vi.fn(async () => true);
+    expect(await fillOnDevice({ ...base, outdated: true, snapshotAgeMs: Infinity, syncNow: async () => {}, refresh })).toBe(false);
+    expect(refresh).not.toHaveBeenCalled();
+  });
   it("this browser runs older queue rules than the server: the server picks", async () => {
     expect(await fillOnDevice({ ...base, outdated: true, snapshotAgeMs: 1_000, syncNow: async () => {} })).toBe(false);
   });
