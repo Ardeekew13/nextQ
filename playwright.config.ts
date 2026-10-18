@@ -30,6 +30,9 @@ export default defineConfig({
       MONGODB_URI: E2E_MONGODB_URI,
       JWT_SECRET: E2E_JWT_SECRET,
       NEXT_PUBLIC_APP_URL: E2E_BASE_URL,
+      // Tests and the night simulation act far faster than a person: no rate limit here.
+      RATE_LIMIT_ORGANISER_MAX: "1000000",
+      RATE_LIMIT_PUBLIC_MAX: "1000000",
     },
   },
 });

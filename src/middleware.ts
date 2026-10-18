@@ -6,7 +6,12 @@ interface RateLimitStore {
 
 const rateLimitStore: RateLimitStore = {};
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const RATE_LIMIT_MAX_REQUESTS = 100; // per minute per IP
+/** Per logged-in organiser (their own bucket, never shared with others on the same Wi-Fi). */
+const ORGANISER_MAX_REQUESTS = Number(process.env.RATE_LIMIT_ORGANISER_MAX ?? 600);
+/** Per IP for everyone else. Players on the venue Wi-Fi usually share one IP, and the public
+ * session page polls every 8 s, so this allows roughly 35 people watching at once. */
+const PUBLIC_MAX_REQUESTS = Number(process.env.RATE_LIMIT_PUBLIC_MAX ?? 300);
+const AUTH_COOKIE = process.env.AUTH_COOKIE_NAME || "nextq_session";
 
 function cleanupExpiredEntries() {
   const now = Date.now();
@@ -17,10 +22,9 @@ function cleanupExpiredEntries() {
   }
 }
 
-function checkRateLimit(ip: string): boolean {
+function checkRateLimit(key: string, max: number): boolean {
   cleanupExpiredEntries();
   const now = Date.now();
-  const key = ip;
 
   if (!rateLimitStore[key]) {
     rateLimitStore[key] = { count: 1, resetTime: now + RATE_LIMIT_WINDOW };
@@ -35,14 +39,21 @@ function checkRateLimit(ip: string): boolean {
   }
 
   entry.count += 1;
-  return entry.count <= RATE_LIMIT_MAX_REQUESTS;
+  return entry.count <= max;
 }
 
 export function middleware(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
 
-  if (!checkRateLimit(ip)) {
-    return new NextResponse("Too many requests", { status: 429 });
+  // Only data requests count; page loads and assets don't. A 429 makes the organiser's screen
+  // treat the server as unreachable (offline mode), so the organiser gets a bucket of their own
+  // instead of sharing the venue Wi-Fi's IP with everyone watching the public page.
+  if (request.nextUrl.pathname.startsWith("/api/")) {
+    const session = request.cookies.get(AUTH_COOKIE)?.value;
+    const allowed = session
+      ? checkRateLimit(`org:${ip}:${session.slice(-32)}`, ORGANISER_MAX_REQUESTS)
+      : checkRateLimit(`ip:${ip}`, PUBLIC_MAX_REQUESTS);
+    if (!allowed) return new NextResponse("Too many requests", { status: 429 });
   }
 
   const response = NextResponse.next();
