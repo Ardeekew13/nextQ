@@ -85,7 +85,15 @@ describe("strengthTier — boundaries", () => {
 
 // ---------------------------------------------------------------------------
 describe("loadClubHistory — DB edge cases", () => {
-  const chain = (rows: unknown[]) => ({ select: () => ({ lean: () => Promise.resolve(rows) }) });
+  // A query chain: select / sort / limit return the chain, lean() resolves the rows.
+  const chain = (rows: unknown[]) => {
+    const q: Record<string, unknown> = {};
+    q.select = () => q;
+    q.sort = () => q;
+    q.limit = () => q;
+    q.lean = () => Promise.resolve(rows);
+    return q;
+  };
   beforeEach(() => vi.clearAllMocks());
 
   it("does no queries without a club or without names", async () => {

@@ -3,6 +3,9 @@ import { SessionPlayer } from "@/models/SessionPlayer";
 import { SessionStatus } from "@/types/enums";
 import { HISTORY_SESSIONS, normaliseName, type ClubRecord } from "@/lib/playerStrength";
 
+/** How many of the club's most recent completed sessions are searched for players' records. */
+export const CLUB_HISTORY_SCAN_SESSIONS = 60;
+
 /**
  * Each named player's record over their last HISTORY_SESSIONS completed sessions in the
  * club, excluding the current session. Players are matched by name (trimmed, case-
@@ -23,6 +26,10 @@ export async function loadClubHistory(
     _id: { $ne: currentSessionId },
   })
     .select("_id sessionDate")
+    // Only the club's most recent sessions: anyone's last few sessions are almost always among
+    // them, and it keeps this lookup (run on every fill and refresh) from growing forever.
+    .sort({ sessionDate: -1 })
+    .limit(CLUB_HISTORY_SCAN_SESSIONS)
     .lean();
   if (sessions.length === 0) return history;
   const dateOf = new Map(sessions.map((s) => [String(s._id), new Date(s.sessionDate).getTime()]));

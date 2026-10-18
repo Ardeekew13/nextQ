@@ -79,6 +79,12 @@ function announceMatchup(
 	window.speechSynthesis.speak(utterance);
 }
 
+/** How long a Fill Court may wait for a fresh copy of the session before letting the server pick. */
+const SNAPSHOT_REFRESH_TIMEOUT_MS = 2500;
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+	return Promise.race([promise, new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))]);
+}
+
 export function OverviewTab({
 	sessionId,
 	onStats,
@@ -133,6 +139,11 @@ export function OverviewTab({
 	// connection is down) the courts, queue and next-game preview are derived locally by
 	// replaying what the organiser did on top of the last server snapshot.
 	const [snapshot, setSnapshot] = useState<QueueSnapshot | null>(null);
+	// The latest snapshot, readable in the same click that fetched it (state updates later).
+	const snapshotRef = useRef<QueueSnapshot | null>(null);
+	useEffect(() => {
+		if (snapshot && (!snapshotRef.current || snapshot.takenAt >= snapshotRef.current.takenAt)) snapshotRef.current = snapshot;
+	}, [snapshot]);
 	const apollo = useApolloClient();
 	// When this device last received a snapshot from the server (0 = none yet this visit, or
 	// it's known to be behind). Set on every completed fetch, even when nothing changed.
@@ -142,7 +153,8 @@ export function OverviewTab({
 	const snapshotGen = useRef(0);
 	const snapshotSeq = useRef(0);
 	const snapshotAccepted = useRef(0);
-	const refreshSnapshot = useCallback(async () => {
+	/** Fetches a fresh snapshot; resolves to it when it was accepted (null otherwise). */
+	const refreshSnapshot = useCallback(async (): Promise<QueueSnapshot | null> => {
 		const seq = ++snapshotSeq.current;
 		const gen = snapshotGen.current;
 		try {
@@ -153,18 +165,20 @@ export function OverviewTab({
 				errorPolicy: "ignore",
 			});
 			const raw = res.data?.sessionQueueSnapshot;
-			if (!raw) return;
+			if (!raw) return null;
 			// Always take the fresh snapshot, even mid-sync: the replay skips anything the server
 			// already has (offline games are recognised by their temporary id), so nothing is
 			// applied twice — and the device no longer freezes on an old copy of the session.
 			const parsed = JSON.parse(raw) as QueueSnapshot;
-			if (gen !== snapshotGen.current || seq < snapshotAccepted.current || parsed.sessionId !== sessionId) return;
+			if (gen !== snapshotGen.current || seq < snapshotAccepted.current || parsed.sessionId !== sessionId) return null;
 			snapshotAccepted.current = seq;
+			snapshotRef.current = parsed;
 			setSnapshot(parsed);
 			saveSnapshot(parsed);
 			snapshotReceivedAt.current = Date.now();
+			return parsed;
 		} catch {
-			/* offline or a bad answer: keep the previous snapshot */
+			return null; // offline or a bad answer: keep the previous snapshot
 		}
 	}, [apollo, sessionId]);
 	/** The server's copy is changing (a game it picks, a team edit): don't pick on this device
@@ -198,11 +212,6 @@ export function OverviewTab({
 				activeGameIds: (server.activeGames ?? []).map((g: any) => g.id),
 				availablePlayerIds: (server.players ?? []).filter((p: any) => p.checkedIn && p.active).map((p: any) => p.id),
 			});
-		// Behind the server (e.g. a game it just saved isn't in it yet): fetch a new one for next time.
-		if (snapshot && server && !matchesServer && offline.online) {
-			markSnapshotStale();
-			void refreshSnapshot();
-		}
 		return fillOnDevice({
 			hasSnapshot: Boolean(snapshot),
 			online: offline.online,
@@ -211,6 +220,13 @@ export function OverviewTab({
 			snapshotAgeMs: snapshotReceivedAt.current ? Date.now() - snapshotReceivedAt.current : Infinity,
 			hasUnsynced,
 			syncNow: offline.syncNow,
+			// Behind the server (e.g. a game it just saved isn't in the copy yet) or old: fetch a
+			// fresh copy right now (one quick request) and pick on the device from it, instead of
+			// handing the whole fill to the server (slower: it picks, saves, then the page reloads).
+			refresh: async () => {
+				markSnapshotStale();
+				return Boolean(await withTimeout(refreshSnapshot(), SNAPSHOT_REFRESH_TIMEOUT_MS));
+			},
 		});
 	}
 	const [autoFill, setAutoFill] = useState(true);
@@ -471,6 +487,7 @@ export function OverviewTab({
 	 * copy), announces it, and queues it to be saved on the server in the background. Returns
 	 * false (after telling the organiser why, unless `quiet`) when no game can be made. */
 	function fillOnThisDevice(courtId: string, quiet = false): boolean {
+		const snapshot = snapshotRef.current;
 		if (!snapshot) {
 			if (!quiet) message.error("Can't generate games offline until this session has loaded once online.");
 			return false;

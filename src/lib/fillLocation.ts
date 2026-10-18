@@ -47,10 +47,15 @@ export async function fillOnDevice(opts: {
   snapshotAgeMs: number;
   hasUnsynced: () => boolean;
   syncNow: () => Promise<void>;
+  /** Fetch a fresh snapshot now; resolves true when one arrived (then the device can pick). */
+  refresh?: () => Promise<boolean>;
 }): Promise<boolean> {
   if (!opts.hasSnapshot) return false;
   if (!opts.online) return true;
-  if (!opts.outdated && opts.matchesServer && opts.snapshotAgeMs <= FRESH_SNAPSHOT_MS) return true;
+  if (opts.outdated) return shouldFillOnDevice(opts);
+  if (opts.matchesServer && opts.snapshotAgeMs <= FRESH_SNAPSHOT_MS) return true;
+  // Old or behind: a fresh copy taken now is the latest state there is, so pick from it.
+  if (opts.refresh && (await opts.refresh().catch(() => false))) return true;
   return shouldFillOnDevice(opts);
 }
 
