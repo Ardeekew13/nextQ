@@ -63,7 +63,7 @@ export async function courtLineups(page: Page): Promise<string[]> {
   );
 }
 
-async function gql(page: Page, query: string, variables: Record<string, unknown>) {
+export async function gql(page: Page, query: string, variables: Record<string, unknown>) {
   const res = await page.request.post("/api/graphql", { data: { query, variables } });
   const body = await res.json();
   if (body.errors?.length) throw new Error(`GraphQL: ${JSON.stringify(body.errors)}`);
