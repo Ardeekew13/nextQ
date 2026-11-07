@@ -10,11 +10,12 @@
  * (falsely) as a `PlayerQuad`. `assignTeams` → `legalSplits` then destructured a 4th player
  * that didn't exist, and later read `.id` off that `undefined` value while scoring team splits.
  *
- * The fix: when a pair can't fit, it's recorded as "deferred"; if the round still ends one
- * seat short with a deferred pair on hand, one half of that pair fills the last seat instead
- * of handing back a broken foursome. A defensive guard in `selectPlayers` also now fails the
- * round cleanly (`ok: false`) rather than return a short list, as a backstop against any
- * future regression of the same shape.
+ * The fix: a fixed pair is never split and never dropped. When it arrives with only one seat
+ * open, the lowest-priority single already seated gives way instead (scanning from the back of
+ * `selectedList`, skipping anyone who's already part of an intact seated pair), freeing the
+ * second seat the pair needs. A defensive guard in `selectPlayers` also now fails the round
+ * cleanly (`ok: false`) rather than return a short list, as a backstop against any future
+ * regression of the same shape.
  */
 import { describe, expect, it } from "vitest";
 import { generateNextGame, type QueuePlayer } from "@/lib/queueEngine";
@@ -39,11 +40,11 @@ function qp(id: string, minutesWaited: number, extra: Partial<QueuePlayer> = {})
 }
 
 describe("generateNextGame — fixed-partner pair with exactly one seat open", () => {
-  it("never returns a short foursome, and never throws, when a fixed pair can't both fit", () => {
+  it("never splits the pair: a lower-priority single gives way instead, and the pair plays as partners", () => {
     // 3 ordinary singles, each waiting longer than the last (highest priority first), plus one
-    // fixed pair that joined most recently. By priority order the 3 singles fill 3 seats,
+    // fixed pair that joined most recently. By priority order the 3 singles would fill 3 seats,
     // leaving exactly 1 seat for a pair that needs 2 — the shape that used to get silently
-    // dropped, producing a 3-player "foursome".
+    // dropped, producing a 3-player "foursome" and crashing downstream.
     const eligible: QueuePlayer[] = [
       qp("s1", 40),
       qp("s2", 30),
@@ -69,14 +70,19 @@ describe("generateNextGame — fixed-partner pair with exactly one seat open", (
     expect(teamB).toHaveLength(2);
     for (const p of [...teamA, ...teamB]) expect(p && typeof p.id).toBe("string");
 
-    // No duplicate or phantom players across the two teams.
     const ids = [...teamA, ...teamB].map((p) => p.id);
     expect(new Set(ids).size).toBe(4);
 
-    // The 3 longest-waiting singles always fit; only one half of the stranded pair joins them.
-    expect(ids).toEqual(expect.arrayContaining(["s1", "s2", "s3"]));
-    const pairMembersIncluded = ids.filter((id) => id === "pairA" || id === "pairB");
-    expect(pairMembersIncluded.length).toBe(1);
+    // The fixed pair is NEVER split: both halves are in, together, every time.
+    expect(ids).toEqual(expect.arrayContaining(["pairA", "pairB"]));
+    // They're seated as partners (same team), not just in the same foursome as opponents.
+    const teamOf = (id: string) => (teamA.some((p) => p.id === id) ? "A" : "B");
+    expect(teamOf("pairA")).toBe(teamOf("pairB"));
+
+    // To make room, the single with the WORST priority of the three (s3, who joined most
+    // recently among the singles) is the one who sits this round out — s1 and s2 still play.
+    expect(ids).toEqual(expect.arrayContaining(["s1", "s2"]));
+    expect(ids).not.toContain("s3");
   });
 
   it("falls back to ok: false instead of crashing if fewer than 4 players are eligible", () => {

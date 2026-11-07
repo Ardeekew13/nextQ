@@ -587,19 +587,30 @@ function selectPlayers(
 
   const behind = catchingUpIds(pool, mode);
   const selectedList: QueuePlayer[] = [];
+  // Ids currently seated as one half of an intact fixed pair - never bumped to make room for
+  // another entry (that would split a pair, which must never happen; see take() below).
+  const pairedIds = new Set<string>();
   const skipped: Entry[] = [];
-  // Fixed pairs that couldn't both fit because only one seat was still open when their turn
-  // came. This is the only way `selectedList` can end a round one short of a full foursome
-  // (every other entry adds exactly 1 or 2 players, so the sole broken size is 3) - handled
-  // below by splitting a pair rather than returning a foursome with a missing 4th player.
-  const deferredPairs: Array<{ players: [QueuePlayer, QueuePlayer] }> = [];
   const take = (entry: Entry) => {
     if (entry.kind === "pair") {
       if (selectedList.length > 2) {
-        deferredPairs.push({ players: entry.players });
-        return; // no room for both — leave the pair for next round
+        // Only one seat open and this fixed pair needs two. A fixed pair is NEVER split, so
+        // instead the lowest-priority single already seated gives way: scan from the back (the
+        // most recently admitted, hence worst-priority, single) for the first player who isn't
+        // part of an already-seated pair, and bump them. Seats only ever fill one at a time
+        // (singles) or two at a time (pairs), so whenever exactly 3 seats are taken, at least
+        // one of them must be a lone single — an all-pairs total can only be 0, 2 or 4 — so a
+        // bump candidate always exists here.
+        for (let i = selectedList.length - 1; i >= 0; i--) {
+          if (!pairedIds.has(selectedList[i].id)) {
+            selectedList.splice(i, 1);
+            break;
+          }
+        }
       }
       selectedList.push(entry.players[0], entry.players[1]);
+      pairedIds.add(entry.players[0].id);
+      pairedIds.add(entry.players[1].id);
     } else {
       selectedList.push(entry.player);
     }
@@ -619,14 +630,6 @@ function selectPlayers(
   for (const entry of skipped) {
     if (selectedList.length >= 4) break;
     take(entry);
-  }
-  // One seat left and the only remaining candidate was a fixed pair that couldn't both fit:
-  // split it rather than hand back a foursome short a player. The partner with the better
-  // (lower) individual score takes the seat; the other half stays eligible for next round.
-  if (selectedList.length === 3 && deferredPairs.length > 0) {
-    const [a, b] = deferredPairs[0].players;
-    const chosen = (scoreById.get(a.id) ?? 0) <= (scoreById.get(b.id) ?? 0) ? a : b;
-    selectedList.push(chosen);
   }
 
   // Variety rules, applied when the priority order would break one:
