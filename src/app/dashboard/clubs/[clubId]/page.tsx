@@ -9,6 +9,7 @@ import {
 	UPDATE_CLUB_MEMBER,
 	REMOVE_CLUB_MEMBER,
 	MERGE_CLUB_MEMBERS,
+	GENERATE_CLUB_JOIN_CODE,
 	ME_QUERY,
 } from "@/graphql/documents/organiser";
 import { CLUB_STANDINGS_QUERY } from "@/graphql/documents/public";
@@ -98,6 +99,7 @@ export default function ClubDetailPage() {
 	const [updateClubMember] = useMutation(UPDATE_CLUB_MEMBER);
 	const [removeClubMember] = useMutation(REMOVE_CLUB_MEMBER);
 	const [mergeClubMembers] = useMutation(MERGE_CLUB_MEMBERS);
+	const [generateClubJoinCode, { loading: generatingCode }] = useMutation(GENERATE_CLUB_JOIN_CODE);
 
 	const [addMemberOpen, setAddMemberOpen] = useState(false);
 	const [editingMember, setEditingMember] = useState<any>(null);
@@ -150,6 +152,17 @@ export default function ClubDetailPage() {
 				}
 			},
 		});
+	}
+
+	async function handleGenerateJoinCode() {
+		try {
+			await generateClubJoinCode({ variables: { id: club.id } });
+			message.success("Join code generated");
+		} catch (error) {
+			message.error(
+				error instanceof Error ? error.message : "Could not generate a join code",
+			);
+		}
 	}
 
 	async function handleAddMember(values: {
@@ -954,6 +967,71 @@ export default function ClubDetailPage() {
 									</Button>
 								}
 							/>
+						</div>
+					</div>
+
+					{/* Co-organiser invite */}
+					<div className="rail-section">
+						<div className="rail-title">Co-organiser Code</div>
+						<div
+							style={{
+								background: "#fff",
+								padding: 12,
+								borderRadius: 0,
+								marginBottom: 12,
+							}}
+						>
+							<div
+								style={{
+									fontSize: 12,
+									color: "rgba(29,31,32,0.6)",
+									marginBottom: 12,
+								}}
+							>
+								Share this code so another organiser can help manage this club.
+							</div>
+							{club.joinCode ? (
+								<>
+									<Input
+										readOnly
+										value={club.joinCode}
+										size="small"
+										style={{ borderRadius: 0, fontWeight: 700, letterSpacing: "0.2em" }}
+										suffix={
+											<Button
+												type="text"
+												size="small"
+												icon={<CopyOutlined />}
+												onClick={() => {
+													navigator.clipboard.writeText(club.joinCode);
+													message.success("Code copied");
+												}}
+											>
+												Copy
+											</Button>
+										}
+									/>
+									<Button
+										type="link"
+										size="small"
+										loading={generatingCode}
+										onClick={handleGenerateJoinCode}
+										style={{ padding: "8px 0 0", height: "auto" }}
+									>
+										Generate a new code
+									</Button>
+								</>
+							) : (
+								<Button
+									block
+									icon={<PlusOutlined />}
+									loading={generatingCode}
+									onClick={handleGenerateJoinCode}
+									style={{ borderRadius: 0 }}
+								>
+									Generate code
+								</Button>
+							)}
 						</div>
 					</div>
 
