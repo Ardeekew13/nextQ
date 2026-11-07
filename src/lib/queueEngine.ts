@@ -587,11 +587,30 @@ function selectPlayers(
 
   const behind = catchingUpIds(pool, mode);
   const selectedList: QueuePlayer[] = [];
+  // Ids currently seated as one half of an intact fixed pair - never bumped to make room for
+  // another entry (that would split a pair, which must never happen; see take() below).
+  const pairedIds = new Set<string>();
   const skipped: Entry[] = [];
   const take = (entry: Entry) => {
     if (entry.kind === "pair") {
-      if (selectedList.length > 2) return; // no room for both — leave the pair for next round
+      if (selectedList.length > 2) {
+        // Only one seat open and this fixed pair needs two. A fixed pair is NEVER split, so
+        // instead the lowest-priority single already seated gives way: scan from the back (the
+        // most recently admitted, hence worst-priority, single) for the first player who isn't
+        // part of an already-seated pair, and bump them. Seats only ever fill one at a time
+        // (singles) or two at a time (pairs), so whenever exactly 3 seats are taken, at least
+        // one of them must be a lone single — an all-pairs total can only be 0, 2 or 4 — so a
+        // bump candidate always exists here.
+        for (let i = selectedList.length - 1; i >= 0; i--) {
+          if (!pairedIds.has(selectedList[i].id)) {
+            selectedList.splice(i, 1);
+            break;
+          }
+        }
+      }
       selectedList.push(entry.players[0], entry.players[1]);
+      pairedIds.add(entry.players[0].id);
+      pairedIds.add(entry.players[1].id);
     } else {
       selectedList.push(entry.player);
     }
@@ -748,6 +767,14 @@ function selectPlayers(
       }
       }
     }
+  }
+
+  // Defensive guard: every path above should always land on exactly 4 players once
+  // eligible.length >= 4, but if some future rule change leaves the list short, fail the
+  // generation cleanly instead of handing downstream team-assignment a quad with a missing
+  // (undefined) player.
+  if (selectedList.length < 4) {
+    return { ok: false, reason: "Could not assemble a full foursome from the eligible pool." };
   }
 
   // Order the final foursome by individual priority for a sensible "up next" display —
