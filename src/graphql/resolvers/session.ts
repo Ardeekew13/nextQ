@@ -146,13 +146,18 @@ export const sessionResolvers = {
         throw new GraphQLError("Session name is required.", { extensions: { code: "BAD_USER_INPUT" } });
       }
 
-      const ongoingSession = await Session.findOne({
+      // A club may run at most MAX_CONCURRENT_SESSIONS sessions at once (different players,
+      // same queueing engine, independent courts) - e.g. two separate open-play groups under
+      // one club. This only caps concurrency; it doesn't stop the club from having many
+      // sessions over time.
+      const MAX_CONCURRENT_SESSIONS = 2;
+      const ongoingCount = await Session.countDocuments({
         clubId: club._id,
         status: { $in: [SessionStatus.ACTIVE, SessionStatus.PAUSED] },
       });
-      if (ongoingSession) {
+      if (ongoingCount >= MAX_CONCURRENT_SESSIONS) {
         throw new GraphQLError(
-          `Finish "${ongoingSession.name}" before starting a new session.`,
+          `This club already has ${MAX_CONCURRENT_SESSIONS} sessions running or paused. Finish one before starting another.`,
           { extensions: { code: "BAD_USER_INPUT" } }
         );
       }
