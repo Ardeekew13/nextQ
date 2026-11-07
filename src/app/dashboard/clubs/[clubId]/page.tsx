@@ -47,6 +47,7 @@ import { useParams, useRouter } from "next/navigation";
 import { SessionsTab } from "@/components/ClubTabs/SessionsTab";
 import { PlayersTab } from "@/components/ClubTabs/PlayersTab";
 import { StandingsTab } from "@/components/ClubTabs/StandingsTab";
+import { MAX_CONCURRENT_SESSIONS_PER_CLUB } from "@/types/enums";
 
 const { Text } = Typography;
 
@@ -115,7 +116,11 @@ export default function ClubDetailPage() {
 
 	// 1. Use first session's creation date if available, otherwise use club creation date
 	const sessions = club.sessions ?? [];
-	const ongoingSession = sessions.find((s: any) => s.status === "ACTIVE" || s.status === "PAUSED");
+	const ongoingSessions = sessions.filter((s: any) => s.status === "ACTIVE" || s.status === "PAUSED");
+	// The server allows MAX_CONCURRENT_SESSIONS_PER_CLUB sessions running/paused at once (see the
+	// createSession resolver) - the button below must only block once that cap is actually hit,
+	// not the moment a single session is ongoing.
+	const atSessionLimit = ongoingSessions.length >= MAX_CONCURRENT_SESSIONS_PER_CLUB;
 	let createdDate = sessions.length > 0 ? sessions[0].createdAt : club.createdAt;
 	if (createdDate && typeof createdDate === "object" && "toDate" in createdDate) {
 		createdDate = (createdDate as any).toDate();
@@ -760,13 +765,17 @@ export default function ClubDetailPage() {
 
 						<Button
 							type="primary"
-							disabled={!!ongoingSession}
-							title={ongoingSession ? `Finish "${ongoingSession.name}" before starting a new session.` : undefined}
+							disabled={atSessionLimit}
+							title={
+								atSessionLimit
+									? `This club already has ${MAX_CONCURRENT_SESSIONS_PER_CLUB} sessions running or paused. Finish one before starting another.`
+									: undefined
+							}
 							onClick={() =>
 								router.push(`/dashboard/clubs/${club.id}/sessions/new`)
 							}
 							style={{
-								background: ongoingSession ? undefined : "linear-gradient(135deg, #ec4899 0%, #db2777 100%)",
+								background: atSessionLimit ? undefined : "linear-gradient(135deg, #ec4899 0%, #db2777 100%)",
 								border: "none",
 								fontWeight: 700,
 								fontSize: 13,

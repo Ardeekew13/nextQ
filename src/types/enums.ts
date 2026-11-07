@@ -16,6 +16,12 @@ export const SessionStatus = {
 } as const;
 export type SessionStatus = (typeof SessionStatus)[keyof typeof SessionStatus];
 
+/** A club may have at most this many sessions running (ACTIVE) or PAUSED at once - e.g. two
+ * separate open-play groups under one club, each with their own courts and players. Shared
+ * between the createSession resolver (server-side enforcement) and the dashboard UI (so the
+ * "New session" button's enabled state always matches what the server will actually allow). */
+export const MAX_CONCURRENT_SESSIONS_PER_CLUB = 2;
+
 export const CourtStatus = {
   AVAILABLE: "AVAILABLE",
   IN_USE: "IN_USE",

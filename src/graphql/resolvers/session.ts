@@ -9,7 +9,7 @@ import { getQueuePreview, getNextGamePreview } from "@/lib/eligibility";
 import { findTogetherGroups } from "@/lib/togetherGroups";
 import { getSessionStandingsWithPlayers, getSessionPodiumWithPlayers, getSessionFirstPlaceTieWithPlayers } from "@/lib/stats";
 import { buildPublicSessionUrl, diffMinutes } from "@/lib/urls";
-import { SessionStatus, GameStatus, DEFAULT_SESSION_SETTINGS, PairingMode, MatchingStyle, QueueMode, type SessionSettings } from "@/types/enums";
+import { SessionStatus, GameStatus, DEFAULT_SESSION_SETTINGS, PairingMode, MatchingStyle, QueueMode, MAX_CONCURRENT_SESSIONS_PER_CLUB, type SessionSettings } from "@/types/enums";
 import { requireOrganiser, requireClubOwner, requireSessionOwner } from "../guards";
 import type { GraphQLContext } from "../context";
 
@@ -146,18 +146,18 @@ export const sessionResolvers = {
         throw new GraphQLError("Session name is required.", { extensions: { code: "BAD_USER_INPUT" } });
       }
 
-      // A club may run at most MAX_CONCURRENT_SESSIONS sessions at once (different players,
-      // same queueing engine, independent courts) - e.g. two separate open-play groups under
-      // one club. This only caps concurrency; it doesn't stop the club from having many
-      // sessions over time.
-      const MAX_CONCURRENT_SESSIONS = 2;
+      // A club may run at most MAX_CONCURRENT_SESSIONS_PER_CLUB sessions at once (different
+      // players, same queueing engine, independent courts) - e.g. two separate open-play groups
+      // under one club. This only caps concurrency; it doesn't stop the club from having many
+      // sessions over time. Shared with the dashboard UI (see MAX_CONCURRENT_SESSIONS_PER_CLUB
+      // in types/enums) so the "New session" button's enabled state never drifts from this rule.
       const ongoingCount = await Session.countDocuments({
         clubId: club._id,
         status: { $in: [SessionStatus.ACTIVE, SessionStatus.PAUSED] },
       });
-      if (ongoingCount >= MAX_CONCURRENT_SESSIONS) {
+      if (ongoingCount >= MAX_CONCURRENT_SESSIONS_PER_CLUB) {
         throw new GraphQLError(
-          `This club already has ${MAX_CONCURRENT_SESSIONS} sessions running or paused. Finish one before starting another.`,
+          `This club already has ${MAX_CONCURRENT_SESSIONS_PER_CLUB} sessions running or paused. Finish one before starting another.`,
           { extensions: { code: "BAD_USER_INPUT" } }
         );
       }
