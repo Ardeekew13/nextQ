@@ -10,7 +10,7 @@ import { findTogetherGroups } from "@/lib/togetherGroups";
 import { getSessionStandingsWithPlayers, getSessionPodiumWithPlayers, getSessionFirstPlaceTieWithPlayers } from "@/lib/stats";
 import { buildPublicSessionUrl, diffMinutes } from "@/lib/urls";
 import { SessionStatus, GameStatus, DEFAULT_SESSION_SETTINGS, PairingMode, MatchingStyle, QueueMode, MAX_CONCURRENT_SESSIONS_PER_CLUB, type SessionSettings } from "@/types/enums";
-import { requireOrganiser, requireClubOwner, requireSessionOwner } from "../guards";
+import { requireOrganiser, requireClubAccess, requireSessionOwner } from "../guards";
 import type { GraphQLContext } from "../context";
 
 async function uniqueSessionSlug(clubId: unknown, desired: string): Promise<string> {
@@ -104,14 +104,14 @@ async function buildSessionSummary(sessionDoc: {
 export const sessionResolvers = {
   Query: {
     sessionsByClub: async (_p: unknown, args: { clubId: string }, context: GraphQLContext) => {
-      await requireClubOwner(context, args.clubId);
+      await requireClubAccess(context, args.clubId);
       return Session.find({ clubId: args.clubId }).sort({ sessionDate: -1 });
     },
     session: async (_p: unknown, args: { id: string }, context: GraphQLContext) => {
       return requireSessionOwner(context, args.id);
     },
     activeSession: async (_p: unknown, args: { clubId: string }, context: GraphQLContext) => {
-      await requireClubOwner(context, args.clubId);
+      await requireClubAccess(context, args.clubId);
       return Session.findOne({ clubId: args.clubId, status: SessionStatus.ACTIVE });
     },
     publicSession: async (_p: unknown, args: { clubSlug: string; sessionSlug: string }) => {
@@ -140,7 +140,7 @@ export const sessionResolvers = {
       },
       context: GraphQLContext
     ) => {
-      const club = await requireClubOwner(context, args.input.clubId);
+      const club = await requireClubAccess(context, args.input.clubId);
       const organiser = requireOrganiser(context);
       if (!args.input.name.trim()) {
         throw new GraphQLError("Session name is required.", { extensions: { code: "BAD_USER_INPUT" } });

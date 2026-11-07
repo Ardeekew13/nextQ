@@ -46,14 +46,26 @@ export async function requireClubOwner(context: GraphQLContext, clubId: string) 
   return club;
 }
 
+/**
+ * A session belongs to a club, and anyone with access to that club - the owner, any
+ * co-organiser (see Club.coOrganiserIds / generateClubJoinCode), or an admin - has access to
+ * every session under it, regardless of which of them happened to create it. This mirrors
+ * requireClubAccess rather than checking session.organiserId directly, so a co-organiser who
+ * joins a club can run, score and manage sessions the owner started (and vice versa), not just
+ * ones they personally created.
+ */
 export async function requireSessionOwner(context: GraphQLContext, sessionId: string) {
   const organiser = requireOrganiser(context);
   const session = await Session.findById(sessionId);
   if (!session) {
     throw new GraphQLError("Session not found.", { extensions: { code: "NOT_FOUND" } });
   }
-  const isAdmin = organiser.role === "ADMIN";
-  if (!isAdmin && String(session.organiserId) !== organiser.sub) {
+  if (organiser.role === "ADMIN") return session;
+  const club = await Club.findById(session.clubId);
+  const isOwner = Boolean(club) && String(club!.organiserId) === organiser.sub;
+  const coOrganiserIds = (club?.coOrganiserIds ?? []) as unknown[];
+  const isCoOrganiser = coOrganiserIds.some((id) => String(id) === organiser.sub);
+  if (!isOwner && !isCoOrganiser) {
     throw new GraphQLError("You do not have access to this session.", {
       extensions: { code: "FORBIDDEN" },
     });
