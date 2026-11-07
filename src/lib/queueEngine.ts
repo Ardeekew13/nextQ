@@ -588,9 +588,17 @@ function selectPlayers(
   const behind = catchingUpIds(pool, mode);
   const selectedList: QueuePlayer[] = [];
   const skipped: Entry[] = [];
+  // Fixed pairs that couldn't both fit because only one seat was still open when their turn
+  // came. This is the only way `selectedList` can end a round one short of a full foursome
+  // (every other entry adds exactly 1 or 2 players, so the sole broken size is 3) - handled
+  // below by splitting a pair rather than returning a foursome with a missing 4th player.
+  const deferredPairs: Array<{ players: [QueuePlayer, QueuePlayer] }> = [];
   const take = (entry: Entry) => {
     if (entry.kind === "pair") {
-      if (selectedList.length > 2) return; // no room for both — leave the pair for next round
+      if (selectedList.length > 2) {
+        deferredPairs.push({ players: entry.players });
+        return; // no room for both — leave the pair for next round
+      }
       selectedList.push(entry.players[0], entry.players[1]);
     } else {
       selectedList.push(entry.player);
@@ -611,6 +619,14 @@ function selectPlayers(
   for (const entry of skipped) {
     if (selectedList.length >= 4) break;
     take(entry);
+  }
+  // One seat left and the only remaining candidate was a fixed pair that couldn't both fit:
+  // split it rather than hand back a foursome short a player. The partner with the better
+  // (lower) individual score takes the seat; the other half stays eligible for next round.
+  if (selectedList.length === 3 && deferredPairs.length > 0) {
+    const [a, b] = deferredPairs[0].players;
+    const chosen = (scoreById.get(a.id) ?? 0) <= (scoreById.get(b.id) ?? 0) ? a : b;
+    selectedList.push(chosen);
   }
 
   // Variety rules, applied when the priority order would break one:
@@ -748,6 +764,14 @@ function selectPlayers(
       }
       }
     }
+  }
+
+  // Defensive guard: every path above should always land on exactly 4 players once
+  // eligible.length >= 4, but if some future rule change leaves the list short, fail the
+  // generation cleanly instead of handing downstream team-assignment a quad with a missing
+  // (undefined) player.
+  if (selectedList.length < 4) {
+    return { ok: false, reason: "Could not assemble a full foursome from the eligible pool." };
   }
 
   // Order the final foursome by individual priority for a sensible "up next" display —
