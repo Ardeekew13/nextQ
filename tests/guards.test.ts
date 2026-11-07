@@ -70,16 +70,39 @@ describe("requireClubOwner", () => {
 });
 
 describe("requireSessionOwner", () => {
-  it("throws FORBIDDEN when a different organiser owns the session", async () => {
-    (Session.findById as any).mockResolvedValue({ organiserId: "owner-1" });
+  // A session belongs to a club, so access is checked against that club's owner and
+  // co-organisers - not just session.organiserId - so whoever has access to the club has
+  // access to every session under it, not only the ones they personally created.
+  const sessionDoc = { clubId: "club-1", organiserId: "creator-1" };
+
+  it("throws FORBIDDEN when neither the club's owner nor a co-organiser", async () => {
+    (Session.findById as any).mockResolvedValue(sessionDoc);
+    (Club.findById as any).mockResolvedValue({ organiserId: "owner-1", coOrganiserIds: [] });
     await expect(requireSessionOwner(contextFor("intruder"), "session-1")).rejects.toMatchObject({
       extensions: { code: "FORBIDDEN" },
     });
   });
 
-  it("returns the session when the organiser owns it", async () => {
-    (Session.findById as any).mockResolvedValue({ organiserId: "owner-1" });
+  it("returns the session for the club's owner, even if someone else created the session", async () => {
+    (Session.findById as any).mockResolvedValue(sessionDoc);
+    (Club.findById as any).mockResolvedValue({ organiserId: "owner-1", coOrganiserIds: [] });
     const session = await requireSessionOwner(contextFor("owner-1"), "session-1");
-    expect(session.organiserId).toBe("owner-1");
+    expect(session).toBe(sessionDoc);
+  });
+
+  it("returns the session for a co-organiser who joined the club via a join code, not just the owner or creator", async () => {
+    (Session.findById as any).mockResolvedValue(sessionDoc);
+    (Club.findById as any).mockResolvedValue({ organiserId: "owner-1", coOrganiserIds: ["co-organiser-1"] });
+    const session = await requireSessionOwner(contextFor("co-organiser-1"), "session-1");
+    expect(session).toBe(sessionDoc);
+  });
+
+  it("still throws FORBIDDEN for someone who is a co-organiser of a DIFFERENT club", async () => {
+    (Session.findById as any).mockResolvedValue(sessionDoc);
+    // "outsider" co-organises some other club, but isn't in THIS club's coOrganiserIds.
+    (Club.findById as any).mockResolvedValue({ organiserId: "owner-1", coOrganiserIds: ["someone-else"] });
+    await expect(requireSessionOwner(contextFor("outsider"), "session-1")).rejects.toMatchObject({
+      extensions: { code: "FORBIDDEN" },
+    });
   });
 });
