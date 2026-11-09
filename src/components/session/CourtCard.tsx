@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Button, Select, Typography, Tooltip } from "antd";
+import { useState, useEffect, useRef, type ReactNode } from "react";
+import { Button, Select, Typography, Tooltip, Input } from "antd";
 import { ClockCircleOutlined, SwapOutlined, CheckOutlined, CloseOutlined, EditOutlined, SoundOutlined } from "@ant-design/icons";
 
 const { Text } = Typography;
@@ -72,6 +72,11 @@ interface CourtCardProps {
 	onUpdateTeams?: (gameId: string, teamAPlayerIds: string[], teamBPlayerIds: string[]) => Promise<void>;
 	onRemove?: (courtId: string) => void;
 	onCallOut?: (game: any) => void;
+	/** Renames this court. Resolves/rejects so the inline editor knows whether to close. */
+	onRename?: (courtId: string, name: string) => Promise<void>;
+	/** A drag handle (grip icon with dnd-kit's listeners/attributes already attached),
+	 * rendered in the card header so the whole card isn't draggable - only this handle is. */
+	dragHandle?: ReactNode;
 	/** A result for this court's game was recorded and is waiting to reach the server. */
 	resultState?: "saving" | "offline" | "failed";
 	resultError?: string;
@@ -92,6 +97,8 @@ export function CourtCard({
 	onUpdateTeams,
 	onRemove,
 	onCallOut,
+	onRename,
+	dragHandle,
 	resultState,
 	resultError,
 	onRetryResult,
@@ -100,6 +107,27 @@ export function CourtCard({
 	const [editing, setEditing] = useState(false);
 	const [editTeamA, setEditTeamA] = useState<string[]>([]);
 	const [editTeamB, setEditTeamB] = useState<string[]>([]);
+	const [renamingName, setRenamingName] = useState(false);
+	const [nameDraft, setNameDraft] = useState("");
+	const [savingName, setSavingName] = useState(false);
+
+	function startRenaming() {
+		setNameDraft(court.name ?? "");
+		setRenamingName(true);
+	}
+
+	async function saveRenaming() {
+		if (!onRename) return;
+		setSavingName(true);
+		try {
+			await onRename(court.id, nameDraft.trim());
+			setRenamingName(false);
+		} catch {
+			// Stay open - the caller already surfaced an error message.
+		} finally {
+			setSavingName(false);
+		}
+	}
 
 	const currentCourtPlayerIds = new Set([
 		...(court.currentGame?.teamA.players.map((p: any) => p.id) ?? []),
@@ -138,11 +166,40 @@ export function CourtCard({
 		<div data-testid="court-card" style={{ border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff", overflow: "hidden" }}>
 
 			{/* ── Court header ── */}
-			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 18px 10px" }}>
-				<span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: "0.12em", textTransform: "uppercase", color: "#1d1f20" }}>
-					{court.name || `Court ${court.courtNumber}`}
-				</span>
-				<div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 18px 10px", gap: 8 }}>
+				<div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flex: 1 }}>
+					{dragHandle}
+					{renamingName ? (
+						<Input
+							size="small"
+							autoFocus
+							value={nameDraft}
+							placeholder={`Court ${court.courtNumber}`}
+							onChange={(e) => setNameDraft(e.target.value)}
+							onPressEnter={saveRenaming}
+							onBlur={saveRenaming}
+							disabled={savingName}
+							style={{ fontSize: 14, fontWeight: 700, maxWidth: 160 }}
+						/>
+					) : (
+						<>
+							<span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", letterSpacing: "0.12em", textTransform: "uppercase", color: "#1d1f20", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+								{court.name || `Court ${court.courtNumber}`}
+							</span>
+							{onRename && (
+								<Tooltip title="Rename court">
+									<button
+										onClick={startRenaming}
+										style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(29,31,32,0.3)", width: 22, height: 22, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+									>
+										<EditOutlined style={{ fontSize: 12 }} />
+									</button>
+								</Tooltip>
+							)}
+						</>
+					)}
+				</div>
+				<div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
 					{game?.startedAt && <GameClock startedAt={game.startedAt} />}
 					{game && onCallOut && (
 						<Tooltip title="Call out matchup">

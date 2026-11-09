@@ -207,7 +207,15 @@ export const gameResolvers = {
         eligibleDocs.map((d) => d.name)
       );
       const recentMates = recentGameMates(priorGames); // priorGames is newest first
-      const eligible: QueuePlayer[] = eligibleDocs.map((d) => toQueuePlayer(d, clubHistory, recentMates));
+      // Manual queue order (see setManualQueueOrder) takes priority over the usual
+      // wait-time/games-played ordering - this is the real court-fill path, so it must
+      // match whatever the organiser-facing preview (nextGamePreview) already promised.
+      const manualPriorityById = new Map((session.manualQueueOrder ?? []).map((id, index) => [String(id), index]));
+      const manualOrderLength = session.manualQueueOrder?.length ?? 0;
+      const eligible: QueuePlayer[] = eligibleDocs.map((d) => ({
+        ...toQueuePlayer(d, clubHistory, recentMates),
+        manualPriority: manualPriorityById.get(String(d._id)),
+      }));
 
       const settings = session.settings as SessionSettings;
       const pastGroups = new Set(
@@ -225,6 +233,7 @@ export const gameResolvers = {
         tiebreakSeed: String(session._id),
         pastGroups,
         keepApart: (session.separatedGroups ?? []).map((g) => g.playerIds.map(String)),
+        manualOrderLength,
         random: seededRandom(queuePoolSeed(eligibleDocs)),
       });
 

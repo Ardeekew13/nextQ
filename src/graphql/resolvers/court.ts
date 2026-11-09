@@ -3,6 +3,7 @@ import { Court } from "@/models/Court";
 import { Game } from "@/models/Game";
 import { Session } from "@/models/Session";
 import { CourtStatus } from "@/types/enums";
+import { sortCourtsForDisplay } from "@/lib/courtOrder";
 import { requireSessionOwner, requireOrganiser } from "../guards";
 import type { GraphQLContext } from "../context";
 
@@ -20,7 +21,7 @@ export const courtResolvers = {
   Query: {
     sessionCourts: async (_p: unknown, args: { sessionId: string }, context: GraphQLContext) => {
       await requireSessionOwner(context, args.sessionId);
-      return Court.find({ sessionId: args.sessionId }).sort({ courtNumber: 1 });
+      return sortCourtsForDisplay(await Court.find({ sessionId: args.sessionId }));
     },
   },
 
@@ -81,6 +82,34 @@ export const courtResolvers = {
       }
       await Court.findByIdAndDelete(args.id);
       return true;
+    },
+
+    reorderCourts: async (
+      _p: unknown,
+      args: { sessionId: string; courtIds: string[] },
+      context: GraphQLContext
+    ) => {
+      const session = await requireSessionOwner(context, args.sessionId);
+      const ids = args.courtIds.map(String);
+      const courts = await Court.find({ sessionId: session._id });
+      const sameSet =
+        ids.length === courts.length &&
+        new Set(ids).size === ids.length &&
+        courts.every((c) => ids.includes(String(c._id)));
+      if (!sameSet) {
+        throw new GraphQLError("Provide every court in this session, each exactly once.", {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
+      const byId = new Map(courts.map((c) => [String(c._id), c]));
+      await Promise.all(
+        ids.map((id, index) => {
+          const court = byId.get(id)!;
+          court.displayOrder = index;
+          return court.save();
+        })
+      );
+      return sortCourtsForDisplay(courts);
     },
   },
 

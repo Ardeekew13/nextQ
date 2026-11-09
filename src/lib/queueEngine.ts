@@ -46,6 +46,16 @@ export interface QueuePlayer {
    * the other one forward. This keeps the "always together" guarantee without letting a
    * pair jump ahead of players who'd otherwise be next. */
   fixedPartnerId?: string;
+  /** Organiser-set manual queue order (0-based position among manually-ordered players).
+   * When set, this dominates every other scoring factor - it decides who's picked next
+   * directly, so dragging a player to the front of a saved order puts them in the very
+   * next game. Fairness rules (consecutive-game protection, fixed-partner pairing,
+   * trio-avoidance, keep-apart groups) still apply on top of it exactly as they do for
+   * the automatic order - this only changes WHO goes next, not whether those rules run.
+   * Players with no manualPriority are treated as sitting right after every manually-
+   * ordered player (see manualOrderLength on QueueEngineOptions), keeping their normal
+   * relative order among themselves. */
+  manualPriority?: number;
   /** Ids of the other three players in this player's most recent game. Used to avoid putting
    * people who just shared a court straight back on one together (partners or opponents). */
   lastGameWith?: string[];
@@ -114,6 +124,15 @@ const WAIT_TIE_WINDOW_MINUTES = 2;
  */
 const NEVER_PLAYED_PRIORITY_BOOST = 500_000;
 
+/**
+ * Weight for one step of manual queue order (see QueuePlayer.manualPriority). Sized to
+ * dominate every other term for any realistic session - including the "never played"
+ * boost and wait-time gaps spanning days - so saving a manual order always determines
+ * who's selected next, while still only being one additive term among others rather than
+ * a hard override of the consecutive-game safety net.
+ */
+const MANUAL_ORDER_WEIGHT = 50_000_000;
+
 /** A player's strength for matchmaking; missing or corrupt values count as an average 50. */
 function strengthOf(p: QueuePlayer): number {
   return typeof p.winRate === "number" && Number.isFinite(p.winRate) ? p.winRate : 50;
@@ -139,7 +158,8 @@ function playerScore(
   mode: QueueMode,
   maxConsecutiveGames: number,
   now: number,
-  tiebreak: number
+  tiebreak: number,
+  manualOrderLength: number = 0
 ): number {
   // Bucket by WHEN the player joined the queue, not by how long ago that was. Counting
   // elapsed time ("waited 3m59s → bucket 1, 4m01s → bucket 2") lets two players' buckets
@@ -154,6 +174,11 @@ function playerScore(
   // Consecutive game penalty: deprioritise if at/over limit (unless no alternatives)
   const consecutivePenalty = player.consecutiveGames >= maxConsecutiveGames ? 1_000_000 : 0;
 
+  // Manual queue order, when set, dominates everything below (see MANUAL_ORDER_WEIGHT).
+  // A player with no explicit position sits right after every manually-ordered player.
+  const manualRank = player.manualPriority ?? manualOrderLength;
+  const manualTerm = manualRank * MANUAL_ORDER_WEIGHT;
+
   // Strength is deliberately NOT part of a player's queue score: who plays next depends
   // only on fairness (wait, games played, sat out), never on how good someone is.
 
@@ -161,6 +186,7 @@ function playerScore(
     case QueueMode.BALANCED:
       // Primary: fewest games; secondary: longest wait (bucketed); tertiary: most sat out; then random tiebreak
       return (
+        manualTerm +
         consecutivePenalty +
         player.gamesPlayed * 10_000 +
         (-waitBucket) * 10 * WAIT_TIE_WINDOW_MINUTES +
@@ -171,6 +197,7 @@ function playerScore(
     case QueueMode.SMART:
       // Primary: longest wait (bucketed, no games-played factor); then most sat out
       return (
+        manualTerm +
         consecutivePenalty +
         (-waitBucket) * 10_000 * WAIT_TIE_WINDOW_MINUTES +
         (-player.gamesSatOut) * 5 +
@@ -184,6 +211,7 @@ function playerScore(
       const neverPlayedBoost = player.gamesPlayed === 0 ? -NEVER_PLAYED_PRIORITY_BOOST : 0;
       // Then: longest wait (bucketed); secondary: fewest games (gentle catch-up); tertiary: most sat out
       return (
+        manualTerm +
         consecutivePenalty +
         neverPlayedBoost +
         (-waitBucket) * 1_000 * WAIT_TIE_WINDOW_MINUTES +
@@ -535,7 +563,8 @@ function selectPlayers(
   keepApart?: ReadonlyArray<ReadonlyArray<string>>,
   mixEveryone: boolean = false,
   rankMatchups: boolean = false,
-  tiebreakSeed?: string
+  tiebreakSeed?: string,
+  manualOrderLength: number = 0
 ): { ok: true; selected: PlayerQuad } | { ok: false; reason: string } {
   if (eligible.length < 4) {
     return {
@@ -550,7 +579,7 @@ function selectPlayers(
   const scoreById = new Map<string, number>();
   for (const p of eligible) {
     const tiebreak = tiebreakSeed !== undefined ? stableTiebreak(tiebreakSeed, p.id) : random();
-    scoreById.set(p.id, playerScore(p, mode, maxConsecutiveGames, now, tiebreak));
+    scoreById.set(p.id, playerScore(p, mode, maxConsecutiveGames, now, tiebreak, manualOrderLength));
   }
 
   // If everyone is at consecutive limit, ignore the penalty (not enough alts)
@@ -840,6 +869,7 @@ export function rankQueue(
     rankMatchups = false,
     random = Math.random,
     tiebreakSeed,
+    manualOrderLength = 0,
   } = options;
 
   let pool = [...eligible];
@@ -847,7 +877,7 @@ export function rankQueue(
   const ordered: QueuePlayer[] = [];
 
   while (pool.length >= 4) {
-    const selection = selectPlayers(pool, mode, maxConsecutiveGames, random, groups, keepApart, mixEveryone, rankMatchups, tiebreakSeed);
+    const selection = selectPlayers(pool, mode, maxConsecutiveGames, random, groups, keepApart, mixEveryone, rankMatchups, tiebreakSeed, manualOrderLength);
     if (!selection.ok) break;
 
     const selectedIds = new Set(selection.selected.map((p) => p.id));
@@ -870,7 +900,8 @@ export function rankQueue(
         mode,
         maxConsecutiveGames,
         now,
-        tiebreakSeed !== undefined ? stableTiebreak(tiebreakSeed, p.id) : random()
+        tiebreakSeed !== undefined ? stableTiebreak(tiebreakSeed, p.id) : random(),
+        manualOrderLength
       ),
     }));
     scored.sort((a, b) => a.score - b.score);
@@ -959,6 +990,11 @@ export interface QueueEngineOptions {
   /** When set, each player's tiebreak is fixed per (seed, player) instead of drawn from
    * `random`, so the queue order doesn't reshuffle whenever someone joins or leaves. */
   tiebreakSeed?: string;
+  /** Number of players covered by the saved manual queue order (see QueuePlayer.manualPriority).
+   * Players without an explicit manualPriority are treated as sitting at this position, i.e.
+   * right after every manually-ordered player. 0 (the default) means no manual order is in
+   * effect, so manualPriority is ignored entirely and scoring behaves exactly as before. */
+  manualOrderLength?: number;
   random?: () => number;
   randomizeTeams?: boolean;
 }
@@ -976,6 +1012,7 @@ export function generateNextGame(
     rankMatchups = false,
     balanceTeams = false,
     tiebreakSeed,
+    manualOrderLength = 0,
     random = Math.random,
     // Team splits always minimize repeat partners/opponents by default, in every mode
     // (including HYBRID) — the queue-selection logic above already varies who gets picked
@@ -985,7 +1022,7 @@ export function generateNextGame(
     randomizeTeams = false,
   } = options;
 
-  const selection = selectPlayers(eligible, mode, maxConsecutiveGames, random, pastGroups, keepApart, mixEveryone, rankMatchups, tiebreakSeed);
+  const selection = selectPlayers(eligible, mode, maxConsecutiveGames, random, pastGroups, keepApart, mixEveryone, rankMatchups, tiebreakSeed, manualOrderLength);
   if (!selection.ok) return selection;
 
   const { teamA, teamB } = assignTeams(

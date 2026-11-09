@@ -8,6 +8,7 @@ import { QUEUE_ENGINE_VERSION } from "@/lib/queueEngine";
 import { loadClubHistory } from "@/lib/clubHistory";
 import { normaliseName } from "@/lib/playerStrength";
 import { recentGameMates } from "@/lib/lastGame";
+import { sortCourtsForDisplay } from "@/lib/courtOrder";
 
 function plain(map: unknown): Record<string, number> {
   if (map instanceof Map) return Object.fromEntries(map as Map<string, number>);
@@ -21,9 +22,9 @@ function plain(map: unknown): Record<string, number> {
  */
 export async function buildQueueSnapshot(sessionId: string): Promise<QueueSnapshot> {
   const [session, players, courts, games] = await Promise.all([
-    Session.findById(sessionId).select("settings separatedGroups clubId"),
+    Session.findById(sessionId).select("settings separatedGroups manualQueueOrder clubId"),
     SessionPlayer.find({ sessionId }),
-    Court.find({ sessionId }).sort({ courtNumber: 1 }),
+    Court.find({ sessionId }),
     Game.find({ sessionId }, { teamAPlayerIds: 1, teamBPlayerIds: 1, playersSatOutIds: 1, courtId: 1, gameNumber: 1, status: 1, startedAt: 1, clientId: 1 }).sort({ gameNumber: -1 }),
   ]);
 
@@ -80,8 +81,9 @@ export async function buildQueueSnapshot(sessionId: string): Promise<QueueSnapsh
     // Every offline-made game the server already has (any status), so the device never replays
     // an action the server has already applied when it takes a fresh snapshot mid-sync.
     knownClientIds: games.map((g) => g.clientId).filter((id): id is string => Boolean(id)),
-    courts: courts.map((c) => ({ id: String(c._id), courtNumber: c.courtNumber, name: c.name ?? null, status: c.status })),
+    courts: sortCourtsForDisplay(courts).map((c) => ({ id: String(c._id), courtNumber: c.courtNumber, name: c.name ?? null, status: c.status })),
     pastGroups: past.map((g) => [...g.teamAPlayerIds, ...g.teamBPlayerIds].map(String).sort().join(":")),
     keepApart: (session?.separatedGroups ?? []).map((g) => g.playerIds.map(String)),
+    manualQueueOrder: (session?.manualQueueOrder ?? []).map(String),
   };
 }

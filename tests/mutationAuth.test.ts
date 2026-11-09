@@ -71,6 +71,28 @@ describe("organiser mutations reject anonymous callers", () => {
     ],
     ["cancelGame", () => gameResolvers.Mutation.cancelGame(null, { id: "game-1" }, loggedOutContext)],
     ["deleteGame", () => gameResolvers.Mutation.deleteGame(null, { id: "game-1" }, loggedOutContext)],
+    [
+      "setManualQueueOrder",
+      () =>
+        sessionResolvers.Mutation.setManualQueueOrder(
+          null,
+          { sessionId: "session-1", playerIds: ["player-1"] },
+          loggedOutContext
+        ),
+    ],
+    [
+      "clearManualQueueOrder",
+      () => sessionResolvers.Mutation.clearManualQueueOrder(null, { sessionId: "session-1" }, loggedOutContext),
+    ],
+    [
+      "reorderCourts",
+      () =>
+        courtResolvers.Mutation.reorderCourts(
+          null,
+          { sessionId: "session-1", courtIds: ["court-1"] },
+          loggedOutContext
+        ),
+    ],
   ];
 
   it.each(cases)("%s throws UNAUTHENTICATED for a logged-out caller", async (_name, run) => {

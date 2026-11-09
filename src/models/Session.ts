@@ -70,6 +70,14 @@ const SessionSchema = new Schema(
       type: [new Schema({ playerIds: [{ type: Schema.Types.ObjectId, ref: "SessionPlayer" }] }, { _id: false })],
       default: [],
     },
+    /** Organiser's manual queue order, saved by dragging the queue list and hitting Save
+     * (see setManualQueueOrder). When present and non-empty, this is the dominant factor in
+     * who the queue engine selects next (QueuePlayer.manualPriority) - the top of this list
+     * becomes the next game, ahead of the usual wait-time/games-played ordering. Fairness
+     * rules (consecutive-game limit, fixed partners, trio-avoidance, keep-apart groups) still
+     * apply on top of it. A player not listed here sorts right after everyone who is. Cleared
+     * entirely by clearManualQueueOrder to go back to fully-automatic ordering. */
+    manualQueueOrder: { type: [{ type: Schema.Types.ObjectId, ref: "SessionPlayer" }], default: [] },
     finalisedAt: { type: Date },
   },
   { timestamps: true }
