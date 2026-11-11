@@ -35,16 +35,17 @@ describe("computeStandings", () => {
     expect(entry.winRate).toBe(0);
   });
 
-  it("never shares a rank, but reports a genuine tie for 1st so it can be played off", () => {
+  it("shares a rank between genuinely tied players, skipping ahead for whoever's next", () => {
     const players = [
       makePlayer({ id: "a", name: "A", gamesPlayed: 4, wins: 3, losses: 1 }),
       makePlayer({ id: "b", name: "B", gamesPlayed: 4, wins: 3, losses: 1 }),
       makePlayer({ id: "c", name: "C", gamesPlayed: 4, wins: 1, losses: 3 }),
     ];
     const standings = computeStandings(players, DEFAULT_SESSION_SETTINGS.rankingOrder);
-    expect(standings.map((s) => s.rank)).toEqual([1, 2, 3]);
+    // A and B are genuinely tied (same wins, same losses) so both are rank 1; C is only
+    // behind two players, so - standard competition ranking - C is 3rd, not 2nd.
+    expect(standings.map((s) => s.rank)).toEqual([1, 1, 3]);
     expect(standings[2].id).toBe("c");
-    // A and B are only separated by the arbitrary last-resort fallback, so it's a real tie.
     expect(findFirstPlaceTie(players, DEFAULT_SESSION_SETTINGS.rankingOrder).map((p) => p.id).sort()).toEqual(["a", "b"]);
   });
 
@@ -114,7 +115,7 @@ describe("computePodium", () => {
     expect(podium.every((p) => p.position <= 3)).toBe(true);
   });
 
-  it("keeps the podium to one player per position when several are tied, and flags the tie", () => {
+  it("shows every genuinely tied player at their shared podium position, not just one", () => {
     const players = [
       makePlayer({ id: "a", name: "A", gamesPlayed: 4, wins: 3, losses: 1 }),
       makePlayer({ id: "b", name: "B", gamesPlayed: 4, wins: 3, losses: 1 }),
@@ -123,7 +124,10 @@ describe("computePodium", () => {
     ];
     const standings = computeStandings(players, DEFAULT_SESSION_SETTINGS.rankingOrder);
     const podium = computePodium(standings);
-    expect(podium.map((p) => p.position)).toEqual([1, 2, 3]);
+    // a, b and c are genuinely tied for 1st, so all three appear on the podium at
+    // position 1 - none of them get bumped down to make room for the others.
+    expect(podium.map((p) => p.position)).toEqual([1, 1, 1]);
+    expect(podium.map((p) => p.id).sort()).toEqual(["a", "b", "c"]);
     expect(podium.map((p) => p.id)).not.toContain("d");
     expect(findFirstPlaceTie(players, DEFAULT_SESSION_SETTINGS.rankingOrder)).toHaveLength(3);
   });
