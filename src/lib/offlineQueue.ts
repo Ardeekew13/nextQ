@@ -128,6 +128,9 @@ export interface LocalState {
   pastGroups: Set<string>;
   /** Players free to be picked, longest-waiting first. */
   eligible: SnapshotPlayer[];
+  /** The organiser's manual queue order, minus anyone put in a game since (they come off it,
+   * as on the server). */
+  manualQueueOrder: string[];
 }
 
 export const LOCAL_GAME_PREFIX = "local-";
@@ -190,6 +193,7 @@ export function deriveLocalState(snapshot: QueueSnapshot, ops: LocalOp[]): Local
   let activeGames = snapshot.activeGames.map((g) => ({ ...g }));
   const pastGroups = new Set(snapshot.pastGroups);
   let lastGameNumber = snapshot.lastGameNumber;
+  let manualQueueOrder = [...(snapshot.manualQueueOrder ?? [])];
   // Actions the server already has are part of the snapshot: never apply them twice.
   // A synced offline game is known by its temporary id; if it's still on court, results
   // recorded against that temporary id apply to the server's copy of the game.
@@ -228,6 +232,7 @@ export function deriveLocalState(snapshot: QueueSnapshot, ops: LocalOp[]): Local
         startedAt: null,
       });
       pastGroups.add(groupKey([...selected]));
+      manualQueueOrder = manualQueueOrder.filter((id) => !selected.has(id));
     } else {
       const gameId = serverIdOf.get(op.gameId) ?? op.gameId;
       const game = activeGames.find((g) => g.id === gameId);
@@ -249,7 +254,7 @@ export function deriveLocalState(snapshot: QueueSnapshot, ops: LocalOp[]): Local
     return { ...c, status, currentGameId: current?.id ?? null };
   });
 
-  return { players, activeGames, courts, lastGameNumber, pastGroups, eligible };
+  return { players, activeGames, courts, lastGameNumber, pastGroups, eligible, manualQueueOrder };
 }
 
 function toQueuePlayer(p: SnapshotPlayer, manualPriority?: number): QueuePlayer {
@@ -275,8 +280,8 @@ function toQueuePlayer(p: SnapshotPlayer, manualPriority?: number): QueuePlayer 
 }
 
 /** Each manually-ordered player's saved position, keyed by id - see Session.manualQueueOrder. */
-function manualPriorityById(snapshot: QueueSnapshot): Map<string, number> {
-  return new Map((snapshot.manualQueueOrder ?? []).map((id, index) => [id, index]));
+function manualPriorityById(state: LocalState): Map<string, number> {
+  return new Map(state.manualQueueOrder.map((id, index) => [id, index]));
 }
 
 function engineOptions(snapshot: QueueSnapshot, state: LocalState) {
@@ -289,7 +294,7 @@ function engineOptions(snapshot: QueueSnapshot, state: LocalState) {
     tiebreakSeed: snapshot.sessionId,
     pastGroups: state.pastGroups,
     keepApart: snapshot.keepApart,
-    manualOrderLength: snapshot.manualQueueOrder?.length ?? 0,
+    manualOrderLength: state.manualQueueOrder.length,
     random: seededRandom(poolSeed(state.eligible.map((p) => p.id))),
   };
 }
@@ -298,7 +303,7 @@ function engineOptions(snapshot: QueueSnapshot, state: LocalState) {
 export function rankLocalQueue(snapshot: QueueSnapshot, state: LocalState): SnapshotPlayer[] {
   if (state.eligible.length === 0) return [];
   const byId = new Map(state.eligible.map((p) => [p.id, p]));
-  const manualIds = manualPriorityById(snapshot);
+  const manualIds = manualPriorityById(state);
   return rankQueue(
     state.eligible.map((p) => toQueuePlayer(p, manualIds.get(p.id))),
     engineOptions(snapshot, state)
@@ -316,7 +321,7 @@ export function generateLocalGame(snapshot: QueueSnapshot, state: LocalState): L
   if (state.eligible.length < 4) {
     return { ok: false, reason: "Need at least 4 checked-in players waiting to fill a court." };
   }
-  const manualIds = manualPriorityById(snapshot);
+  const manualIds = manualPriorityById(state);
   const result = generateNextGame(
     state.eligible.map((p) => toQueuePlayer(p, manualIds.get(p.id))),
     engineOptions(snapshot, state)

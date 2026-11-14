@@ -22,7 +22,7 @@ import { seededRandom } from "@/lib/seededRandom";
  * a browser still running an older copy sees a mismatch, warns "refresh this page", and lets
  * the server pick games instead of its out-of-date local copy.
  */
-export const QUEUE_ENGINE_VERSION = "2026-10-18";
+export const QUEUE_ENGINE_VERSION = "2026-11-14";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -132,6 +132,12 @@ const NEVER_PLAYED_PRIORITY_BOOST = 500_000;
  * a hard override of the consecutive-game safety net.
  */
 const MANUAL_ORDER_WEIGHT = 50_000_000;
+
+/** Swapping a manually-ordered player out of the next game costs more than every variety rule
+ * (repeated trio 1e13, catch-up 1e10, third game in a row 1.5e8, fairness 1e8 per game): the
+ * organiser chose who plays next. Only a keep-apart group (1e15), which the organiser also set,
+ * outranks it. The consecutive-game limit still applies through the queue score. */
+const MANUAL_KEEP_WEIGHT = 1e14;
 
 /** A player's strength for matchmaking; missing or corrupt values count as an average 50. */
 function strengthOf(p: QueuePlayer): number {
@@ -614,7 +620,8 @@ function selectPlayers(
 
   entries.sort((a, b) => a.score - b.score);
 
-  const behind = catchingUpIds(pool, mode);
+  // A saved manual order is the organiser's decision: late-group mixing doesn't rearrange it.
+  const behind = manualOrderLength > 0 ? new Set<string>() : catchingUpIds(pool, mode);
   const selectedList: QueuePlayer[] = [];
   // Ids currently seated as one half of an intact fixed pair - never bumped to make room for
   // another entry (that would split a pair, which must never happen; see take() below).
@@ -661,6 +668,17 @@ function selectPlayers(
     take(entry);
   }
 
+  // Manually-ordered players in the priority-order four. The variety rules below (new faces,
+  // mix everyone, repeated trios, no third game in a row, catch-up) may not swap them out: the
+  // organiser chose them. Only a keep-apart group outranks that.
+  const manualTop = new Set(
+    manualOrderLength > 0
+      ? selectedList.slice(0, 4).filter((p) => p.manualPriority !== undefined).map((p) => p.id)
+      : []
+  );
+  const manualDropped = (players: QueuePlayer[]) =>
+    manualTop.size === 0 ? 0 : [...manualTop].filter((id) => !players.some((p) => p.id === id)).length;
+
   // Variety rules, applied when the priority order would break one:
   //  - Keep apart: groups the organiser asked to separate never share a game (any mode).
   //  - Trio rule: no three players may share a game twice, ever, in this session. Skipped
@@ -684,15 +702,14 @@ function selectPlayers(
       // Keep-apart and repeated trios still come first; the queue score breaks remaining ties.
       const minGames = Math.min(...pool.map((p) => p.gamesPlayed));
       let window = minGames + 1;
-      let windowed = entries.filter((e) =>
-        (e.kind === "pair" ? e.players : [e.player]).every((p) => p.gamesPlayed <= window)
-      );
+      const inWindow = (e: Entry) =>
+        (e.kind === "pair" ? e.players : [e.player]).every((p) => p.gamesPlayed <= window) ||
+        (e.kind === "pair" ? e.players : [e.player]).some((p) => manualTop.has(p.id));
+      let windowed = entries.filter(inWindow);
       const playersIn = (list: Entry[]) => list.reduce((n, e) => n + (e.kind === "pair" ? 2 : 1), 0);
       while (playersIn(windowed) < 8 && window < minGames + 50) {
         window += 1;
-        windowed = entries.filter((e) =>
-          (e.kind === "pair" ? e.players : [e.player]).every((p) => p.gamesPlayed <= window)
-        );
+        windowed = entries.filter(inWindow);
       }
       // Same rule order as the default path: keep-apart, no repeated trio, then FAIRNESS against
       // the plain priority-order four (nobody may replace someone who has played fewer games),
@@ -702,6 +719,7 @@ function selectPlayers(
       const mixViolations = (players: QueuePlayer[]) =>
         countKeepApartBreaches(players, keepApart) * 1e15 +
         countRepeatedTriples(players, pastTriples) * 1e13 +
+        manualDropped(players) * MANUAL_KEEP_WEIGHT +
         unfairSwapAgainst(mixDefaultTop, players) * 100_000 +
         catchUpBunching(players, behind) +
         thirdInARowPairs(players) * THIRD_IN_A_ROW_WEIGHT +
@@ -745,6 +763,7 @@ function selectPlayers(
       const orderedViolations = (players: QueuePlayer[]) =>
         countKeepApartBreaches(players, keepApart) * 1e15 +
         countRepeatedTriples(players, pastTriplesForOrder) * 1e13 +
+        manualDropped(players) * MANUAL_KEEP_WEIGHT +
         unfairSwapAgainst(defaultTop, players) * 100_000 +
         catchUpBunching(players, behind) +
         // Not in strict SMART.
@@ -820,7 +839,9 @@ function selectPlayers(
     let swapIndex = -1;
     for (let i = selected.length - 1; i >= 0; i--) {
       const candidate = selected[i];
-      const paired = Boolean(candidate.fixedPartnerId && selectedIds.has(candidate.fixedPartnerId));
+      const paired =
+        Boolean(candidate.fixedPartnerId && selectedIds.has(candidate.fixedPartnerId)) ||
+        manualTop.has(candidate.id); // a manually-ordered player keeps their spot too
       if (!paired) {
         swapIndex = i;
         break;

@@ -1,6 +1,7 @@
 import { GraphQLError } from "graphql";
 import { Game, type GameDoc } from "@/models/Game";
 import { Court } from "@/models/Court";
+import { Session } from "@/models/Session";
 import { SessionPlayer, type SessionPlayerDoc } from "@/models/SessionPlayer";
 import { generateGame, type MatchPlayer } from "@/lib/matchmaking";
 import { generateNextGame as queueEngineGenerate, type QueuePlayer } from "@/lib/queueEngine";
@@ -14,6 +15,12 @@ import { CourtStatus, GameSource, GameStatus, WinningTeam, PairingMode, QueueMod
 import { requireSessionOwner, requireOrganiser } from "../guards";
 import { loadCourt, loadPlayers, type GraphQLContext } from "../context";
 import type { HydratedDocument } from "mongoose";
+
+/** A manual queue order says who plays NEXT: once someone from it is in a game they're taken off
+ * it (the rest keep their order), so they don't jump the queue again after their game. */
+function releaseFromManualOrder(sessionId: unknown, playerIds: unknown[]) {
+  return Session.updateOne({ _id: sessionId }, { $pull: { manualQueueOrder: { $in: playerIds } } });
+}
 
 function toMatchPlayer(doc: HydratedDocument<SessionPlayerDoc>): MatchPlayer {
   const partnerHistory: Map<string, number> =
@@ -168,6 +175,7 @@ export const gameResolvers = {
           ? SessionPlayer.updateMany({ _id: { $in: satOut } }, { $set: { consecutiveGames: 0 } })
           : Promise.resolve(),
         court.save(),
+        releaseFromManualOrder(session._id, selected),
       ]);
       return game;
     },
@@ -274,6 +282,7 @@ export const gameResolvers = {
             )
           : Promise.resolve(),
         court.save(),
+        releaseFromManualOrder(session._id, [...selectedIds]),
       ]);
 
       return game;
@@ -363,6 +372,7 @@ export const gameResolvers = {
           ? SessionPlayer.updateMany({ _id: { $in: playersSatOutIds } }, { $set: { consecutiveGames: 0 } })
           : Promise.resolve(),
         court.save(),
+        releaseFromManualOrder(court.sessionId, allPlayerIds),
       ]);
 
       return game;
