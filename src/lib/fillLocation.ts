@@ -66,12 +66,20 @@ export async function fillOnDevice(opts: {
  * from it would put players who are already on another court into the new game.
  */
 export function snapshotMatchesServer(
-  snapshot: { activeGames: Array<{ id: string }>; players: Array<{ id: string; checkedIn: boolean; active: boolean }> },
-  server: { activeGameIds: string[]; availablePlayerIds: string[] }
+  snapshot: {
+    activeGames: Array<{ id: string }>;
+    players: Array<{ id: string; checkedIn: boolean; active: boolean }>;
+    manualQueueOrder?: string[];
+  },
+  server: { activeGameIds: string[]; availablePlayerIds: string[]; manualQueueOrder?: string[] }
 ): boolean {
   const same = (a: string[], b: string[]) => a.length === b.length && new Set([...a, ...b]).size === a.length;
+  // The saved manual order decides the next game, so a copy with an older order (saved a moment
+  // ago, or players taken off it by a game) would pick different players than "Next up" shows.
+  const sameOrder = (a: string[], b: string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
   return (
     same(snapshot.activeGames.map((g) => g.id), server.activeGameIds) &&
-    same(snapshot.players.filter((p) => p.checkedIn && p.active).map((p) => p.id), server.availablePlayerIds)
+    same(snapshot.players.filter((p) => p.checkedIn && p.active).map((p) => p.id), server.availablePlayerIds) &&
+    (server.manualQueueOrder === undefined || sameOrder(snapshot.manualQueueOrder ?? [], server.manualQueueOrder))
   );
 }

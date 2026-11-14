@@ -316,6 +316,7 @@ export function OverviewTab({
 			snapshotMatchesServer(snapshot, {
 				activeGameIds: (server.activeGames ?? []).map((g: any) => g.id),
 				availablePlayerIds: (server.players ?? []).filter((p: any) => p.checkedIn && p.active).map((p: any) => p.id),
+				manualQueueOrder: (server.manualQueueOrder ?? []).map(String),
 			});
 		return fillOnDevice({
 			hasSnapshot: Boolean(snapshot),

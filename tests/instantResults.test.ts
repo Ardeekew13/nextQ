@@ -77,6 +77,13 @@ describe("snapshotMatchesServer", () => {
   it("a game has finished on the server", () => {
     expect(snapshotMatchesServer(snapshot, { activeGameIds: [], availablePlayerIds: ["a", "b"] })).toBe(false);
   });
+  it("the saved manual queue order changed (just saved, or players taken off it by a game)", () => {
+    const withOrder = { ...snapshot, manualQueueOrder: ["a", "b"] };
+    expect(snapshotMatchesServer(withOrder, { activeGameIds: ["g1"], availablePlayerIds: ["a", "b"], manualQueueOrder: ["a", "b"] })).toBe(true);
+    expect(snapshotMatchesServer(withOrder, { activeGameIds: ["g1"], availablePlayerIds: ["a", "b"], manualQueueOrder: ["b", "a"] })).toBe(false);
+    expect(snapshotMatchesServer(snapshot, { activeGameIds: ["g1"], availablePlayerIds: ["a", "b"], manualQueueOrder: ["a"] })).toBe(false);
+    expect(snapshotMatchesServer(withOrder, { activeGameIds: ["g1"], availablePlayerIds: ["a", "b"], manualQueueOrder: [] })).toBe(false);
+  });
   it("someone checked in or out since", () => {
     expect(snapshotMatchesServer(snapshot, { activeGameIds: ["g1"], availablePlayerIds: ["a", "b", "c"] })).toBe(false);
     expect(snapshotMatchesServer(snapshot, { activeGameIds: ["g1"], availablePlayerIds: ["a"] })).toBe(false);
