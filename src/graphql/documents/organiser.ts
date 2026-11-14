@@ -455,6 +455,7 @@ export const SESSION_DASHBOARD_QUERY = gql`
         id
         name
         gamesPlayed
+        consecutiveGames
         queueEnteredAt
       }
       manualQueueOrder
@@ -535,6 +536,7 @@ export const SESSION_COURTS_QUERY = gql`
         id
         name
         gamesPlayed
+        consecutiveGames
         queueEnteredAt
       }
       checkedInPlayerCount

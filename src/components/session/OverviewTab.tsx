@@ -108,7 +108,15 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 }
 
 /** One draggable row while the organiser is reordering the queue (see "Edit order" below). */
-function SortableQueueRow({ id, index, name }: { id: string; index: number; name: string }) {
+/** Ids of queued players the engine will rest for one game: at the back-to-back limit, as long
+ * as at least 4 others can still play (mirrors the consecutive-game rule in queueEngine). */
+function restingPlayerIds(players: any[], maxConsecutiveGames: number): Set<string> {
+	const atLimit = players.filter((p: any) => (p.consecutiveGames ?? 0) >= maxConsecutiveGames);
+	if (players.length - atLimit.length < 4) return new Set();
+	return new Set(atLimit.map((p: any) => p.id));
+}
+
+function SortableQueueRow({ id, index, name, resting }: { id: string; index: number; name: string; resting?: string }) {
 	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
 	return (
 		<div
@@ -132,7 +140,10 @@ function SortableQueueRow({ id, index, name }: { id: string; index: number; name
 			<span style={{ fontSize: 13, fontWeight: 700, color: "#e11d74", fontFamily: "'Barlow Condensed', sans-serif", width: 18, flexShrink: 0 }}>
 				{index + 1}
 			</span>
-			<span style={{ fontSize: 14, fontWeight: 600, color: "#1d1f20", flex: 1, minWidth: 0 }}>{name}</span>
+			<span style={{ flex: 1, minWidth: 0 }}>
+				<span style={{ display: "block", fontSize: 14, fontWeight: 600, color: "#1d1f20" }}>{name}</span>
+				{resting && <span style={{ display: "block", fontSize: 11, color: "#b45309" }}>{resting}</span>}
+			</span>
 			<span style={{ fontSize: 16, color: "rgba(29,31,32,0.3)", flexShrink: 0 }}>⠿</span>
 		</div>
 	);
@@ -412,6 +423,7 @@ export function OverviewTab({
 			name: p.name,
 			gamesPlayed: p.gamesPlayed,
 			gamesSatOut: p.gamesSatOut,
+			consecutiveGames: p.consecutiveGames,
 			queueEnteredAt: p.queueEnteredAt,
 		}));
 		const next = generateLocalGame(snapshot, local);
@@ -425,6 +437,9 @@ export function OverviewTab({
 	}, [data, snapshot, local]);
 
 	const queuedPlayers: any[] = session?.queuedPlayers ?? [];
+	const maxConsecutive: number = session?.settings?.maxConsecutiveGames ?? 2;
+	const restingIds = restingPlayerIds(queuedPlayers, maxConsecutive);
+	const restingLabel = `Sits out next game · ${maxConsecutive} in a row`;
 	// The court grid's current order: the organiser's just-dragged order while it's still
 	// saving, otherwise the server's order. The override is only trusted when it covers
 	// exactly the courts that exist right now - e.g. once a court is added or removed it no
@@ -799,7 +814,22 @@ export function OverviewTab({
 			// showing the OLD order even though the save genuinely succeeded.
 			markSnapshotStale();
 			void refreshSnapshot();
-			message.success("Custom queue order saved — it'll decide who's picked next.");
+			// Saving always goes through, but warn when the back-to-back limit will rest someone
+			// the organiser put in the next game, so the list doesn't look like it ignored them.
+			const restingInNext = draftQueueOrder
+				.slice(0, 4)
+				.filter((id) => restingIds.has(id))
+				.map((id) => queuedPlayers.find((p: any) => p.id === id)?.name ?? "A player");
+			if (restingInNext.length > 0) {
+				const names = restingInNext.length === 1 ? restingInNext[0] : `${restingInNext.slice(0, -1).join(", ")} and ${restingInNext[restingInNext.length - 1]}`;
+				const verb = restingInNext.length === 1 ? "has" : "have";
+				message.warning({
+					content: `Order saved. ${names} ${verb} played ${maxConsecutive} games in a row, so they sit out the next game and the next player in your order moves up.`,
+					duration: 8,
+				});
+			} else {
+				message.success("Custom queue order saved — it'll decide who's picked next.");
+			}
 			setDraftQueueOrder(null);
 			setEditingQueueOrder(false);
 		} catch (err) {
@@ -1750,13 +1780,18 @@ export function OverviewTab({
 								<Text style={{ fontSize: 11, color: "rgba(29,31,32,0.6)" }}>
 									Drag players to set a custom order, then Save. The top of this list is who plays next.
 								</Text>
+								{(draftQueueOrder ?? []).slice(0, 4).some((id) => restingIds.has(id)) && (
+									<Text style={{ display: "block", marginTop: 4, fontSize: 11, color: "#b45309" }}>
+										Heads up: anyone marked "sits out next game" has played {maxConsecutive} in a row, so the next player in your order takes their spot. You can still save.
+									</Text>
+								)}
 							</div>
 							<DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleQueueOrderDragEnd}>
 								<SortableContext items={draftQueueOrder ?? []} strategy={verticalListSortingStrategy}>
 									{(draftQueueOrder ?? []).map((playerId, index) => {
 										const player = queuedPlayers.find((p: any) => p.id === playerId);
 										if (!player) return null;
-										return <SortableQueueRow key={playerId} id={playerId} index={index} name={player.name} />;
+										return <SortableQueueRow key={playerId} id={playerId} index={index} name={player.name} resting={restingIds.has(playerId) ? restingLabel : undefined} />;
 									})}
 								</SortableContext>
 							</DndContext>
@@ -1848,6 +1883,9 @@ export function OverviewTab({
 													{player.gamesPlayed}{" "}
 													{player.gamesPlayed === 1 ? "game" : "games"}
 												</div>
+												{restingIds.has(player.id) && (
+													<div style={{ fontSize: 11, color: "#b45309" }}>{restingLabel}</div>
+												)}
 											</div>
 											<span
 												style={{
@@ -1874,7 +1912,7 @@ export function OverviewTab({
 									}}
 								>
 									<Text type="secondary" style={{ fontSize: 11 }}>
-										{(queuePage - 1) * QUEUE_PAGE_SIZE + 1}–{Math.min(queuePage * QUEUE_PAGE_SIZE, filteredQueue.length)} of {filteredQueue.length} · sorted by wait
+										{(queuePage - 1) * QUEUE_PAGE_SIZE + 1}–{Math.min(queuePage * QUEUE_PAGE_SIZE, filteredQueue.length)} of {filteredQueue.length} · {(session?.manualQueueOrder?.length ?? 0) > 0 ? "custom order" : "sorted by wait"}
 									</Text>
 									{totalQueuePages > 1 && (
 										<div style={{ display: "flex", gap: 4, alignItems: "center" }}>

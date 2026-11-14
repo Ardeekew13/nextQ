@@ -193,6 +193,8 @@ export const typeDefs = gql`
     currentStreak: Int!
     longestWinStreak: Int!
     gamesSatOut: Int!
+    """Games played back to back without a break; at the session's limit the queue rests them for one game."""
+    consecutiveGames: Int!
     partnerHistory: [PlayerHistoryEntry!]!
     opponentHistory: [PlayerHistoryEntry!]!
     createdAt: Date!
