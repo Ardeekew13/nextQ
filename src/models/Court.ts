@@ -8,6 +8,11 @@ const CourtSchema = new Schema(
     sessionId: { type: Schema.Types.ObjectId, ref: "Session", required: true, index: true },
     courtNumber: { type: Number, required: true },
     name: { type: String, trim: true },
+    /** Where this court sits in the organiser's drag-and-dropped display order (see
+     * reorderCourts), lower first. Left unset until the organiser reorders at least once -
+     * sortCourtsForDisplay falls back to courtNumber for any court with no displayOrder yet,
+     * so courts display exactly as before until someone drags one. */
+    displayOrder: { type: Number },
     status: {
       type: String,
       enum: Object.values(CourtStatus),

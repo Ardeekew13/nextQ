@@ -5,9 +5,13 @@ import {
 	CANCEL_GAME,
 	CHECK_IN_PLAYER,
 	DELETE_COURT,
+	UPDATE_COURT,
+	REORDER_COURTS,
 	FILL_COURT_MANUALLY,
 	GENERATE_NEXT_GAME,
 	SEPARATE_PLAYERS,
+	SET_MANUAL_QUEUE_ORDER,
+	CLEAR_MANUAL_QUEUE_ORDER,
 	UPDATE_SESSION,
 	SESSION_DASHBOARD_QUERY,
 	SESSION_QUEUE_SNAPSHOT,
@@ -19,7 +23,7 @@ import { DEFAULT_QUEUE_SETTINGS } from "@/types/enums";
 import { useApolloClient, useMutation, useQuery } from "@apollo/client";
 import { placeGameOnCourt, shouldShowDeviceCopy, slowToSync } from "@/lib/courtDisplay";
 import { App, Button, Empty, Input, Modal, Popover, Switch, Typography } from "antd";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
 	ScoreEntryForm,
 	type ScoreEntryValues,
@@ -35,6 +39,24 @@ import {
 	type QueueSnapshot,
 } from "@/lib/offlineQueue";
 import { QUEUE_ENGINE_VERSION } from "@/lib/queueEngine";
+import {
+	DndContext,
+	PointerSensor,
+	KeyboardSensor,
+	closestCenter,
+	useSensor,
+	useSensors,
+	type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+	SortableContext,
+	verticalListSortingStrategy,
+	rectSortingStrategy,
+	useSortable,
+	arrayMove,
+	sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { fillOnDevice, snapshotMatchesServer } from "@/lib/fillLocation";
 import { loadAutoFill, saveAutoFill } from "@/lib/autoFill";
 import { isNetworkFailure, loadIdMap, loadPending, loadSnapshot, saveSnapshot } from "@/lib/offlineResults";
@@ -85,6 +107,59 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 	return Promise.race([promise, new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))]);
 }
 
+/** One draggable row while the organiser is reordering the queue (see "Edit order" below). */
+function SortableQueueRow({ id, index, name }: { id: string; index: number; name: string }) {
+	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+	return (
+		<div
+			ref={setNodeRef}
+			style={{
+				transform: CSS.Transform.toString(transform),
+				transition,
+				opacity: isDragging ? 0.5 : 1,
+				display: "flex",
+				alignItems: "center",
+				gap: 12,
+				padding: "10px 16px",
+				borderBottom: "1px solid rgba(138,39,72,0.07)",
+				background: "#fff",
+				cursor: "grab",
+				touchAction: "none",
+			}}
+			{...attributes}
+			{...listeners}
+		>
+			<span style={{ fontSize: 13, fontWeight: 700, color: "#e11d74", fontFamily: "'Barlow Condensed', sans-serif", width: 18, flexShrink: 0 }}>
+				{index + 1}
+			</span>
+			<span style={{ fontSize: 14, fontWeight: 600, color: "#1d1f20", flex: 1, minWidth: 0 }}>{name}</span>
+			<span style={{ fontSize: 16, color: "rgba(29,31,32,0.3)", flexShrink: 0 }}>⠿</span>
+		</div>
+	);
+}
+
+
+/** Drag handle for reordering a court card. Only this small handle is draggable - the
+ * rest of the card stays interactive (fill/score buttons, lineup editor, etc). */
+function SortableCourtCard({ id, children }: { id: string; children: (dragHandle: ReactNode) => ReactNode }) {
+	const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
+	const dragHandle = (
+		<span
+			ref={setActivatorNodeRef}
+			{...attributes}
+			{...listeners}
+			style={{ cursor: "grab", touchAction: "none", color: "rgba(29,31,32,0.3)", fontSize: 15, lineHeight: 1, flexShrink: 0, padding: "2px 2px" }}
+		>
+			⠿
+		</span>
+	);
+	return (
+		<div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1, zIndex: isDragging ? 1 : undefined, position: "relative" }}>
+			{children(dragHandle)}
+		</div>
+	);
+}
+
 export function OverviewTab({
 	sessionId,
 	onStats,
@@ -124,6 +199,19 @@ export function OverviewTab({
 		],
 		awaitRefetchQueries: true,
 	});
+	const [updateCourt] = useMutation(UPDATE_COURT, {
+		refetchQueries: [{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } }],
+	});
+	const [reorderCourtsMutation] = useMutation(REORDER_COURTS);
+	// Local override of the court display order, applied the instant a drag finishes so the
+	// grid doesn't wait on a round trip. Discarded automatically (falls back to the server's
+	// order) the moment it no longer matches the current set of courts - e.g. after a court is
+	// added or removed - so it can never go stale.
+	const [courtOrderOverride, setCourtOrderOverride] = useState<string[] | null>(null);
+	const courtDndSensors = useSensors(
+		useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+		useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+	);
 
 	const [scoreGame, setScoreGame] = useState<any>(null);
 	const [editResultGame, setEditResultGame] = useState<any>(null);
@@ -133,6 +221,23 @@ export function OverviewTab({
 	const [updateSession, { loading: updatingMix }] = useMutation(UPDATE_SESSION);
 	const [queuePage, setQueuePage] = useState(1);
 	const QUEUE_PAGE_SIZE = 10;
+
+	// ── Manual queue order (drag to reorder, then Save) ──
+	const [editingQueueOrder, setEditingQueueOrder] = useState(false);
+	// Player ids in the order being dragged, while editing. Null when not editing.
+	const [draftQueueOrder, setDraftQueueOrder] = useState<string[] | null>(null);
+	const [setManualQueueOrder, { loading: savingQueueOrder }] = useMutation(SET_MANUAL_QUEUE_ORDER, {
+		refetchQueries: [{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } }],
+		awaitRefetchQueries: true,
+	});
+	const [clearManualQueueOrder, { loading: clearingQueueOrder }] = useMutation(CLEAR_MANUAL_QUEUE_ORDER, {
+		refetchQueries: [{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } }],
+		awaitRefetchQueries: true,
+	});
+	const dndSensors = useSensors(
+		useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+		useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+	);
 
 	// ── Offline overlay ──
 	// The queue state is kept on this device. While anything is waiting to sync (or the
@@ -319,6 +424,18 @@ export function OverviewTab({
 	}, [data, snapshot, local]);
 
 	const queuedPlayers: any[] = session?.queuedPlayers ?? [];
+	// The court grid's current order: the organiser's just-dragged order while it's still
+	// saving, otherwise the server's order. The override is only trusted when it covers
+	// exactly the courts that exist right now - e.g. once a court is added or removed it no
+	// longer matches and this falls straight back to the server's order on its own.
+	const serverCourts: any[] = session?.courts ?? [];
+	const courtOrderIsCurrent =
+		!!courtOrderOverride &&
+		courtOrderOverride.length === serverCourts.length &&
+		serverCourts.every((c: any) => courtOrderOverride.includes(c.id));
+	const orderedCourts: any[] = courtOrderIsCurrent
+		? courtOrderOverride!.map((id) => serverCourts.find((c: any) => c.id === id)).filter(Boolean)
+		: serverCourts;
 	const checkedIn =
 		session?.players.filter((p: any) => p.checkedIn).length ?? 0;
 	const onCourt =
@@ -645,6 +762,75 @@ export function OverviewTab({
 				err instanceof Error ? err.message : "Could not add player",
 			);
 		}
+	}
+
+	function handleStartQueueOrderEdit() {
+		// Always start from the FULL current queue (every waiting player, not just the
+		// current search/page), so saving never silently drops someone out of the order.
+		setDraftQueueOrder(queuedPlayers.map((p: any) => p.id));
+		setEditingQueueOrder(true);
+	}
+
+	function handleCancelQueueOrderEdit() {
+		setDraftQueueOrder(null);
+		setEditingQueueOrder(false);
+	}
+
+	function handleQueueOrderDragEnd(event: DragEndEvent) {
+		const { active, over } = event;
+		if (!over || active.id === over.id) return;
+		setDraftQueueOrder((current) => {
+			if (!current) return current;
+			const oldIndex = current.indexOf(String(active.id));
+			const newIndex = current.indexOf(String(over.id));
+			if (oldIndex === -1 || newIndex === -1) return current;
+			return arrayMove(current, oldIndex, newIndex);
+		});
+	}
+
+	async function handleSaveQueueOrder() {
+		if (!draftQueueOrder || draftQueueOrder.length === 0) return;
+		try {
+			await setManualQueueOrder({ variables: { sessionId, playerIds: draftQueueOrder } });
+			message.success("Custom queue order saved — it'll decide who's picked next.");
+			setDraftQueueOrder(null);
+			setEditingQueueOrder(false);
+		} catch (err) {
+			message.error(err instanceof Error ? err.message : "Could not save the queue order");
+		}
+	}
+
+	async function handleResetQueueOrder() {
+		try {
+			await clearManualQueueOrder({ variables: { sessionId } });
+			message.success("Back to automatic queue ordering.");
+		} catch (err) {
+			message.error(err instanceof Error ? err.message : "Could not reset the queue order");
+		}
+	}
+
+	async function handleRenameCourt(courtId: string, name: string) {
+		try {
+			await updateCourt({ variables: { id: courtId, input: { name } } });
+		} catch (err) {
+			message.error(err instanceof Error ? err.message : "Could not rename court");
+			throw err; // let the card know the save failed so it stays open
+		}
+	}
+
+	function handleCourtDragEnd(event: DragEndEvent) {
+		const { active, over } = event;
+		if (!over || active.id === over.id) return;
+		const currentOrder = orderedCourts.map((c: any) => c.id);
+		const oldIndex = currentOrder.indexOf(String(active.id));
+		const newIndex = currentOrder.indexOf(String(over.id));
+		if (oldIndex === -1 || newIndex === -1) return;
+		const newOrder = arrayMove(currentOrder, oldIndex, newIndex);
+		setCourtOrderOverride(newOrder);
+		reorderCourtsMutation({ variables: { sessionId, courtIds: newOrder } }).catch((err) => {
+			setCourtOrderOverride(null);
+			message.error(err instanceof Error ? err.message : "Could not save the new court order");
+		});
 	}
 
 	return (
@@ -1152,7 +1338,7 @@ export function OverviewTab({
 						style={{
 							display: "grid",
 							gridTemplateColumns: (() => {
-								const courtCount = session.courts.length;
+								const courtCount = orderedCourts.length;
 								if (courtCount === 1) return "1fr";
 								if (courtCount === 2) return "repeat(2, 1fr)";
 								if (courtCount === 3) return "repeat(3, 1fr)";
@@ -1162,10 +1348,15 @@ export function OverviewTab({
 							padding: 20,
 						}}
 					>
-						{session.courts.map((court: any) => (
+					<DndContext sensors={courtDndSensors} collisionDetection={closestCenter} onDragEnd={handleCourtDragEnd}>
+						<SortableContext items={orderedCourts.map((c: any) => c.id)} strategy={rectSortingStrategy}>
+						{orderedCourts.map((court: any) => (
+							<SortableCourtCard key={court.id} id={court.id}>
+							{(dragHandle) => (
 							<CourtCard
-								key={court.id}
 								court={court}
+								dragHandle={dragHandle}
+								onRename={handleRenameCourt}
 								generating={generating || fillingManually}
 								sessionActive={session.status === "ACTIVE"}
 								allPlayers={session.players.filter(
@@ -1218,7 +1409,11 @@ export function OverviewTab({
 									});
 								}}
 							/>
+							)}
+							</SortableCourtCard>
 						))}
+						</SortableContext>
+					</DndContext>
 					</div>
 
 					{/* On deck banner */}
@@ -1493,13 +1688,70 @@ export function OverviewTab({
 						>
 							Waiting Queue
 						</span>
-						{queuedPlayers.length > 0 && (
-							<span style={{ fontSize: 11, fontWeight: 700, color: "#e11d74" }}>
-								{queuedPlayers.length} waiting
-							</span>
-						)}
+						<div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+							{!editingQueueOrder && queuedPlayers.length > 0 && (
+								<span style={{ fontSize: 11, fontWeight: 700, color: "#e11d74" }}>
+									{queuedPlayers.length} waiting
+								</span>
+							)}
+							{editingQueueOrder ? (
+								<div style={{ display: "flex", gap: 6 }}>
+									<Button size="small" onClick={handleCancelQueueOrderEdit}>
+										Cancel
+									</Button>
+									<Button
+										size="small"
+										type="primary"
+										style={{ background: "#e11d74", borderColor: "#e11d74" }}
+										loading={savingQueueOrder}
+										onClick={handleSaveQueueOrder}
+									>
+										Save
+									</Button>
+								</div>
+							) : (
+								<div style={{ display: "flex", gap: 6 }}>
+									{(session?.manualQueueOrder?.length ?? 0) > 0 && (
+										<Button size="small" loading={clearingQueueOrder} onClick={handleResetQueueOrder}>
+											Reset order
+										</Button>
+									)}
+									{queuedPlayers.length >= 2 && (
+										<Button size="small" onClick={handleStartQueueOrderEdit}>
+											Edit order
+										</Button>
+									)}
+								</div>
+							)}
+						</div>
 					</div>
+					{!editingQueueOrder && (session?.manualQueueOrder?.length ?? 0) > 0 && (
+						<div style={{ padding: "8px 16px", background: "#fdf2f8", borderBottom: "1px solid rgba(138,39,72,0.08)" }}>
+							<Text style={{ fontSize: 11, color: "#9d174d" }}>
+								Custom order active — this decides who plays next, ahead of the usual wait-time order.
+							</Text>
+						</div>
+					)}
 
+					{editingQueueOrder ? (
+						<div>
+							<div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(138,39,72,0.08)", background: "#fdf2f8" }}>
+								<Text style={{ fontSize: 11, color: "rgba(29,31,32,0.6)" }}>
+									Drag players to set a custom order, then Save. The top of this list is who plays next.
+								</Text>
+							</div>
+							<DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleQueueOrderDragEnd}>
+								<SortableContext items={draftQueueOrder ?? []} strategy={verticalListSortingStrategy}>
+									{(draftQueueOrder ?? []).map((playerId, index) => {
+										const player = queuedPlayers.find((p: any) => p.id === playerId);
+										if (!player) return null;
+										return <SortableQueueRow key={playerId} id={playerId} index={index} name={player.name} />;
+									})}
+								</SortableContext>
+							</DndContext>
+						</div>
+					) : (
+						<>
 					{/* Search + add */}
 					<div
 						style={{
@@ -1656,6 +1908,8 @@ export function OverviewTab({
 							</>
 						)}
 					</div>
+						</>
+					)}
 				</div>
 			</div>
 

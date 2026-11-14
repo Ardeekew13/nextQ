@@ -350,6 +350,9 @@ export const typeDefs = gql`
     """Players who keep landing in the same games (2+ players sharing 2+ games), strongest first,
     so the organiser can be prompted to break them up. Groups already separated are excluded."""
     togetherGroups: [TogetherGroup!]!
+    """Organiser-saved manual queue order (session player ids, front of the queue first).
+    Empty when no manual order is set, meaning the queue is fully automatic."""
+    manualQueueOrder: [ID!]!
     """Players genuinely tied for 1st place under this session's ranking rules.
     Empty when there's a clear #1. When 2+ players show up here, they should
     play each other to decide the winner — useful when a prize is on the line."""
@@ -557,6 +560,14 @@ export const typeDefs = gql`
     updateSession(id: ID!, input: UpdateSessionInput!): Session!
     """Breaks a group up: from now on the queue never puts two or more of these players in the same game."""
     separatePlayers(sessionId: ID!, playerIds: [ID!]!): Session!
+    """Saves a custom queue order: playerIds front-to-back is the order the queue engine
+    will pick from next, overriding the usual wait-time/games-played ordering (fairness
+    rules like the consecutive-game limit and fixed partners still apply on top). Every id
+    must be a checked-in player in this session; a player left out sorts after everyone
+    listed, in their normal automatic order."""
+    setManualQueueOrder(sessionId: ID!, playerIds: [ID!]!): Session!
+    """Clears a saved manual queue order, returning the queue to fully-automatic ordering."""
+    clearManualQueueOrder(sessionId: ID!): Session!
     startSession(id: ID!): Session!
     pauseSession(id: ID!): Session!
     resumeSession(id: ID!): Session!
@@ -582,6 +593,10 @@ export const typeDefs = gql`
     updateCourt(id: ID!, input: UpdateCourtInput!): Court!
     disableCourt(id: ID!, disabled: Boolean!): Court!
     deleteCourt(id: ID!): Boolean!
+    """Reorders this session's courts for display (e.g. dragging court cards on the
+    Overview tab). courtIds must list every court in this session exactly once,
+    front-to-back in the new order."""
+    reorderCourts(sessionId: ID!, courtIds: [ID!]!): [Court!]!
 
     generateNextGame(sessionId: ID!, courtId: ID!): Game!
     "Saves a game picked in the browser (local-first, or offline). Idempotent on clientGameId. createdOffline: made with no connection (defaults to true for older clients)."

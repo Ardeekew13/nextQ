@@ -457,6 +457,7 @@ export const SESSION_DASHBOARD_QUERY = gql`
         gamesPlayed
         queueEnteredAt
       }
+      manualQueueOrder
       togetherGroups {
         id
         gamesTogether
@@ -627,6 +628,24 @@ export const SEPARATE_PLAYERS = gql`
   }
 `;
 
+export const SET_MANUAL_QUEUE_ORDER = gql`
+  mutation SetManualQueueOrder($sessionId: ID!, $playerIds: [ID!]!) {
+    setManualQueueOrder(sessionId: $sessionId, playerIds: $playerIds) {
+      id
+      manualQueueOrder
+    }
+  }
+`;
+
+export const CLEAR_MANUAL_QUEUE_ORDER = gql`
+  mutation ClearManualQueueOrder($sessionId: ID!) {
+    clearManualQueueOrder(sessionId: $sessionId) {
+      id
+      manualQueueOrder
+    }
+  }
+`;
+
 export const SESSION_GAMES_QUERY = gql`
   ${GAME_FIELDS}
   query SessionGames($sessionId: ID!) {
@@ -725,6 +744,17 @@ export const DISABLE_COURT = gql`
 export const DELETE_COURT = gql`
   mutation DeleteCourt($id: ID!) {
     deleteCourt(id: $id)
+  }
+`;
+
+export const REORDER_COURTS = gql`
+  mutation ReorderCourts($sessionId: ID!, $courtIds: [ID!]!) {
+    reorderCourts(sessionId: $sessionId, courtIds: $courtIds) {
+      id
+      courtNumber
+      name
+      status
+    }
   }
 `;
 

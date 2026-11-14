@@ -6,6 +6,7 @@ import { Game } from "@/models/Game";
 import { SessionPlayer } from "@/models/SessionPlayer";
 import { slugify, withRandomSuffix } from "@/lib/slug";
 import { getQueuePreview, getNextGamePreview } from "@/lib/eligibility";
+import { sortCourtsForDisplay } from "@/lib/courtOrder";
 import { findTogetherGroups } from "@/lib/togetherGroups";
 import { getSessionStandingsWithPlayers, getSessionPodiumWithPlayers, getSessionFirstPlaceTieWithPlayers } from "@/lib/stats";
 import { buildPublicSessionUrl, diffMinutes } from "@/lib/urls";
@@ -300,6 +301,32 @@ export const sessionResolvers = {
       return session;
     },
 
+    setManualQueueOrder: async (
+      _p: unknown,
+      args: { sessionId: string; playerIds: string[] },
+      context: GraphQLContext
+    ) => {
+      const session = await requireSessionOwner(context, args.sessionId);
+      const ids = [...new Set(args.playerIds.map(String))];
+      if (ids.length === 0) {
+        throw new GraphQLError("Provide at least one player to order.", { extensions: { code: "BAD_USER_INPUT" } });
+      }
+      const found = await SessionPlayer.countDocuments({ _id: { $in: ids }, sessionId: session._id });
+      if (found !== ids.length) {
+        throw new GraphQLError("Those players are not part of this session.", { extensions: { code: "BAD_USER_INPUT" } });
+      }
+      session.manualQueueOrder = ids as never;
+      await session.save();
+      return session;
+    },
+
+    clearManualQueueOrder: async (_p: unknown, args: { sessionId: string }, context: GraphQLContext) => {
+      const session = await requireSessionOwner(context, args.sessionId);
+      session.manualQueueOrder = [] as never;
+      await session.save();
+      return session;
+    },
+
     cancelSession: async (_p: unknown, args: { id: string }, context: GraphQLContext) => {
       const session = await requireSessionOwner(context, args.id);
       assertTransition(
@@ -335,7 +362,7 @@ export const sessionResolvers = {
       return club?.slug ?? "";
     },
     players: async (parent: { _id: unknown }) => SessionPlayer.find({ sessionId: parent._id }),
-    courts: async (parent: { _id: unknown }) => Court.find({ sessionId: parent._id }).sort({ courtNumber: 1 }),
+    courts: async (parent: { _id: unknown }) => sortCourtsForDisplay(await Court.find({ sessionId: parent._id })),
     activeGames: async (parent: { _id: unknown }) =>
       Game.find({ sessionId: parent._id, status: { $in: [GameStatus.QUEUED, GameStatus.IN_PROGRESS] } }).sort({
         gameNumber: 1,
@@ -384,7 +411,7 @@ export const sessionResolvers = {
   PublicSession: {
     id: (parent: { _id: unknown }) => String(parent._id),
     club: async (parent: { clubId: unknown }) => Club.findById(parent.clubId),
-    courts: async (parent: { _id: unknown }) => Court.find({ sessionId: parent._id }).sort({ courtNumber: 1 }),
+    courts: async (parent: { _id: unknown }) => sortCourtsForDisplay(await Court.find({ sessionId: parent._id })),
     checkedInPlayerCount: async (parent: { _id: unknown }) =>
       SessionPlayer.countDocuments({ sessionId: parent._id, checkedIn: true }),
     activeGames: async (parent: { _id: unknown }) =>

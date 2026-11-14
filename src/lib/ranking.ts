@@ -78,15 +78,19 @@ function compareByCriteria(order: RankingCriterion[]) {
 
 /**
  * Ranks players using the session's configured ranking order.
- * Ranks are always unique (1, 2, 3, ...): when every configured criterion is tied the
- * player id breaks the tie, so there's exactly one 1st place. Genuine ties for 1st are
- * reported separately by findFirstPlaceTie so the organiser can play them off.
+ * Players genuinely tied on every configured criterion share the same rank - standard
+ * "1224" competition ranking, so two players tied for 1st are both shown as 1st and the
+ * next distinct player is 3rd, not 2nd. The id-based fallback inside compareByCriteria is
+ * used only to put tied players in a stable, deterministic order against each other; it
+ * never splits their displayed rank apart, which is why the tie check below re-compares
+ * with realCompare (no id fallback) instead of the `compare` used for sorting.
  */
 export function computeStandings(
   players: StandingsInput[],
   rankingOrder: RankingCriterion[]
 ): StandingsEntry[] {
   const compare = compareByCriteria(rankingOrder);
+  const real = realCompare(rankingOrder);
   const sorted = [...players].sort(compare);
 
   const entries: StandingsEntry[] = [];
@@ -97,7 +101,7 @@ export function computeStandings(
       rank = 1;
     } else {
       const previous = sorted[index - 1];
-      rank = compare(player, previous) === 0 ? entries[index - 1].rank : index + 1;
+      rank = real(player, previous) === 0 ? entries[index - 1].rank : index + 1;
     }
     entries.push({ ...player, winRate, rank });
   });
@@ -106,12 +110,11 @@ export function computeStandings(
 }
 
 /**
- * Players who are genuinely tied for 1st place using the session's real
- * ranking criteria (ignoring the arbitrary id-based tiebreak that
- * computeStandings applies just to keep ranks unique). Returns an empty
- * array when there's a clear, uncontested #1. When it returns 2+ players,
- * the organiser should have them play each other to decide who actually
- * takes 1st — useful when a prize is riding on the outcome.
+ * Players who are genuinely tied for 1st place using the session's real ranking
+ * criteria. computeStandings already shows these players sharing rank 1 - this is for
+ * organisers who want to settle it anyway: returns an empty array when there's a clear,
+ * uncontested #1, and 2+ players when they should play each other to decide who
+ * actually takes 1st — useful when a prize is riding on the outcome.
  */
 export function findFirstPlaceTie(
   players: StandingsInput[],

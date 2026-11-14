@@ -96,6 +96,11 @@ interface QueueContext {
   pastGroups: Set<string>;
   /** Groups the organiser asked to keep out of the same game. */
   keepApart: string[][];
+  /** Each manually-ordered player's saved position (0-based), from the session's
+   * manualQueueOrder. Empty when no manual order is set. */
+  manualPriorityById: Map<string, number>;
+  /** Number of players covered by the saved manual order - see QueueEngineOptions.manualOrderLength. */
+  manualOrderLength: number;
   /** Stable per-pool seed. Passing a fresh `seededRandom(seed)` to both the flat
    * queue preview and the next-game preview keeps their first-round selection
    * (including tiebreaks and the anti-repeat swap) identical to each other. */
@@ -108,7 +113,7 @@ interface QueueContext {
 
 async function loadQueueContext(sessionId: string): Promise<QueueContext> {
   const [session, eligibleDocs, priorGames] = await Promise.all([
-    Session.findById(sessionId).select("settings separatedGroups clubId"),
+    Session.findById(sessionId).select("settings separatedGroups manualQueueOrder clubId"),
     getEligiblePlayers(sessionId),
     Game.find(
       { sessionId, status: { $ne: GameStatus.CANCELLED } },
@@ -139,6 +144,8 @@ async function loadQueueContext(sessionId: string): Promise<QueueContext> {
     tiebreakSeed: sessionId,
     pastGroups,
     keepApart: (session?.separatedGroups ?? []).map((g) => g.playerIds.map(String)),
+    manualPriorityById: new Map((session?.manualQueueOrder ?? []).map((id, index) => [String(id), index])),
+    manualOrderLength: session?.manualQueueOrder?.length ?? 0,
     seed: queuePoolSeed(eligibleDocs),
     clubHistory,
     recentMates: recentGameMates(priorGames),
@@ -156,17 +163,24 @@ export async function getQueuePreview(
   const ctx = await loadQueueContext(sessionId);
   if (ctx.eligibleDocs.length === 0) return [];
 
-  const ranked = rankQueue(ctx.eligibleDocs.map((d) => toQueuePlayer(d, ctx.clubHistory, ctx.recentMates)), {
-    mode: ctx.mode,
-    maxConsecutiveGames: ctx.maxConsecutiveGames,
-    mixEveryone: ctx.mixEveryone,
-    rankMatchups: ctx.rankMatchups,
-    balanceTeams: ctx.balanceTeams,
-    tiebreakSeed: ctx.tiebreakSeed,
-    pastGroups: ctx.pastGroups,
-    keepApart: ctx.keepApart,
-    random: seededRandom(ctx.seed),
-  });
+  const ranked = rankQueue(
+    ctx.eligibleDocs.map((d) => ({
+      ...toQueuePlayer(d, ctx.clubHistory, ctx.recentMates),
+      manualPriority: ctx.manualPriorityById.get(String(d._id)),
+    })),
+    {
+      mode: ctx.mode,
+      maxConsecutiveGames: ctx.maxConsecutiveGames,
+      mixEveryone: ctx.mixEveryone,
+      rankMatchups: ctx.rankMatchups,
+      balanceTeams: ctx.balanceTeams,
+      tiebreakSeed: ctx.tiebreakSeed,
+      pastGroups: ctx.pastGroups,
+      keepApart: ctx.keepApart,
+      manualOrderLength: ctx.manualOrderLength,
+      random: seededRandom(ctx.seed),
+    }
+  );
 
   return ranked
     .map((p) => ctx.byId.get(p.id))
@@ -190,17 +204,24 @@ export async function getNextGamePreview(
   const ctx = await loadQueueContext(sessionId);
   if (ctx.eligibleDocs.length < 4) return null;
 
-  const result = queueEngineGenerateNextGame(ctx.eligibleDocs.map((d) => toQueuePlayer(d, ctx.clubHistory, ctx.recentMates)), {
-    mode: ctx.mode,
-    maxConsecutiveGames: ctx.maxConsecutiveGames,
-    mixEveryone: ctx.mixEveryone,
-    rankMatchups: ctx.rankMatchups,
-    balanceTeams: ctx.balanceTeams,
-    tiebreakSeed: ctx.tiebreakSeed,
-    pastGroups: ctx.pastGroups,
-    keepApart: ctx.keepApart,
-    random: seededRandom(ctx.seed),
-  });
+  const result = queueEngineGenerateNextGame(
+    ctx.eligibleDocs.map((d) => ({
+      ...toQueuePlayer(d, ctx.clubHistory, ctx.recentMates),
+      manualPriority: ctx.manualPriorityById.get(String(d._id)),
+    })),
+    {
+      mode: ctx.mode,
+      maxConsecutiveGames: ctx.maxConsecutiveGames,
+      mixEveryone: ctx.mixEveryone,
+      rankMatchups: ctx.rankMatchups,
+      balanceTeams: ctx.balanceTeams,
+      tiebreakSeed: ctx.tiebreakSeed,
+      pastGroups: ctx.pastGroups,
+      keepApart: ctx.keepApart,
+      manualOrderLength: ctx.manualOrderLength,
+      random: seededRandom(ctx.seed),
+    }
+  );
   if (!result.ok) return null;
 
   const resolve = (p: QueuePlayer) => ctx.byId.get(p.id);
