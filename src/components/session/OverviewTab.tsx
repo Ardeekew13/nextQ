@@ -792,6 +792,12 @@ export function OverviewTab({
 		if (!draftQueueOrder || draftQueueOrder.length === 0) return;
 		try {
 			await setManualQueueOrder({ variables: { sessionId, playerIds: draftQueueOrder } });
+			// The dashboard refetch above picks up the new order, but the on-device snapshot
+			// (what's actually shown whenever there's any unsynced/recently-synced action - see
+			// shouldShowDeviceCopy) doesn't know about it yet. Without this, the queue can keep
+			// showing the OLD order even though the save genuinely succeeded.
+			markSnapshotStale();
+			void refreshSnapshot();
 			message.success("Custom queue order saved — it'll decide who's picked next.");
 			setDraftQueueOrder(null);
 			setEditingQueueOrder(false);
@@ -803,6 +809,10 @@ export function OverviewTab({
 	async function handleResetQueueOrder() {
 		try {
 			await clearManualQueueOrder({ variables: { sessionId } });
+			// Same reason as handleSaveQueueOrder: force the on-device snapshot to catch up so
+			// the queue doesn't keep showing the old manual order after it's been cleared.
+			markSnapshotStale();
+			void refreshSnapshot();
 			message.success("Back to automatic queue ordering.");
 		} catch (err) {
 			message.error(err instanceof Error ? err.message : "Could not reset the queue order");
