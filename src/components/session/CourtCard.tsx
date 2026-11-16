@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { Button, Select, Typography, Tooltip, Input } from "antd";
-import { ClockCircleOutlined, SwapOutlined, CheckOutlined, CloseOutlined, EditOutlined, SoundOutlined } from "@ant-design/icons";
+import { ClockCircleOutlined, SwapOutlined, CheckOutlined, CloseOutlined, EditOutlined, SoundOutlined, LinkOutlined } from "@ant-design/icons";
 
 const { Text } = Typography;
 
@@ -65,6 +65,10 @@ interface CourtCardProps {
 	sessionActive?: boolean;
 	allPlayers?: any[];
 	queuedPlayers?: any[];
+	/** Fixed partner's name, for each player who has one (shown as a link mark). */
+	partnerNameOf?: Map<string, string>;
+	/** Fixed partner's id, for each player who has one (to warn when an edit splits them). */
+	fixedPartnerIdOf?: Map<string, string>;
 	updatingTeams?: boolean;
 	onFill: (courtId: string) => void;
 	onRecordResult: (game: any, winner: "A" | "B") => void;
@@ -90,6 +94,8 @@ export function CourtCard({
 	sessionActive = true,
 	allPlayers = [],
 	queuedPlayers = [],
+	partnerNameOf = new Map(),
+	fixedPartnerIdOf = new Map(),
 	updatingTeams,
 	onFill,
 	onRecordResult,
@@ -162,6 +168,26 @@ export function CourtCard({
 	const game = court.currentGame;
 	const teamsValid = editTeamA.length === 2 && editTeamB.length === 2;
 
+	// Fixed pairs this edit would split: one partner on a team, the other free to play (on this
+	// court or waiting) but not on the same team.
+	const pickableIds = new Set(pickablePlayers.map((p: any) => p.id));
+	const nameOf = (id: string) => allPlayers.find((p: any) => p.id === id)?.name ?? "their partner";
+	const splitPairs: string[] = [];
+	for (const [team, mates] of [[editTeamA, editTeamA], [editTeamB, editTeamB]] as const) {
+		for (const id of team) {
+			const partner = fixedPartnerIdOf.get(id);
+			if (!partner || mates.includes(partner) || !pickableIds.has(partner)) continue;
+			const label = [nameOf(id), nameOf(partner)].sort().join(" and ");
+			if (!splitPairs.includes(label)) splitPairs.push(label);
+		}
+	}
+	const partnerMark = (id: string) =>
+		partnerNameOf.has(id) ? (
+			<Tooltip title={`Fixed partner: ${partnerNameOf.get(id)}`}>
+				<LinkOutlined aria-label={`Fixed partner ${partnerNameOf.get(id)}`} style={{ color: "#e11d74", fontSize: 11, marginLeft: 4 }} />
+			</Tooltip>
+		) : null;
+
 	return (
 		<div data-testid="court-card" style={{ border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff", overflow: "hidden" }}>
 
@@ -214,6 +240,7 @@ export function CourtCard({
 					{game && !editing && onUpdateTeams && (
 						<Tooltip title="Edit lineup">
 							<button
+								aria-label="Edit lineup"
 								onClick={startEditing}
 								style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(29,31,32,0.35)", width: 36, height: 36, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}
 							>
@@ -249,6 +276,11 @@ export function CourtCard({
 									<div style={{ display: "flex", justifyContent: "space-between" }}>
 										<span style={{ fontWeight: opt.data.inQueue ? 600 : 400 }}>
 											{opt.label}{opt.data.inQueue && <ClockCircleOutlined style={{ color: "#e11d74", fontSize: 10, marginLeft: 4 }} />}
+											{partnerNameOf.has(String(opt.value)) && (
+												<span style={{ fontSize: 11, fontWeight: 400, color: "#9d174d", marginLeft: 6 }}>
+													<LinkOutlined /> {partnerNameOf.get(String(opt.value))}
+												</span>
+											)}
 										</span>
 										<Text type="secondary" style={{ fontSize: 11 }}>{opt.data.inQueue ? `Queue #${opt.data.queuePos}` : `${opt.data.gamesPlayed} games`}</Text>
 									</div>
@@ -281,6 +313,11 @@ export function CourtCard({
 									<div style={{ display: "flex", justifyContent: "space-between" }}>
 										<span style={{ fontWeight: opt.data.inQueue ? 600 : 400 }}>
 											{opt.label}{opt.data.inQueue && <ClockCircleOutlined style={{ color: "#e11d74", fontSize: 10, marginLeft: 4 }} />}
+											{partnerNameOf.has(String(opt.value)) && (
+												<span style={{ fontSize: 11, fontWeight: 400, color: "#9d174d", marginLeft: 6 }}>
+													<LinkOutlined /> {partnerNameOf.get(String(opt.value))}
+												</span>
+											)}
 										</span>
 										<Text type="secondary" style={{ fontSize: 11 }}>{opt.data.inQueue ? `Queue #${opt.data.queuePos}` : `${opt.data.gamesPlayed} games`}</Text>
 									</div>
@@ -290,12 +327,17 @@ export function CourtCard({
 								<div style={{ fontSize: 11, color: "#e11d74", marginTop: 3 }}>Needs exactly 2 players ({editTeamB.length} selected)</div>
 							)}
 						</div>
+						{splitPairs.length > 0 && (
+							<div role="alert" style={{ fontSize: 11, color: "#b45309", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 4, padding: "6px 8px" }}>
+								<LinkOutlined /> {splitPairs.join("; ")} {splitPairs.length === 1 ? "are fixed partners" : "are fixed pairs"}: this lineup splits them up. Put them on the same team, or save anyway.
+							</div>
+						)}
 						<div style={{ display: "flex", gap: 6 }}>
 							<Button size="small" block icon={<CloseOutlined />} onClick={() => setEditing(false)}>Cancel</Button>
 							<Tooltip title={!teamsValid ? "Each team needs exactly 2 players" : ""}>
 								<span style={{ flex: 1, display: "inline-block" }}>
 									<Button size="small" type="primary" block icon={<CheckOutlined />} loading={updatingTeams} disabled={!teamsValid} onClick={saveEditing}
-										style={{ background: "#e11d74", borderColor: "#e11d74" }}>Save</Button>
+										style={{ background: "#e11d74", borderColor: "#e11d74" }}>{splitPairs.length > 0 ? "Save anyway" : "Save"}</Button>
 								</span>
 							</Tooltip>
 						</div>
@@ -311,6 +353,7 @@ export function CourtCard({
 								{game.teamA.players.map((p: any) => (
 									<div key={p.id} data-testid="court-player" style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", color: "#1d1f20", lineHeight: 1.3, textTransform: "uppercase" }}>
 										{p.name}
+										{partnerMark(p.id)}
 									</div>
 								))}
 							</div>
@@ -324,6 +367,7 @@ export function CourtCard({
 								{game.teamB.players.map((p: any) => (
 									<div key={p.id} data-testid="court-player" style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", color: "#1d1f20", lineHeight: 1.3, textTransform: "uppercase" }}>
 										{p.name}
+										{partnerMark(p.id)}
 									</div>
 								))}
 							</div>

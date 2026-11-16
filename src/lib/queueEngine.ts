@@ -22,7 +22,7 @@ import { seededRandom } from "@/lib/seededRandom";
  * a browser still running an older copy sees a mismatch, warns "refresh this page", and lets
  * the server pick games instead of its out-of-date local copy.
  */
-export const QUEUE_ENGINE_VERSION = "2026-11-14";
+export const QUEUE_ENGINE_VERSION = "2026-11-16";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -44,7 +44,8 @@ export interface QueuePlayer {
    * The pair's turn is decided by whichever partner has the WORSE individual priority —
    * i.e. the pair waits as a unit for its slower half, rather than the faster half dragging
    * the other one forward. This keeps the "always together" guarantee without letting a
-   * pair jump ahead of players who'd otherwise be next. */
+   * pair jump ahead of players who'd otherwise be next. Exception: in a saved manual order the
+   * organiser placed people by hand, so the pair goes at the EARLIER partner's spot. */
   fixedPartnerId?: string;
   /** Organiser-set manual queue order (0-based position among manually-ordered players).
    * When set, this dominates every other scoring factor - it decides who's picked next
@@ -139,6 +140,23 @@ const MANUAL_ORDER_WEIGHT = 50_000_000;
  * outranks it. The consecutive-game limit still applies through the queue score. */
 const MANUAL_KEEP_WEIGHT = 1e14;
 
+/** When fewer than 4 waiting players are under the games-in-a-row limit, the limit can't be
+ * fully kept. Each game a foursome's players would be over the limit costs this much - more
+ * than a repeated trio (1e13) - so everyone under the limit plays first, then whoever has the
+ * shortest run. A saved manual order and a keep-apart group still come first. */
+const OVER_LIMIT_WEIGHT = 5e13;
+
+/** "Up next" is the front of the queue right after the last fill. Anyone who joined the queue
+ * after that fill (came off a court, or just checked in) goes behind it: each one in a foursome
+ * costs more than the repeated trios swapping them in could avoid, so the next fill matches what "Up next" showed and nobody
+ * coming off court jumps players who were already waiting. Used only when the earlier waiters
+ * can't fill the game on their own. Below the games-in-a-row limit, a saved manual order and
+ * keep-apart groups. */
+// Swapping one player changes 3 of a foursome's 4 trios, so this must beat 3 repeated trios.
+const JOINED_SINCE_FILL_WEIGHT = 4e13;
+/** Score handicap for the same players, so the plain priority order puts them last too. */
+const JOINED_SINCE_FILL_SCORE = 1e12;
+
 /** A player's strength for matchmaking; missing or corrupt values count as an average 50. */
 function strengthOf(p: QueuePlayer): number {
   return typeof p.winRate === "number" && Number.isFinite(p.winRate) ? p.winRate : 50;
@@ -178,7 +196,13 @@ function playerScore(
   );
 
   // Consecutive game penalty: deprioritise if at/over limit (unless no alternatives)
-  const consecutivePenalty = player.consecutiveGames >= maxConsecutiveGames ? 1_000_000 : 0;
+  // Grows with every extra game over the limit, so when the limit has to be relaxed (too few
+  // rested players) the ones with the longest run sit out first instead of the same few
+  // players winning the tiebreak game after game.
+  const consecutivePenalty =
+    player.consecutiveGames >= maxConsecutiveGames
+      ? 1_000_000 * (player.consecutiveGames - maxConsecutiveGames + 1)
+      : 0;
 
   // Manual queue order, when set, dominates everything below (see MANUAL_ORDER_WEIGHT).
   // A player with no explicit position sits right after every manually-ordered player.
@@ -201,11 +225,14 @@ function playerScore(
       );
 
     case QueueMode.SMART:
-      // Primary: longest wait (bucketed, no games-played factor); then most sat out
+      // Primary: longest wait (bucketed). Among people who joined the line at the same moment
+      // (e.g. the four off one court) fewer games played goes first, then most sat out. Without
+      // the games tiebreak the same people won every tie and drifted 3 games ahead.
       return (
         manualTerm +
         consecutivePenalty +
         (-waitBucket) * 10_000 * WAIT_TIE_WINDOW_MINUTES +
+        player.gamesPlayed * 100 +
         (-player.gamesSatOut) * 5 +
         tiebreak
       );
@@ -570,7 +597,8 @@ function selectPlayers(
   mixEveryone: boolean = false,
   rankMatchups: boolean = false,
   tiebreakSeed?: string,
-  manualOrderLength: number = 0
+  manualOrderLength: number = 0,
+  lastFillAt?: Date
 ): { ok: true; selected: PlayerQuad } | { ok: false; reason: string } {
   if (eligible.length < 4) {
     return {
@@ -587,6 +615,25 @@ function selectPlayers(
     const tiebreak = tiebreakSeed !== undefined ? stableTiebreak(tiebreakSeed, p.id) : random();
     scoreById.set(p.id, playerScore(p, mode, maxConsecutiveGames, now, tiebreak, manualOrderLength));
   }
+  // Joined since the last fill (see JOINED_SINCE_FILL_WEIGHT). A player the organiser put in
+  // the manual order (or bumped to the front) is exempt: that's an explicit decision.
+  const joinedSinceFill = new Set(
+    lastFillAt
+      ? eligible
+          .filter(
+            (p) =>
+              p.manualPriority === undefined &&
+              // Only people coming off a court: a new arrival (no games yet) still gets the next
+              // free court, and On Deck shows them the moment they check in.
+              p.gamesPlayed > 0 &&
+              p.queueEnteredAt.getTime() > lastFillAt.getTime()
+          )
+          .map((p) => p.id)
+      : []
+  );
+  for (const id of joinedSinceFill) scoreById.set(id, scoreById.get(id)! + JOINED_SINCE_FILL_SCORE);
+  const joinedLate = (players: QueuePlayer[]) =>
+    joinedSinceFill.size === 0 ? 0 : players.filter((p) => joinedSinceFill.has(p.id)).length;
 
   // If everyone is at consecutive limit, ignore the penalty (not enough alts)
   const belowLimitIds = new Set(eligible.filter((p) => p.consecutiveGames < maxConsecutiveGames).map((p) => p.id));
@@ -608,7 +655,13 @@ function selectPlayers(
     const partnerId = player.fixedPartnerId;
     const partner = partnerId && poolIds.has(partnerId) && !consumed.has(partnerId) ? byId.get(partnerId) : undefined;
     if (partner) {
-      const score = Math.max(scoreById.get(player.id)!, scoreById.get(partner.id)!);
+      // A saved manual order is the organiser placing people by hand: the pair goes at the
+      // higher of its two spots (the later partner is pulled up), instead of the usual
+      // "wait for the slower half".
+      const placedByHand =
+        manualOrderLength > 0 && (player.manualPriority !== undefined || partner.manualPriority !== undefined);
+      const pick = placedByHand ? Math.min : Math.max;
+      const score = pick(scoreById.get(player.id)!, scoreById.get(partner.id)!);
       entries.push({ kind: "pair", players: [player, partner], score });
       consumed.add(player.id);
       consumed.add(partner.id);
@@ -678,6 +731,14 @@ function selectPlayers(
   );
   const manualDropped = (players: QueuePlayer[]) =>
     manualTop.size === 0 ? 0 : [...manualTop].filter((id) => !players.some((p) => p.id === id)).length;
+  // Too few rested players to fill a game on their own (the limit was relaxed above): they all
+  // play now, and the remaining seats go to the players over the limit with the shortest run.
+  const relaxed = pool.length > belowLimitIds.size;
+  const rested = relaxed ? belowLimitIds : new Set<string>();
+  const overLimit = (players: QueuePlayer[]) =>
+    !relaxed
+      ? 0
+      : players.reduce((n, p) => n + Math.max(0, p.consecutiveGames - maxConsecutiveGames + 1), 0);
 
   // Variety rules, applied when the priority order would break one:
   //  - Keep apart: groups the organiser asked to separate never share a game (any mode).
@@ -704,7 +765,7 @@ function selectPlayers(
       let window = minGames + 1;
       const inWindow = (e: Entry) =>
         (e.kind === "pair" ? e.players : [e.player]).every((p) => p.gamesPlayed <= window) ||
-        (e.kind === "pair" ? e.players : [e.player]).some((p) => manualTop.has(p.id));
+        (e.kind === "pair" ? e.players : [e.player]).some((p) => manualTop.has(p.id) || rested.has(p.id));
       let windowed = entries.filter(inWindow);
       const playersIn = (list: Entry[]) => list.reduce((n, e) => n + (e.kind === "pair" ? 2 : 1), 0);
       while (playersIn(windowed) < 8 && window < minGames + 50) {
@@ -720,6 +781,8 @@ function selectPlayers(
         countKeepApartBreaches(players, keepApart) * 1e15 +
         countRepeatedTriples(players, pastTriples) * 1e13 +
         manualDropped(players) * MANUAL_KEEP_WEIGHT +
+        overLimit(players) * OVER_LIMIT_WEIGHT +
+        joinedLate(players) * JOINED_SINCE_FILL_WEIGHT +
         unfairSwapAgainst(mixDefaultTop, players) * 100_000 +
         catchUpBunching(players, behind) +
         thirdInARowPairs(players) * THIRD_IN_A_ROW_WEIGHT +
@@ -764,6 +827,8 @@ function selectPlayers(
         countKeepApartBreaches(players, keepApart) * 1e15 +
         countRepeatedTriples(players, pastTriplesForOrder) * 1e13 +
         manualDropped(players) * MANUAL_KEEP_WEIGHT +
+        overLimit(players) * OVER_LIMIT_WEIGHT +
+        joinedLate(players) * JOINED_SINCE_FILL_WEIGHT +
         unfairSwapAgainst(defaultTop, players) * 100_000 +
         catchUpBunching(players, behind) +
         // Not in strict SMART.
@@ -841,7 +906,8 @@ function selectPlayers(
       const candidate = selected[i];
       const paired =
         Boolean(candidate.fixedPartnerId && selectedIds.has(candidate.fixedPartnerId)) ||
-        manualTop.has(candidate.id); // a manually-ordered player keeps their spot too
+        manualTop.has(candidate.id) || // a manually-ordered player keeps their spot too
+        rested.has(candidate.id); // and so does a rested player when the limit is relaxed
       if (!paired) {
         swapIndex = i;
         break;
@@ -851,6 +917,9 @@ function selectPlayers(
       for (const entry of entries) {
         if (entry.kind !== "single") continue; // keep it simple: don't swap in a pair here
         if (selectedIds.has(entry.player.id)) continue;
+        // Not someone who joined since the last fill: "Up next" (shown before they came off
+        // court) couldn't have included them, and the fill must match it.
+        if (joinedSinceFill.has(entry.player.id)) continue;
         const newGroup = [...selected] as PlayerQuad;
         newGroup[swapIndex] = entry.player;
         if (
@@ -865,6 +934,57 @@ function selectPlayers(
   }
 
   return { ok: true, selected };
+}
+
+/** A game the organiser set up on request: these two teams play each other, together. */
+export interface MatchRequest {
+  id: string;
+  teamA: [string, string];
+  teamB: [string, string];
+}
+
+type Selection =
+  | { ok: true; selected: PlayerQuad; teams?: { teamA: PlayerPair; teamB: PlayerPair } }
+  | { ok: false; reason: string };
+
+/**
+ * selectPlayers plus requested matches. A requested match is one unit of four whose turn is
+ * set by its LAST member in the queue (like a fixed pair waits for its slower half): its
+ * players are held out of other games until nobody else is ahead of that last member, then
+ * all four play together, on the requested teams. A request only counts once all four are
+ * free to play.
+ */
+function selectNext(
+  pool: QueuePlayer[],
+  requests: ReadonlyArray<MatchRequest>,
+  args: Parameters<typeof selectPlayers>
+): Selection {
+  const byId = new Map(pool.map((p) => [p.id, p]));
+  const units = requests.filter((r) => [...r.teamA, ...r.teamB].every((id) => byId.has(id)));
+  if (units.length === 0) return selectPlayers(...args);
+
+  const [, mode, maxConsecutiveGames, , , , , , tiebreakSeed, manualOrderLength, lastFillAt] = args;
+  const now = Date.now();
+  const scoreOf = (p: QueuePlayer) =>
+    playerScore(p, mode, maxConsecutiveGames, now, stableTiebreak(tiebreakSeed ?? "request", p.id), manualOrderLength) +
+    (lastFillAt && p.manualPriority === undefined && p.gamesPlayed > 0 && p.queueEnteredAt.getTime() > lastFillAt.getTime()
+      ? JOINED_SINCE_FILL_SCORE
+      : 0);
+  const members = new Set(units.flatMap((r) => [...r.teamA, ...r.teamB]));
+  const others = pool.filter((p) => !members.has(p.id));
+  const unitScore = (r: MatchRequest) => Math.max(...[...r.teamA, ...r.teamB].map((id) => scoreOf(byId.get(id)!)));
+  const sorted = [...units].sort((a, b) => unitScore(a) - unitScore(b));
+  const due = sorted.find((r) => others.every((p) => scoreOf(p) >= unitScore(r)));
+  // Its last member has reached the front, or too few others are left to make a game without them.
+  const play = due ?? (others.length < 4 ? sorted[0] : undefined);
+  if (play) {
+    const teamA = play.teamA.map((id) => byId.get(id)!) as PlayerPair;
+    const teamB = play.teamB.map((id) => byId.get(id)!) as PlayerPair;
+    return { ok: true, selected: [...teamA, ...teamB] as PlayerQuad, teams: { teamA, teamB } };
+  }
+  const rest: Parameters<typeof selectPlayers> = [...args];
+  rest[0] = others;
+  return selectPlayers(...rest);
 }
 
 /**
@@ -891,14 +1011,20 @@ export function rankQueue(
     random = Math.random,
     tiebreakSeed,
     manualOrderLength = 0,
+    lastFillAt,
+    matchRequests = [],
   } = options;
 
   let pool = [...eligible];
+  let round = 0;
   const groups = new Set(pastGroups);
   const ordered: QueuePlayer[] = [];
 
   while (pool.length >= 4) {
-    const selection = selectPlayers(pool, mode, maxConsecutiveGames, random, groups, keepApart, mixEveryone, rankMatchups, tiebreakSeed, manualOrderLength);
+    // Only the very next fill puts people who joined since the last fill behind: by the fill
+    // after that, they were already waiting.
+    const selection = selectNext(pool, matchRequests, [pool, mode, maxConsecutiveGames, random, groups, keepApart, mixEveryone, rankMatchups, tiebreakSeed, manualOrderLength, round === 0 ? lastFillAt : undefined]);
+    round += 1;
     if (!selection.ok) break;
 
     const selectedIds = new Set(selection.selected.map((p) => p.id));
@@ -1016,6 +1142,11 @@ export interface QueueEngineOptions {
    * right after every manually-ordered player. 0 (the default) means no manual order is in
    * effect, so manualPriority is ignored entirely and scoring behaves exactly as before. */
   manualOrderLength?: number;
+  /** When the last court was filled (newest non-cancelled game). Players who joined the queue
+   * after it go behind those who were already waiting - see JOINED_SINCE_FILL_WEIGHT. */
+  lastFillAt?: Date;
+  /** Games the organiser set up on request - see MatchRequest / selectNext. */
+  matchRequests?: ReadonlyArray<MatchRequest>;
   random?: () => number;
   randomizeTeams?: boolean;
 }
@@ -1034,6 +1165,8 @@ export function generateNextGame(
     balanceTeams = false,
     tiebreakSeed,
     manualOrderLength = 0,
+    lastFillAt,
+    matchRequests = [],
     random = Math.random,
     // Team splits always minimize repeat partners/opponents by default, in every mode
     // (including HYBRID) — the queue-selection logic above already varies who gets picked
@@ -1043,8 +1176,10 @@ export function generateNextGame(
     randomizeTeams = false,
   } = options;
 
-  const selection = selectPlayers(eligible, mode, maxConsecutiveGames, random, pastGroups, keepApart, mixEveryone, rankMatchups, tiebreakSeed, manualOrderLength);
+  const selection = selectNext(eligible, matchRequests, [eligible, mode, maxConsecutiveGames, random, pastGroups, keepApart, mixEveryone, rankMatchups, tiebreakSeed, manualOrderLength, lastFillAt]);
   if (!selection.ok) return selection;
+  // A requested match plays on the teams that were asked for.
+  if (selection.teams) return { ok: true, selected: selection.selected, ...selection.teams };
 
   const { teamA, teamB } = assignTeams(
     selection.selected,

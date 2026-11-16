@@ -89,7 +89,7 @@ describe("offline queue", () => {
     const winner = st.players.find((p) => p.id === g.teamA[0])!;
     expect(winner.wins).toBe(1);
     expect(winner.queueEnteredAt).toBe(iso(25));
-    expect(winner.consecutiveGames).toBe(0);
+    expect(winner.consecutiveGames).toBe(1); // finishing isn't a rest; only sitting out resets it
     // the same four can't be picked again as an exact repeat group
     const again = generateLocalGame(snap, st);
     if (again.ok) expect([...again.teamA, ...again.teamB].sort().join()).not.toBe([...g.teamA, ...g.teamB].sort().join());

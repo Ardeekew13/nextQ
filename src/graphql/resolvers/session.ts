@@ -316,6 +316,8 @@ export const sessionResolvers = {
         throw new GraphQLError("Those players are not part of this session.", { extensions: { code: "BAD_USER_INPUT" } });
       }
       session.manualQueueOrder = ids as never;
+      // The organiser just set the whole order by hand: that replaces any earlier bumps.
+      session.upNextFirst = [] as never;
       await session.save();
       return session;
     },
@@ -323,6 +325,53 @@ export const sessionResolvers = {
     clearManualQueueOrder: async (_p: unknown, args: { sessionId: string }, context: GraphQLContext) => {
       const session = await requireSessionOwner(context, args.sessionId);
       session.manualQueueOrder = [] as never;
+      await session.save();
+      return session;
+    },
+
+    requestMatch: async (
+      _p: unknown,
+      args: { sessionId: string; teamAPlayerIds: string[]; teamBPlayerIds: string[] },
+      context: GraphQLContext
+    ) => {
+      const session = await requireSessionOwner(context, args.sessionId);
+      const teamA = args.teamAPlayerIds.map(String);
+      const teamB = args.teamBPlayerIds.map(String);
+      const all = [...teamA, ...teamB];
+      const bad = (msg: string) => new GraphQLError(msg, { extensions: { code: "BAD_USER_INPUT" } });
+      if (teamA.length !== 2 || teamB.length !== 2 || new Set(all).size !== 4) {
+        throw bad("Pick 2 different players for each team.");
+      }
+      const players = await SessionPlayer.find({ _id: { $in: all }, sessionId: session._id });
+      if (players.length !== 4) throw bad("Those players are not part of this session.");
+      const nameOf = (id: string) => players.find((p) => String(p._id) === id)?.name ?? "A player";
+      const taken = (session.matchRequests ?? []).flatMap((r) => [...r.teamAPlayerIds, ...r.teamBPlayerIds].map(String));
+      const busy = all.find((id) => taken.includes(id));
+      if (busy) throw bad(`${nameOf(busy)} is already in a requested match. Cancel that one first.`);
+      // A fixed pair is never split, so a request has to keep them on the same team.
+      for (const p of players) {
+        const partner = p.fixedPartnerId ? String(p.fixedPartnerId) : null;
+        if (!partner) continue;
+        const team = teamA.includes(String(p._id)) ? teamA : teamB;
+        if (!team.includes(partner)) {
+          const partnerDoc = await SessionPlayer.findById(partner);
+          throw bad(`${p.name} has a fixed partner (${partnerDoc?.name ?? "another player"}). Put them on the same team, or remove the fixed partnership first.`);
+        }
+      }
+      for (const g of session.separatedGroups ?? []) {
+        const inGame = g.playerIds.map(String).filter((id) => all.includes(id));
+        if (inGame.length >= 2) {
+          throw bad(`${inGame.map(nameOf).join(" and ")} are set to be kept apart. Remove that first to put them in one game.`);
+        }
+      }
+      session.matchRequests.push({ teamAPlayerIds: teamA, teamBPlayerIds: teamB } as never);
+      await session.save();
+      return session;
+    },
+
+    cancelMatchRequest: async (_p: unknown, args: { sessionId: string; requestId: string }, context: GraphQLContext) => {
+      const session = await requireSessionOwner(context, args.sessionId);
+      session.matchRequests = (session.matchRequests ?? []).filter((r) => String(r._id) !== String(args.requestId)) as never;
       await session.save();
       return session;
     },
@@ -370,6 +419,13 @@ export const sessionResolvers = {
     completedGames: async (parent: { _id: unknown }) =>
       Game.find({ sessionId: parent._id, status: GameStatus.COMPLETED }).sort({ gameNumber: 1 }),
     queuedPlayers: async (parent: { _id: unknown }) => getQueuePreview(String(parent._id)),
+    matchRequests: (parent: { matchRequests?: { _id: unknown; teamAPlayerIds: unknown[]; teamBPlayerIds: unknown[]; createdAt?: Date }[] }) =>
+      (parent.matchRequests ?? []).map((r) => ({
+        id: String(r._id),
+        teamAPlayerIds: r.teamAPlayerIds.map(String),
+        teamBPlayerIds: r.teamBPlayerIds.map(String),
+        createdAt: r.createdAt ?? new Date(0),
+      })),
     nextGamePreview: async (parent: { _id: unknown }) => getNextGamePreview(String(parent._id)),
     standings: async (parent: { _id: unknown }) => getSessionStandingsWithPlayers(String(parent._id)),
     podium: async (parent: { _id: unknown }) => getSessionPodiumWithPlayers(String(parent._id)),

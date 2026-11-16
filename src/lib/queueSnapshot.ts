@@ -9,6 +9,7 @@ import { loadClubHistory } from "@/lib/clubHistory";
 import { normaliseName } from "@/lib/playerStrength";
 import { recentGameMates } from "@/lib/lastGame";
 import { sortCourtsForDisplay } from "@/lib/courtOrder";
+import { engineMatchRequests } from "@/lib/upNext";
 
 function plain(map: unknown): Record<string, number> {
   if (map instanceof Map) return Object.fromEntries(map as Map<string, number>);
@@ -22,10 +23,10 @@ function plain(map: unknown): Record<string, number> {
  */
 export async function buildQueueSnapshot(sessionId: string): Promise<QueueSnapshot> {
   const [session, players, courts, games] = await Promise.all([
-    Session.findById(sessionId).select("settings separatedGroups manualQueueOrder clubId"),
+    Session.findById(sessionId).select("settings separatedGroups manualQueueOrder upNextFirst matchRequests clubId"),
     SessionPlayer.find({ sessionId }),
     Court.find({ sessionId }),
-    Game.find({ sessionId }, { teamAPlayerIds: 1, teamBPlayerIds: 1, playersSatOutIds: 1, courtId: 1, gameNumber: 1, status: 1, startedAt: 1, clientId: 1 }).sort({ gameNumber: -1 }),
+    Game.find({ sessionId }, { teamAPlayerIds: 1, teamBPlayerIds: 1, playersSatOutIds: 1, courtId: 1, gameNumber: 1, status: 1, startedAt: 1, clientId: 1, createdAt: 1 }).sort({ gameNumber: -1 }),
   ]);
 
   const settings = session?.settings as SessionSettings | undefined;
@@ -85,5 +86,8 @@ export async function buildQueueSnapshot(sessionId: string): Promise<QueueSnapsh
     pastGroups: past.map((g) => [...g.teamAPlayerIds, ...g.teamBPlayerIds].map(String).sort().join(":")),
     keepApart: (session?.separatedGroups ?? []).map((g) => g.playerIds.map(String)),
     manualQueueOrder: (session?.manualQueueOrder ?? []).map(String),
+    upNextFirst: (session?.upNextFirst ?? []).map(String),
+    matchRequests: engineMatchRequests(session?.matchRequests),
+    lastFillAt: past[0]?.createdAt ? past[0].createdAt.toISOString() : null,
   };
 }

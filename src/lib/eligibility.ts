@@ -8,6 +8,7 @@ import { blendedStrength, normaliseName, type ClubRecord } from "@/lib/playerStr
 import { loadClubHistory } from "@/lib/clubHistory";
 import { recentGameMates } from "@/lib/lastGame";
 import type { HydratedDocument } from "mongoose";
+import { engineMatchRequests, queuePriorityOrder } from "@/lib/upNext";
 
 /** Players currently locked to a court because they're mid-game (queued or in progress). */
 export async function getBusyPlayerIds(sessionId: string): Promise<Set<string>> {
@@ -101,6 +102,9 @@ interface QueueContext {
   manualPriorityById: Map<string, number>;
   /** Number of players covered by the saved manual order - see QueueEngineOptions.manualOrderLength. */
   manualOrderLength: number;
+  /** When the newest (non-cancelled) game was created - see QueueEngineOptions.lastFillAt. */
+  lastFillAt?: Date;
+  matchRequests: ReturnType<typeof engineMatchRequests>;
   /** Stable per-pool seed. Passing a fresh `seededRandom(seed)` to both the flat
    * queue preview and the next-game preview keeps their first-round selection
    * (including tiebreaks and the anti-repeat swap) identical to each other. */
@@ -113,11 +117,11 @@ interface QueueContext {
 
 async function loadQueueContext(sessionId: string): Promise<QueueContext> {
   const [session, eligibleDocs, priorGames] = await Promise.all([
-    Session.findById(sessionId).select("settings separatedGroups manualQueueOrder clubId"),
+    Session.findById(sessionId).select("settings separatedGroups manualQueueOrder upNextFirst matchRequests clubId"),
     getEligiblePlayers(sessionId),
     Game.find(
       { sessionId, status: { $ne: GameStatus.CANCELLED } },
-      { teamAPlayerIds: 1, teamBPlayerIds: 1 }
+      { teamAPlayerIds: 1, teamBPlayerIds: 1, createdAt: 1 }
     )
       .sort({ gameNumber: -1 })
       .limit(200),
@@ -144,8 +148,10 @@ async function loadQueueContext(sessionId: string): Promise<QueueContext> {
     tiebreakSeed: sessionId,
     pastGroups,
     keepApart: (session?.separatedGroups ?? []).map((g) => g.playerIds.map(String)),
-    manualPriorityById: new Map((session?.manualQueueOrder ?? []).map((id, index) => [String(id), index])),
-    manualOrderLength: session?.manualQueueOrder?.length ?? 0,
+    manualPriorityById: new Map(queuePriorityOrder(session).map((id, index) => [id, index])),
+    manualOrderLength: queuePriorityOrder(session).length,
+    lastFillAt: priorGames[0]?.createdAt ?? undefined,
+    matchRequests: engineMatchRequests(session?.matchRequests),
     seed: queuePoolSeed(eligibleDocs),
     clubHistory,
     recentMates: recentGameMates(priorGames),
@@ -178,6 +184,8 @@ export async function getQueuePreview(
       pastGroups: ctx.pastGroups,
       keepApart: ctx.keepApart,
       manualOrderLength: ctx.manualOrderLength,
+      lastFillAt: ctx.lastFillAt,
+      matchRequests: ctx.matchRequests,
       random: seededRandom(ctx.seed),
     }
   );
@@ -219,6 +227,8 @@ export async function getNextGamePreview(
       pastGroups: ctx.pastGroups,
       keepApart: ctx.keepApart,
       manualOrderLength: ctx.manualOrderLength,
+      lastFillAt: ctx.lastFillAt,
+      matchRequests: ctx.matchRequests,
       random: seededRandom(ctx.seed),
     }
   );

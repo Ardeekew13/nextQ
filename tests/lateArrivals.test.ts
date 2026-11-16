@@ -82,6 +82,9 @@ export function runLateScenario(
   const lastEnd = new Map<string, number>();
   let longestOriginalWait = 0;
   let threeInARow = 0;
+  // When the last court was filled: the server passes it to the engine (Up next is a promise -
+  // players who join after it go behind those already waiting), so the simulation does too.
+  let lastFillAt: number | undefined;
 
   const byId = () => new Map(players.map((p) => [p.id, p]));
   const fill = () => {
@@ -93,8 +96,12 @@ export function runLateScenario(
       winRate: blendedStrength({ wins: p.wins, games: p.gamesPlayed }), fixedPartnerId: p.fixedPartnerId,
       recentGames: p.recentGames.map((g) => [...g]), lastGameWith: p.recentGames[0],
     }));
-    const r = generateNextGame(eligible, { pastGroups, tiebreakSeed: "sess", maxConsecutiveGames: 2, ...opts });
+    const r = generateNextGame(eligible, {
+      pastGroups, tiebreakSeed: "sess", maxConsecutiveGames: 2,
+      lastFillAt: lastFillAt !== undefined ? new Date(lastFillAt) : undefined, ...opts,
+    });
     if (!r.ok) return false;
+    lastFillAt = clock;
     gameNo++;
     const a = r.teamA.map((p) => p.id), b = r.teamB.map((p) => p.id);
     const picked = new Set([...a, ...b]);
@@ -226,7 +233,11 @@ describe("late check-ins: 2 together, then 1, then 1 more, while most have 2-3 g
       for (const r of nights(o)) {
         for (const l of r.late) {
           expect(l.minutesToFirstGame, `${l.id} first game`).toBeLessThanOrEqual(15);
-          expect(l.gamesAtEnd, `${l.id} games`).toBeGreaterThanOrEqual(5); // arrived when others had ~2.5
+          // Arrived when others had ~2.5. Nobody goes straight back on court after a game any more
+          // (On Deck is a promise), so catching up is a little slower than it was (5+), but a
+          // late player still out-plays the originals from the moment the late group arrived.
+          expect(l.gamesAtEnd, `${l.id} games`).toBeGreaterThanOrEqual(4);
+          expect(l.gamesAtEnd, `${l.id} vs originals since arrival`).toBeGreaterThanOrEqual(r.originalsGamesSinceFirstLate.min);
         }
         expect(r.originalsAtEnd.max - r.originalsAtEnd.min).toBeLessThanOrEqual(1);
         expect(r.longestOriginalWait).toBeLessThanOrEqual(40);

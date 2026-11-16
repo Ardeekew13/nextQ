@@ -70,8 +70,9 @@ export function snapshotMatchesServer(
     activeGames: Array<{ id: string }>;
     players: Array<{ id: string; checkedIn: boolean; active: boolean }>;
     manualQueueOrder?: string[];
+    matchRequests?: Array<{ id: string }>;
   },
-  server: { activeGameIds: string[]; availablePlayerIds: string[]; manualQueueOrder?: string[] }
+  server: { activeGameIds: string[]; availablePlayerIds: string[]; manualQueueOrder?: string[]; matchRequestIds?: string[] }
 ): boolean {
   const same = (a: string[], b: string[]) => a.length === b.length && new Set([...a, ...b]).size === a.length;
   // The saved manual order decides the next game, so a copy with an older order (saved a moment
@@ -80,6 +81,8 @@ export function snapshotMatchesServer(
   return (
     same(snapshot.activeGames.map((g) => g.id), server.activeGameIds) &&
     same(snapshot.players.filter((p) => p.checkedIn && p.active).map((p) => p.id), server.availablePlayerIds) &&
-    (server.manualQueueOrder === undefined || sameOrder(snapshot.manualQueueOrder ?? [], server.manualQueueOrder))
+    (server.manualQueueOrder === undefined || sameOrder(snapshot.manualQueueOrder ?? [], server.manualQueueOrder)) &&
+    // A requested match changes who's picked, so the copy must know about the same ones.
+    (server.matchRequestIds === undefined || same((snapshot.matchRequests ?? []).map((r) => r.id), server.matchRequestIds))
   );
 }

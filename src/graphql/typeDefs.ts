@@ -193,6 +193,8 @@ export const typeDefs = gql`
     currentStreak: Int!
     longestWinStreak: Int!
     gamesSatOut: Int!
+    """Games played back to back without a break; at the session's limit the queue rests them for one game."""
+    consecutiveGames: Int!
     partnerHistory: [PlayerHistoryEntry!]!
     opponentHistory: [PlayerHistoryEntry!]!
     createdAt: Date!
@@ -269,6 +271,15 @@ export const typeDefs = gql`
     name: String!
     """SESSION = already in this session, CLUB = on the club roster but not in this session."""
     source: String!
+  }
+
+  """A game set up on request: these two teams play each other once, when the last of the four
+  reaches the front of the queue."""
+  type MatchRequest {
+    id: ID!
+    teamAPlayerIds: [ID!]!
+    teamBPlayerIds: [ID!]!
+    createdAt: Date!
   }
 
   type TogetherGroup {
@@ -353,6 +364,10 @@ export const typeDefs = gql`
     """Organiser-saved manual queue order (session player ids, front of the queue first).
     Empty when no manual order is set, meaning the queue is fully automatic."""
     manualQueueOrder: [ID!]!
+    """Players taken out of a game by the organiser: first in the queue until they play."""
+    upNextFirst: [ID!]!
+    """Requested games still waiting to be played."""
+    matchRequests: [MatchRequest!]!
     """Players genuinely tied for 1st place under this session's ranking rules.
     Empty when there's a clear #1. When 2+ players show up here, they should
     play each other to decide the winner — useful when a prize is on the line."""
@@ -568,6 +583,9 @@ export const typeDefs = gql`
     setManualQueueOrder(sessionId: ID!, playerIds: [ID!]!): Session!
     """Clears a saved manual queue order, returning the queue to fully-automatic ordering."""
     clearManualQueueOrder(sessionId: ID!): Session!
+    """Set up a requested game (team A vs team B). It plays when the last of the four is up."""
+    requestMatch(sessionId: ID!, teamAPlayerIds: [ID!]!, teamBPlayerIds: [ID!]!): Session!
+    cancelMatchRequest(sessionId: ID!, requestId: ID!): Session!
     startSession(id: ID!): Session!
     pauseSession(id: ID!): Session!
     resumeSession(id: ID!): Session!

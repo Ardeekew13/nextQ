@@ -5,7 +5,7 @@ import { Session } from "@/models/Session";
 import { SessionPlayer, type SessionPlayerDoc } from "@/models/SessionPlayer";
 import { generateGame, type MatchPlayer } from "@/lib/matchmaking";
 import { generateNextGame as queueEngineGenerate, type QueuePlayer } from "@/lib/queueEngine";
-import { getEligiblePlayers, toQueuePlayer, queuePoolSeed, seededRandom } from "@/lib/eligibility";
+import { getEligiblePlayers, getQueuePreview, toQueuePlayer, queuePoolSeed, seededRandom } from "@/lib/eligibility";
 import { loadClubHistory } from "@/lib/clubHistory";
 import { recentGameMates } from "@/lib/lastGame";
 import { buildQueueSnapshot } from "@/lib/queueSnapshot";
@@ -13,13 +13,33 @@ import { rebuildSessionStatistics } from "@/lib/stats";
 import { withOptionalTransaction } from "@/lib/transaction";
 import { CourtStatus, GameSource, GameStatus, WinningTeam, PairingMode, QueueMode, type SessionSettings } from "@/types/enums";
 import { requireSessionOwner, requireOrganiser } from "../guards";
+import { engineMatchRequests, fulfilledRequestIds, queuePriorityOrder } from "@/lib/upNext";
 import { loadCourt, loadPlayers, type GraphQLContext } from "../context";
 import type { HydratedDocument } from "mongoose";
 
 /** A manual queue order says who plays NEXT: once someone from it is in a game they're taken off
  * it (the rest keep their order), so they don't jump the queue again after their game. */
-function releaseFromManualOrder(sessionId: unknown, playerIds: unknown[]) {
-  return Session.updateOne({ _id: sessionId }, { $pull: { manualQueueOrder: { $in: playerIds } } });
+function releaseFromManualOrder(sessionId: unknown, playerIds: unknown[], requests?: Parameters<typeof fulfilledRequestIds>[0]) {
+  // A requested match whose four are all in this game has been played.
+  const played = fulfilledRequestIds(requests, playerIds);
+  return Session.updateOne(
+    { _id: sessionId },
+    {
+      $pull: {
+        manualQueueOrder: { $in: playerIds },
+        upNextFirst: { $in: playerIds },
+        ...(played.length > 0 ? { matchRequests: { _id: { $in: played } } } : {}),
+      },
+    }
+  );
+}
+
+/** Players the organiser took out of a game go to the very front of the queue (in this order,
+ * ahead of anyone bumped earlier) until they play - see lib/upNext.ts. */
+async function bumpToFront(sessionId: unknown, playerIds: string[]) {
+  if (playerIds.length === 0) return;
+  await Session.updateOne({ _id: sessionId }, { $pull: { upNextFirst: { $in: playerIds } } });
+  await Session.updateOne({ _id: sessionId }, { $push: { upNextFirst: { $each: playerIds, $position: 0 } } });
 }
 
 function toMatchPlayer(doc: HydratedDocument<SessionPlayerDoc>): MatchPlayer {
@@ -175,7 +195,7 @@ export const gameResolvers = {
           ? SessionPlayer.updateMany({ _id: { $in: satOut } }, { $set: { consecutiveGames: 0 } })
           : Promise.resolve(),
         court.save(),
-        releaseFromManualOrder(session._id, selected),
+        releaseFromManualOrder(session._id, selected, session.matchRequests),
       ]);
       return game;
     },
@@ -192,7 +212,7 @@ export const gameResolvers = {
         getEligiblePlayers(args.sessionId),
         Game.find(
           { sessionId: args.sessionId, status: { $ne: GameStatus.CANCELLED } },
-          { teamAPlayerIds: 1, teamBPlayerIds: 1 }
+          { teamAPlayerIds: 1, teamBPlayerIds: 1, createdAt: 1 }
         )
           .sort({ gameNumber: -1 })
           .limit(200),
@@ -218,8 +238,9 @@ export const gameResolvers = {
       // Manual queue order (see setManualQueueOrder) takes priority over the usual
       // wait-time/games-played ordering - this is the real court-fill path, so it must
       // match whatever the organiser-facing preview (nextGamePreview) already promised.
-      const manualPriorityById = new Map((session.manualQueueOrder ?? []).map((id, index) => [String(id), index]));
-      const manualOrderLength = session.manualQueueOrder?.length ?? 0;
+      const priorityOrder = queuePriorityOrder(session);
+      const manualPriorityById = new Map(priorityOrder.map((id, index) => [id, index]));
+      const manualOrderLength = priorityOrder.length;
       const eligible: QueuePlayer[] = eligibleDocs.map((d) => ({
         ...toQueuePlayer(d, clubHistory, recentMates),
         manualPriority: manualPriorityById.get(String(d._id)),
@@ -242,6 +263,8 @@ export const gameResolvers = {
         pastGroups,
         keepApart: (session.separatedGroups ?? []).map((g) => g.playerIds.map(String)),
         manualOrderLength,
+        lastFillAt: priorGames[0]?.createdAt ?? undefined,
+        matchRequests: engineMatchRequests(session.matchRequests),
         random: seededRandom(queuePoolSeed(eligibleDocs)),
       });
 
@@ -282,7 +305,7 @@ export const gameResolvers = {
             )
           : Promise.resolve(),
         court.save(),
-        releaseFromManualOrder(session._id, [...selectedIds]),
+        releaseFromManualOrder(session._id, [...selectedIds], session.matchRequests),
       ]);
 
       return game;
@@ -305,7 +328,7 @@ export const gameResolvers = {
         });
       }
 
-      await requireSessionOwner(context, String(court.sessionId));
+      const owningSession = await requireSessionOwner(context, String(court.sessionId));
 
       const allPlayerIds = [...args.teamAPlayerIds, ...args.teamBPlayerIds];
       if (new Set(allPlayerIds).size !== allPlayerIds.length) {
@@ -344,6 +367,9 @@ export const gameResolvers = {
       }
 
       const chosen = new Set(allPlayerIds.map(String));
+      // Whoever "Up next" promised but the organiser left out goes to the front of the queue.
+      const promised = (await getQueuePreview(String(court.sessionId))).slice(0, 4).map((d) => String(d._id));
+      const skippedUpNext = promised.filter((id) => !chosen.has(id));
       const playersSatOutIds = (await getEligiblePlayers(String(court.sessionId)))
         .map((d) => String(d._id))
         .filter((id) => !chosen.has(id));
@@ -372,7 +398,7 @@ export const gameResolvers = {
           ? SessionPlayer.updateMany({ _id: { $in: playersSatOutIds } }, { $set: { consecutiveGames: 0 } })
           : Promise.resolve(),
         court.save(),
-        releaseFromManualOrder(court.sessionId, allPlayerIds),
+        releaseFromManualOrder(court.sessionId, allPlayerIds, owningSession.matchRequests).then(() => bumpToFront(court.sessionId, skippedUpNext)),
       ]);
 
       return game;
@@ -383,7 +409,7 @@ export const gameResolvers = {
       args: { id: string; teamAPlayerIds: string[]; teamBPlayerIds: string[] },
       context: GraphQLContext
     ) => {
-      const { game } = await requireGameOwner(context, args.id);
+      const { game, session: gameSession } = await requireGameOwner(context, args.id);
       if (game.status === GameStatus.COMPLETED || game.status === GameStatus.CANCELLED) {
         throw new GraphQLError(`Cannot edit teams of a ${game.status.toLowerCase()} game.`, {
           extensions: { code: "BAD_USER_INPUT" },
@@ -424,9 +450,26 @@ export const gameResolvers = {
         } as never);
       }
 
+      // Move this game's count to whoever really plays it: a swapped-in player gets the game,
+      // a swapped-out player now sits this round out (as playersSatOutIds above says). Without
+      // this the swapped-out player kept a game they never played and could be rested for it.
+      const oldTeamIds = new Set([...game.teamAPlayerIds, ...game.teamBPlayerIds].map(String));
+      const swappedIn = [...newTeamIds].filter((id) => !oldTeamIds.has(id));
+      const swappedOut = [...oldTeamIds].filter((id) => !newTeamIds.has(id));
+
       game.teamAPlayerIds = args.teamAPlayerIds as never[];
       game.teamBPlayerIds = args.teamBPlayerIds as never[];
       await game.save();
+      await Promise.all([
+        swappedIn.length > 0
+          ? SessionPlayer.updateMany({ _id: { $in: swappedIn } }, { $inc: { consecutiveGames: 1 } })
+          : Promise.resolve(),
+        swappedOut.length > 0
+          ? SessionPlayer.updateMany({ _id: { $in: swappedOut } }, { $set: { consecutiveGames: 0 } })
+          : Promise.resolve(),
+        // Taken out of this game by the organiser: they're up next instead.
+        releaseFromManualOrder(game.sessionId, [...newTeamIds], gameSession?.matchRequests).then(() => bumpToFront(game.sessionId, swappedOut)),
+      ]);
       return game;
     },
 
@@ -492,7 +535,10 @@ export const gameResolvers = {
         const playerIds = [...game.teamAPlayerIds, ...game.teamBPlayerIds];
         await SessionPlayer.updateMany(
           { _id: { $in: playerIds } },
-          { $set: { queueEnteredAt: completedAt, consecutiveGames: 0 } },
+          // consecutiveGames is NOT reset here: finishing a game isn't a rest. It only resets when
+          // the player sits out a fill (or rejoins the queue), so maxConsecutiveGames really means
+          // "games in a row without sitting one out". Resetting here made the limit a no-op.
+          { $set: { queueEnteredAt: completedAt } },
           { session: mongooseSession ?? undefined }
         );
 
