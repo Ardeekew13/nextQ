@@ -10,10 +10,11 @@
  */
 
 import { QueueMode } from "@/types/enums";
-import { generateNextGame, rankQueue, type QueuePlayer } from "@/lib/queueEngine";
+import { generateNextGame, rankQueue, type MatchRequest, type QueuePlayer } from "@/lib/queueEngine";
 import { poolSeed, seededRandom } from "@/lib/seededRandom";
 import { blendedStrength } from "@/lib/playerStrength";
 import { RECENT_GAMES_REMEMBERED } from "@/lib/lastGame";
+import { queuePriorityOrder } from "@/lib/upNext";
 
 export interface SnapshotPlayer {
   id: string;
@@ -85,6 +86,13 @@ export interface QueueSnapshot {
   /** Organiser's saved manual queue order (see Session.manualQueueOrder). Empty when no
    * manual order is set. Missing entirely on older snapshots, same as an empty array. */
   manualQueueOrder?: string[];
+  /** Players the organiser took out of a game: front of the queue, ahead of manualQueueOrder,
+   * until they play (see lib/upNext.ts). Missing on older snapshots. */
+  upNextFirst?: string[];
+  /** When the newest non-cancelled game was created (see QueueEngineOptions.lastFillAt). */
+  lastFillAt?: string | null;
+  /** Requested matches still to play (see MatchRequest in queueEngine). */
+  matchRequests?: MatchRequest[];
 }
 
 export interface FillOp {
@@ -131,6 +139,10 @@ export interface LocalState {
   /** The organiser's manual queue order, minus anyone put in a game since (they come off it,
    * as on the server). */
   manualQueueOrder: string[];
+  /** When the newest game was made (on the server or on this device). */
+  lastFillAt: string | null;
+  /** Requested matches not played yet. */
+  matchRequests: MatchRequest[];
 }
 
 export const LOCAL_GAME_PREFIX = "local-";
@@ -176,7 +188,7 @@ function applyResult(
       for (const mate of team) if (mate !== id) bump(p.partnerHistory, mate);
       for (const opp of opponents) bump(p.opponentHistory, opp);
       p.queueEnteredAt = recordedAt;
-      p.consecutiveGames = 0;
+      // consecutiveGames carries on: only sitting out a fill resets it (same as the server).
     }
   };
   applyTeam(game.teamA, game.teamB, winningTeam === "A");
@@ -193,7 +205,10 @@ export function deriveLocalState(snapshot: QueueSnapshot, ops: LocalOp[]): Local
   let activeGames = snapshot.activeGames.map((g) => ({ ...g }));
   const pastGroups = new Set(snapshot.pastGroups);
   let lastGameNumber = snapshot.lastGameNumber;
-  let manualQueueOrder = [...(snapshot.manualQueueOrder ?? [])];
+  // Bumped players first, then the saved order - the same list the server's engine uses.
+  let manualQueueOrder = queuePriorityOrder(snapshot);
+  let lastFillAt = snapshot.lastFillAt ?? null;
+  let matchRequests = [...(snapshot.matchRequests ?? [])];
   // Actions the server already has are part of the snapshot: never apply them twice.
   // A synced offline game is known by its temporary id; if it's still on court, results
   // recorded against that temporary id apply to the server's copy of the game.
@@ -233,6 +248,8 @@ export function deriveLocalState(snapshot: QueueSnapshot, ops: LocalOp[]): Local
       });
       pastGroups.add(groupKey([...selected]));
       manualQueueOrder = manualQueueOrder.filter((id) => !selected.has(id));
+      if (!lastFillAt || op.createdAt > lastFillAt) lastFillAt = op.createdAt;
+      matchRequests = matchRequests.filter((r) => ![...r.teamA, ...r.teamB].every((id) => selected.has(id)));
     } else {
       const gameId = serverIdOf.get(op.gameId) ?? op.gameId;
       const game = activeGames.find((g) => g.id === gameId);
@@ -254,7 +271,7 @@ export function deriveLocalState(snapshot: QueueSnapshot, ops: LocalOp[]): Local
     return { ...c, status, currentGameId: current?.id ?? null };
   });
 
-  return { players, activeGames, courts, lastGameNumber, pastGroups, eligible, manualQueueOrder };
+  return { players, activeGames, courts, lastGameNumber, pastGroups, eligible, manualQueueOrder, lastFillAt, matchRequests };
 }
 
 function toQueuePlayer(p: SnapshotPlayer, manualPriority?: number): QueuePlayer {
@@ -295,6 +312,8 @@ function engineOptions(snapshot: QueueSnapshot, state: LocalState) {
     pastGroups: state.pastGroups,
     keepApart: snapshot.keepApart,
     manualOrderLength: state.manualQueueOrder.length,
+    lastFillAt: state.lastFillAt ? new Date(state.lastFillAt) : undefined,
+    matchRequests: state.matchRequests,
     random: seededRandom(poolSeed(state.eligible.map((p) => p.id))),
   };
 }

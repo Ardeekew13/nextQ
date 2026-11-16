@@ -17,6 +17,7 @@ export const PLAYER_FIELDS = gql`
     currentStreak
     longestWinStreak
     gamesSatOut
+    fixedPartnerId
   }
 `;
 
@@ -459,6 +460,12 @@ export const SESSION_DASHBOARD_QUERY = gql`
         queueEnteredAt
       }
       manualQueueOrder
+      upNextFirst
+      matchRequests {
+        id
+        teamAPlayerIds
+        teamBPlayerIds
+      }
       togetherGroups {
         id
         gamesTogether
@@ -635,6 +642,32 @@ export const SET_MANUAL_QUEUE_ORDER = gql`
     setManualQueueOrder(sessionId: $sessionId, playerIds: $playerIds) {
       id
       manualQueueOrder
+    }
+  }
+`;
+
+export const REQUEST_MATCH = gql`
+  mutation RequestMatch($sessionId: ID!, $teamAPlayerIds: [ID!]!, $teamBPlayerIds: [ID!]!) {
+    requestMatch(sessionId: $sessionId, teamAPlayerIds: $teamAPlayerIds, teamBPlayerIds: $teamBPlayerIds) {
+      id
+      matchRequests {
+        id
+        teamAPlayerIds
+        teamBPlayerIds
+      }
+    }
+  }
+`;
+
+export const CANCEL_MATCH_REQUEST = gql`
+  mutation CancelMatchRequest($sessionId: ID!, $requestId: ID!) {
+    cancelMatchRequest(sessionId: $sessionId, requestId: $requestId) {
+      id
+      matchRequests {
+        id
+        teamAPlayerIds
+        teamBPlayerIds
+      }
     }
   }
 `;

@@ -35,6 +35,6 @@ describe("players leave the manual queue order when they get a game", () => {
       { sessionId: "s1", courtId: "c1", clientGameId: "local-1", teamAPlayerIds: ["a", "b"], teamBPlayerIds: ["c", "d"], playersSatOutIds: ["e"] },
       ctx
     );
-    expect(Session.updateOne).toHaveBeenCalledWith({ _id: "s1" }, { $pull: { manualQueueOrder: { $in: ["a", "b", "c", "d"] } } });
+    expect(Session.updateOne).toHaveBeenCalledWith({ _id: "s1" }, { $pull: { manualQueueOrder: { $in: ["a", "b", "c", "d"] }, upNextFirst: { $in: ["a", "b", "c", "d"] } } });
   });
 });

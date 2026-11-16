@@ -78,6 +78,21 @@ const SessionSchema = new Schema(
      * apply on top of it. A player not listed here sorts right after everyone who is. Cleared
      * entirely by clearManualQueueOrder to go back to fully-automatic ordering. */
     manualQueueOrder: { type: [{ type: Schema.Types.ObjectId, ref: "SessionPlayer" }], default: [] },
+    /** Players the organiser took out of a game: they go to the very front of the queue, ahead of
+     * manualQueueOrder, until they're put in a game (see lib/upNext.ts). */
+    upNextFirst: { type: [{ type: Schema.Types.ObjectId, ref: "SessionPlayer" }], default: [] },
+    /** Games the organiser set up on request ("A and B want to play C and D"). Each plays once,
+     * when its last member's turn in the queue comes, on these teams; removed once played. */
+    matchRequests: {
+      type: [
+        new Schema({
+          teamAPlayerIds: [{ type: Schema.Types.ObjectId, ref: "SessionPlayer" }],
+          teamBPlayerIds: [{ type: Schema.Types.ObjectId, ref: "SessionPlayer" }],
+          createdAt: { type: Date, default: () => new Date() },
+        }),
+      ],
+      default: [],
+    },
     finalisedAt: { type: Date },
   },
   { timestamps: true }

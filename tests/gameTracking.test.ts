@@ -10,6 +10,7 @@ vi.mock("@/graphql/guards", () => ({
   requireClubOwner: vi.fn(),
 }));
 vi.mock("@/models/Game", () => ({ Game: { findById: vi.fn() } }));
+vi.mock("@/models/Session", () => ({ Session: { updateOne: vi.fn(async () => ({})) } }));
 vi.mock("@/models/SessionPlayer", () => ({ SessionPlayer: { find: vi.fn(), updateMany: vi.fn() } }));
 
 import mongoose from "mongoose";

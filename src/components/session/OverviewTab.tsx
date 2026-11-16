@@ -12,6 +12,8 @@ import {
 	SEPARATE_PLAYERS,
 	SET_MANUAL_QUEUE_ORDER,
 	CLEAR_MANUAL_QUEUE_ORDER,
+	REQUEST_MATCH,
+	CANCEL_MATCH_REQUEST,
 	UPDATE_SESSION,
 	SESSION_DASHBOARD_QUERY,
 	SESSION_QUEUE_SNAPSHOT,
@@ -22,7 +24,8 @@ import {
 import { DEFAULT_QUEUE_SETTINGS } from "@/types/enums";
 import { useApolloClient, useMutation, useQuery } from "@apollo/client";
 import { placeGameOnCourt, shouldShowDeviceCopy, slowToSync } from "@/lib/courtDisplay";
-import { App, Button, Empty, Input, Modal, Popover, Switch, Typography } from "antd";
+import { App, Button, Empty, Input, Modal, Popover, Select, Switch, Tooltip, Typography } from "antd";
+import { LinkOutlined } from "@ant-design/icons";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
 	ScoreEntryForm,
@@ -58,6 +61,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { fillOnDevice, snapshotMatchesServer } from "@/lib/fillLocation";
+import { queuePriorityOrder } from "@/lib/upNext";
 import { loadAutoFill, saveAutoFill } from "@/lib/autoFill";
 import { isNetworkFailure, loadIdMap, loadPending, loadSnapshot, saveSnapshot } from "@/lib/offlineResults";
 import { pickTopFour } from "@/lib/topFour";
@@ -108,6 +112,19 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 }
 
 /** One draggable row while the organiser is reordering the queue (see "Edit order" below). */
+/** Small chain-link mark for a player with a fixed partner (they always play on the same team). */
+function PartnerMark({ partner, light }: { partner?: string; light?: boolean }) {
+	if (!partner) return null;
+	return (
+		<Tooltip title={`Fixed partner: ${partner} - keep them on the same team`}>
+			<LinkOutlined
+				aria-label={`Fixed partner ${partner}`}
+				style={{ marginLeft: 4, fontSize: "0.75em", color: light ? "rgba(255,255,255,0.75)" : "#e11d74" }}
+			/>
+		</Tooltip>
+	);
+}
+
 /** Ids of queued players the engine will rest for one game: at the back-to-back limit, as long
  * as at least 4 others can still play (mirrors the consecutive-game rule in queueEngine). */
 function restingPlayerIds(players: any[], maxConsecutiveGames: number): Set<string> {
@@ -241,6 +258,18 @@ export function OverviewTab({
 		refetchQueries: [{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } }],
 		awaitRefetchQueries: true,
 	});
+	// ── Requested matches ("A & B want to play C & D") ──
+	const [requestOpen, setRequestOpen] = useState(false);
+	const [requestTeamA, setRequestTeamA] = useState<string[]>([]);
+	const [requestTeamB, setRequestTeamB] = useState<string[]>([]);
+	const [requestMatch, { loading: requestingMatch }] = useMutation(REQUEST_MATCH, {
+		refetchQueries: [{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } }],
+		awaitRefetchQueries: true,
+	});
+	const [cancelMatchRequest] = useMutation(CANCEL_MATCH_REQUEST, {
+		refetchQueries: [{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } }],
+		awaitRefetchQueries: true,
+	});
 	const [clearManualQueueOrder, { loading: clearingQueueOrder }] = useMutation(CLEAR_MANUAL_QUEUE_ORDER, {
 		refetchQueries: [{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } }],
 		awaitRefetchQueries: true,
@@ -324,10 +353,12 @@ export function OverviewTab({
 		const matchesServer =
 			!!snapshot &&
 			!!server &&
-			snapshotMatchesServer(snapshot, {
+			snapshotMatchesServer({ ...snapshot, manualQueueOrder: queuePriorityOrder(snapshot) }, {
 				activeGameIds: (server.activeGames ?? []).map((g: any) => g.id),
 				availablePlayerIds: (server.players ?? []).filter((p: any) => p.checkedIn && p.active).map((p: any) => p.id),
-				manualQueueOrder: (server.manualQueueOrder ?? []).map(String),
+				// Bumped players first, then the saved order: what both the server and the device rank by.
+				manualQueueOrder: queuePriorityOrder(server),
+				matchRequestIds: (server.matchRequests ?? []).map((r: any) => r.id),
 			});
 		return fillOnDevice({
 			hasSnapshot: Boolean(snapshot),
@@ -440,6 +471,26 @@ export function OverviewTab({
 	const maxConsecutive: number = session?.settings?.maxConsecutiveGames ?? 2;
 	const restingIds = restingPlayerIds(queuedPlayers, maxConsecutive);
 	const restingLabel = `Sits out next game · ${maxConsecutive} in a row`;
+	const nameById = new Map<string, string>((session?.players ?? []).map((p: any) => [p.id, p.name]));
+	// Fixed partner's name for each player who has one.
+	const partnerNameOf = new Map<string, string>();
+	for (const p of session?.players ?? []) {
+		if (p.fixedPartnerId && nameById.has(p.fixedPartnerId)) partnerNameOf.set(p.id, nameById.get(p.fixedPartnerId)!);
+	}
+	const matchRequests: any[] = session?.matchRequests ?? [];
+	const requestOf = new Map<string, any>();
+	for (const r of matchRequests) for (const id of [...r.teamAPlayerIds, ...r.teamBPlayerIds]) requestOf.set(id, r);
+	const describeRequest = (r: any) =>
+		`${r.teamAPlayerIds.map((id: string) => nameById.get(id) ?? "?").join(" & ")} vs ${r.teamBPlayerIds.map((id: string) => nameById.get(id) ?? "?").join(" & ")}`;
+	/** Who the request is waiting on: the member furthest back in the queue, or one still on court. */
+	const requestWaitingOn = (r: any) => {
+		const ids: string[] = [...r.teamAPlayerIds, ...r.teamBPlayerIds];
+		const queuePos = new Map(queuedPlayers.map((p: any, i: number) => [p.id, i]));
+		const notWaiting = ids.filter((id) => !queuePos.has(id));
+		if (notWaiting.length > 0) return `waiting for ${notWaiting.map((id) => nameById.get(id)).join(", ")} to be free`;
+		const last = ids.reduce((a, b) => ((queuePos.get(a) ?? 0) >= (queuePos.get(b) ?? 0) ? a : b));
+		return `plays when ${nameById.get(last)}'s turn comes (#${(queuePos.get(last) ?? 0) + 1} in queue)`;
+	};
 	// The court grid's current order: the organiser's just-dragged order while it's still
 	// saving, otherwise the server's order. The override is only trusted when it covers
 	// exactly the courts that exist right now - e.g. once a court is added or removed it no
@@ -847,6 +898,31 @@ export function OverviewTab({
 			message.success("Back to automatic queue ordering.");
 		} catch (err) {
 			message.error(err instanceof Error ? err.message : "Could not reset the queue order");
+		}
+	}
+
+	async function handleRequestMatch() {
+		try {
+			await requestMatch({ variables: { sessionId, teamAPlayerIds: requestTeamA, teamBPlayerIds: requestTeamB } });
+			markSnapshotStale();
+			void refreshSnapshot();
+			message.success("Match requested - they'll play together when the last of the four is up.");
+			setRequestOpen(false);
+			setRequestTeamA([]);
+			setRequestTeamB([]);
+		} catch (err) {
+			message.error(err instanceof Error ? err.message : "Could not request that match");
+		}
+	}
+
+	async function handleCancelMatchRequest(requestId: string) {
+		try {
+			await cancelMatchRequest({ variables: { sessionId, requestId } });
+			markSnapshotStale();
+			void refreshSnapshot();
+			message.success("Requested match removed.");
+		} catch (err) {
+			message.error(err instanceof Error ? err.message : "Could not remove that request");
 		}
 	}
 
@@ -1404,6 +1480,8 @@ export function OverviewTab({
 									(p: any) => p.checkedIn || p.active,
 								)}
 								queuedPlayers={queuedPlayers}
+								partnerNameOf={partnerNameOf}
+								fixedPartnerIdOf={new Map((session.players ?? []).filter((p: any) => p.fixedPartnerId).map((p: any) => [p.id, p.fixedPartnerId]))}
 								updatingTeams={updatingTeams}
 								onFill={handleGenerate}
 								resultState={(() => {
@@ -1477,21 +1555,28 @@ export function OverviewTab({
 										<div>
 											<div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>
 												ON DECK · NEXT OFF {nextOffCourt ? `COURT ${nextOffCourt.courtNumber}` : "COURT"}
+												{(() => {
+													const ids = queuedPlayers.slice(0, 4).map((p: any) => p.id);
+													const r = ids.length === 4 ? requestOf.get(ids[0]) : undefined;
+													return r && [...r.teamAPlayerIds, ...r.teamBPlayerIds].every((id: string) => ids.includes(id)) ? " · REQUESTED MATCH" : "";
+												})()}
 											</div>
 											{session?.nextGamePreview ? (
 												<div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
 													<div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
 														{session.nextGamePreview.teamA.players.map((p: any) => (
-															<span key={p.id} style={{ fontSize: 17, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+															<span key={p.id} data-testid="on-deck-player" style={{ fontSize: 17, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", letterSpacing: "0.05em" }}>
 																{p.name}
+																<PartnerMark partner={partnerNameOf.get(p.id)} light />
 															</span>
 														))}
 													</div>
 													<span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.4)" }}>VS</span>
 													<div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
 														{session.nextGamePreview.teamB.players.map((p: any) => (
-															<span key={p.id} style={{ fontSize: 17, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+															<span key={p.id} data-testid="on-deck-player" style={{ fontSize: 17, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", letterSpacing: "0.05em" }}>
 																{p.name}
+																<PartnerMark partner={partnerNameOf.get(p.id)} light />
 															</span>
 														))}
 													</div>
@@ -1499,8 +1584,9 @@ export function OverviewTab({
 											) : (
 												<div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
 													{queuedPlayers.slice(0, 4).map((p: any) => (
-														<span key={p.id} style={{ fontSize: 17, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+														<span key={p.id} data-testid="on-deck-player" style={{ fontSize: 17, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", letterSpacing: "0.05em" }}>
 															{p.name}
+															<PartnerMark partner={partnerNameOf.get(p.id)} light />
 														</span>
 													))}
 												</div>
@@ -1752,6 +1838,9 @@ export function OverviewTab({
 								</div>
 							) : (
 								<div style={{ display: "flex", gap: 6 }}>
+									<Button size="small" onClick={() => setRequestOpen(true)}>
+										Request match
+									</Button>
 									{(session?.manualQueueOrder?.length ?? 0) > 0 && (
 										<Button size="small" loading={clearingQueueOrder} onClick={handleResetQueueOrder}>
 											Reset order
@@ -1773,6 +1862,66 @@ export function OverviewTab({
 							</Text>
 						</div>
 					)}
+
+					{!editingQueueOrder && matchRequests.length > 0 && (
+						<div style={{ padding: "8px 16px", background: "#fff7ed", borderBottom: "1px solid rgba(138,39,72,0.08)", display: "flex", flexDirection: "column", gap: 4 }}>
+							{matchRequests.map((r: any) => (
+								<div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+									<div style={{ flex: 1, minWidth: 0 }}>
+										<div style={{ fontSize: 12, fontWeight: 700, color: "#1d1f20" }}>Requested: {describeRequest(r)}</div>
+										<div style={{ fontSize: 11, color: "#b45309" }}>{requestWaitingOn(r)}</div>
+									</div>
+									<Button size="small" type="text" onClick={() => handleCancelMatchRequest(r.id)} aria-label="Remove requested match">
+										✕
+									</Button>
+								</div>
+							))}
+						</div>
+					)}
+					<Modal
+						title="Request a match"
+						open={requestOpen}
+						onCancel={() => setRequestOpen(false)}
+						onOk={handleRequestMatch}
+						okText="Request"
+						confirmLoading={requestingMatch}
+						okButtonProps={{ disabled: requestTeamA.length !== 2 || requestTeamB.length !== 2, style: { background: "#e11d74", borderColor: "#e11d74" } }}
+					>
+						<Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 12 }}>
+							These four play each other once, on these teams. They go on court together when the last of them reaches the front of the queue, so nobody skips ahead.
+						</Text>
+						{(["A", "B"] as const).map((team) => {
+							const value = team === "A" ? requestTeamA : requestTeamB;
+							const other = team === "A" ? requestTeamB : requestTeamA;
+							const setValue = team === "A" ? setRequestTeamA : setRequestTeamB;
+							const options = (session?.players ?? [])
+								.filter((p: any) => p.checkedIn && !other.includes(p.id) && (!requestOf.has(p.id) || value.includes(p.id)))
+								.map((p: any) => ({ value: p.id, label: p.name }));
+							return (
+								<div key={team} style={{ marginBottom: 12 }}>
+									<div style={{ fontSize: 10, fontWeight: 700, color: "#e11d74", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Team {team}</div>
+									<Select
+										mode="multiple"
+										style={{ width: "100%" }}
+										placeholder="Pick 2 players"
+										value={value}
+										onChange={(v: string[]) => setValue(v.slice(0, 2))}
+										options={options}
+										showSearch
+										filterOption={(input, opt: any) => opt?.label?.toLowerCase().includes(input.toLowerCase())}
+										optionRender={(opt) => (
+											<span>
+												{opt.label}
+												{partnerNameOf.has(String(opt.value)) && (
+													<Text type="secondary" style={{ fontSize: 11 }}> · fixed partner {partnerNameOf.get(String(opt.value))}</Text>
+												)}
+											</span>
+										)}
+									/>
+								</div>
+							);
+						})}
+					</Modal>
 
 					{editingQueueOrder ? (
 						<div>
@@ -1875,6 +2024,7 @@ export function OverviewTab({
 											<div style={{ flex: 1, minWidth: 0 }}>
 												<div style={{ fontSize: 14, fontWeight: 600, color: "#1d1f20" }}>
 													{player.name}
+													<PartnerMark partner={partnerNameOf.get(player.id)} />
 												</div>
 												<div style={{ fontSize: 11, color: "rgba(29,31,32,0.45)" }}>
 													{player.gamesSatOut > 0
@@ -1885,6 +2035,14 @@ export function OverviewTab({
 												</div>
 												{restingIds.has(player.id) && (
 													<div style={{ fontSize: 11, color: "#b45309" }}>{restingLabel}</div>
+												)}
+												{partnerNameOf.has(player.id) && (
+													<div style={{ fontSize: 11, color: "#9d174d" }}>
+														<LinkOutlined style={{ marginRight: 3 }} />Fixed partner: {partnerNameOf.get(player.id)}
+													</div>
+												)}
+												{requestOf.has(player.id) && (
+													<div style={{ fontSize: 11, color: "#b45309" }}>Requested match: {describeRequest(requestOf.get(player.id))}</div>
 												)}
 											</div>
 											<span

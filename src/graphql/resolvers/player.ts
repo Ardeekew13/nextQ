@@ -291,7 +291,10 @@ export const playerResolvers = {
       const player = await requirePlayerOwner(context, args.id);
       player.checkedIn = args.checkedIn;
       player.checkedInAt = args.checkedIn ? new Date() : undefined;
-      if (args.checkedIn) player.queueEnteredAt = new Date();
+      if (args.checkedIn) {
+        player.queueEnteredAt = new Date();
+        player.consecutiveGames = 0; // (re)joining after time away counts as a rest
+      }
       await player.save();
       return player;
     },
@@ -299,7 +302,10 @@ export const playerResolvers = {
     setPlayerActiveStatus: async (_p: unknown, args: { id: string; active: boolean }, context: GraphQLContext) => {
       const player = await requirePlayerOwner(context, args.id);
       player.active = args.active;
-      if (args.active) player.queueEnteredAt = new Date();
+      if (args.active) {
+        player.queueEnteredAt = new Date();
+        player.consecutiveGames = 0; // back from a break counts as a rest
+      }
       await player.save();
       return player;
     },
