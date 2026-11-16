@@ -225,11 +225,14 @@ function playerScore(
       );
 
     case QueueMode.SMART:
-      // Primary: longest wait (bucketed, no games-played factor); then most sat out
+      // Primary: longest wait (bucketed). Among people who joined the line at the same moment
+      // (e.g. the four off one court) fewer games played goes first, then most sat out. Without
+      // the games tiebreak the same people won every tie and drifted 3 games ahead.
       return (
         manualTerm +
         consecutivePenalty +
         (-waitBucket) * 10_000 * WAIT_TIE_WINDOW_MINUTES +
+        player.gamesPlayed * 100 +
         (-player.gamesSatOut) * 5 +
         tiebreak
       );
