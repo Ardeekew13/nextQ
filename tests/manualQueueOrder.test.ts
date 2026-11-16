@@ -63,11 +63,10 @@ describe("manual queue order — generateNextGame", () => {
     expect(result.selected.map((p) => p.id)).toContain("e");
   });
 
-  it("keeps a fixed-partner pair together, deciding the pair's turn by the partner with the worse manual position", () => {
-    // pairA is saved first in the manual order (position 0), but pairB (their fixed partner)
-    // is saved last (position 5). Per the documented "pair waits for its slower half" rule,
-    // the pair's effective turn is position 5, so two independently-higher-priority manual
-    // singles (c, d at positions 1 and 2) must be picked ahead of the pair.
+  it("keeps a fixed-partner pair together, at the EARLIER partner's manual position", () => {
+    // pairA is saved first (position 0) and pairB, their fixed partner, last (position 5). The
+    // organiser placed pairA at the front by hand, so the pair plays now: pairB is pulled up with
+    // them, and the next two saved singles (c, d) fill the game.
     const eligible: QueuePlayer[] = [
       qp("pairA", 0, { manualPriority: 0, fixedPartnerId: "pairB" }),
       qp("pairB", 0, { manualPriority: 5, fixedPartnerId: "pairA" }),
@@ -82,8 +81,7 @@ describe("manual queue order — generateNextGame", () => {
     if (!result.ok) return;
 
     const ids = result.selected.map((p) => p.id);
-    // c, d, x, y (positions 1-4) outrank the pair (effective position 5) and fill all 4 seats.
-    expect(new Set(ids)).toEqual(new Set(["c", "d", "x", "y"]));
+    expect(new Set(ids)).toEqual(new Set(["pairA", "pairB", "c", "d"]));
   });
 });
 

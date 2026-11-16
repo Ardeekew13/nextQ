@@ -93,6 +93,11 @@ test("fixed partners are marked, and splitting them in a lineup edit warns", asy
   await expect(page.getByRole("alert").filter({ hasText: "fixed partners" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save anyway" })).toBeVisible();
   await page.getByRole("button", { name: "Cancel" }).click();
+
+  // And in the custom-order editor.
+  await page.getByRole("button", { name: "Edit order" }).click();
+  await expect(page.getByTestId("queue-order-row").filter({ hasText: waiting.name })).toContainText(`Fixed partner: ${onCourt.name}`);
+  await expect(page.getByText(/Fixed partners always play together/)).toBeVisible();
 });
 
 test("request a match from the form: it waits for its last player, and can be removed", async ({ page }) => {
@@ -160,4 +165,52 @@ test("a requested match goes on court together, on the requested teams", async (
   expect(played).not.toBeNull();
   expect([played!.teamA, played!.teamB].map((t) => t.join()).sort()).toEqual([teamA.sort().join(), teamB.sort().join()].sort());
   expect((await load(page, id)).matchRequests).toEqual([]);
+});
+
+test("a dragged custom order is followed exactly, and keeps being followed after results", async ({ page }) => {
+  const id = await activeSessionId(page);
+  await page.goto(`/dashboard/sessions/${id}`);
+  await expect(page.getByTestId("on-deck-player")).toHaveCount(4);
+
+  await page.getByRole("button", { name: "Edit order" }).click();
+  const rows = page.getByTestId("queue-order-row");
+  await expect(rows).toHaveCount(8);
+  // Keyboard drag (same as the mouse): last player to the top, then the (new) 2nd to the bottom.
+  const drag = async (from: number, steps: number) => {
+    await rows.nth(from).focus();
+    await page.keyboard.press("Space");
+    for (let i = 0; i < Math.abs(steps); i++) {
+      await page.keyboard.press(steps < 0 ? "ArrowUp" : "ArrowDown");
+      await page.waitForTimeout(80); // let each step's move animation settle
+    }
+    await page.keyboard.press("Space");
+    await page.waitForTimeout(200);
+  };
+  const names = () => rows.evaluateAll((els) => els.map((el) => el.querySelector("span span")?.textContent?.trim() ?? ""));
+  const initial = await names();
+  await drag(7, -7);
+  await drag(1, 6);
+  const saved = await names();
+  // The drags really moved people: the old last is now first, the old first went down the list.
+  expect(saved[0]).toBe(initial[7]);
+  expect(saved.indexOf(initial[0])).toBeGreaterThan(1);
+  expect([...saved].sort()).toEqual([...initial].sort());
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText(/Custom order active/)).toBeVisible();
+
+  // The queue shows exactly that order, and On Deck is its first four.
+  await expect.poll(async () => page.getByTestId("queue-row").evaluateAll((els) => els.map((el) => el.getAttribute("data-player-name")))).toEqual(saved);
+  expect(await onDeck(page)).toEqual(saved.slice(0, 4).sort());
+
+  // Fill the open court: the first four play.
+  await page.getByRole("button", { name: "Fill Court" }).click();
+  await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(2);
+  expect(await courtLineups(page)).toContain(saved.slice(0, 4).sort().join(","));
+
+  // A result on the other court: auto-fill puts the NEXT four of the saved order on it.
+  const before = await courtLineups(page);
+  const other = before.findIndex((l) => l !== saved.slice(0, 4).sort().join(","));
+  await page.getByRole("button", { name: "Record Result" }).nth(other).click();
+  await page.getByRole("dialog").getByText("Team A").first().click();
+  await expect.poll(async () => (await courtLineups(page))[other]).toBe(saved.slice(4, 8).sort().join(","));
 });

@@ -44,7 +44,8 @@ export interface QueuePlayer {
    * The pair's turn is decided by whichever partner has the WORSE individual priority —
    * i.e. the pair waits as a unit for its slower half, rather than the faster half dragging
    * the other one forward. This keeps the "always together" guarantee without letting a
-   * pair jump ahead of players who'd otherwise be next. */
+   * pair jump ahead of players who'd otherwise be next. Exception: in a saved manual order the
+   * organiser placed people by hand, so the pair goes at the EARLIER partner's spot. */
   fixedPartnerId?: string;
   /** Organiser-set manual queue order (0-based position among manually-ordered players).
    * When set, this dominates every other scoring factor - it decides who's picked next
@@ -644,7 +645,13 @@ function selectPlayers(
     const partnerId = player.fixedPartnerId;
     const partner = partnerId && poolIds.has(partnerId) && !consumed.has(partnerId) ? byId.get(partnerId) : undefined;
     if (partner) {
-      const score = Math.max(scoreById.get(player.id)!, scoreById.get(partner.id)!);
+      // A saved manual order is the organiser placing people by hand: the pair goes at the
+      // higher of its two spots (the later partner is pulled up), instead of the usual
+      // "wait for the slower half".
+      const placedByHand =
+        manualOrderLength > 0 && (player.manualPriority !== undefined || partner.manualPriority !== undefined);
+      const pick = placedByHand ? Math.min : Math.max;
+      const score = pick(scoreById.get(player.id)!, scoreById.get(partner.id)!);
       entries.push({ kind: "pair", players: [player, partner], score });
       consumed.add(player.id);
       consumed.add(partner.id);

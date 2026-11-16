@@ -133,11 +133,12 @@ function restingPlayerIds(players: any[], maxConsecutiveGames: number): Set<stri
 	return new Set(atLimit.map((p: any) => p.id));
 }
 
-function SortableQueueRow({ id, index, name, resting }: { id: string; index: number; name: string; resting?: string }) {
+function SortableQueueRow({ id, index, name, resting, partner }: { id: string; index: number; name: string; resting?: string; partner?: string }) {
 	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
 	return (
 		<div
 			ref={setNodeRef}
+			data-testid="queue-order-row"
 			style={{
 				transform: CSS.Transform.toString(transform),
 				transition,
@@ -159,6 +160,11 @@ function SortableQueueRow({ id, index, name, resting }: { id: string; index: num
 			</span>
 			<span style={{ flex: 1, minWidth: 0 }}>
 				<span style={{ display: "block", fontSize: 14, fontWeight: 600, color: "#1d1f20" }}>{name}</span>
+				{partner && (
+					<span style={{ display: "block", fontSize: 11, color: "#9d174d" }}>
+						<LinkOutlined style={{ marginRight: 3 }} />Fixed partner: {partner}
+					</span>
+				)}
 				{resting && <span style={{ display: "block", fontSize: 11, color: "#b45309" }}>{resting}</span>}
 			</span>
 			<span style={{ fontSize: 16, color: "rgba(29,31,32,0.3)", flexShrink: 0 }}>⠿</span>
@@ -1603,6 +1609,7 @@ export function OverviewTab({
 												{queuedPlayers.slice(4, 8).map((p: any) => (
 													<span key={p.id} style={{ fontSize: 17, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif", textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.65 }}>
 														{p.name}
+														<PartnerMark partner={partnerNameOf.get(p.id)} light />
 													</span>
 												))}
 											</div>
@@ -1927,8 +1934,13 @@ export function OverviewTab({
 						<div>
 							<div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(138,39,72,0.08)", background: "#fdf2f8" }}>
 								<Text style={{ fontSize: 11, color: "rgba(29,31,32,0.6)" }}>
-									Drag players to set a custom order, then Save. The top of this list is who plays next.
+									Drag players to set a custom order, then Save. The queue then follows it exactly, four at a time, as results come in.
 								</Text>
+								{(draftQueueOrder ?? []).some((id) => partnerNameOf.has(id)) && (
+									<Text style={{ display: "block", marginTop: 4, fontSize: 11, color: "#9d174d" }}>
+										<LinkOutlined /> Fixed partners always play together: they go at whichever of their two spots is higher.
+									</Text>
+								)}
 								{(draftQueueOrder ?? []).slice(0, 4).some((id) => restingIds.has(id)) && (
 									<Text style={{ display: "block", marginTop: 4, fontSize: 11, color: "#b45309" }}>
 										Heads up: anyone marked "sits out next game" has played {maxConsecutive} in a row, so the next player in your order takes their spot. You can still save.
@@ -1940,7 +1952,7 @@ export function OverviewTab({
 									{(draftQueueOrder ?? []).map((playerId, index) => {
 										const player = queuedPlayers.find((p: any) => p.id === playerId);
 										if (!player) return null;
-										return <SortableQueueRow key={playerId} id={playerId} index={index} name={player.name} resting={restingIds.has(playerId) ? restingLabel : undefined} />;
+										return <SortableQueueRow key={playerId} id={playerId} index={index} name={player.name} resting={restingIds.has(playerId) ? restingLabel : undefined} partner={partnerNameOf.get(playerId)} />;
 									})}
 								</SortableContext>
 							</DndContext>
@@ -2000,6 +2012,8 @@ export function OverviewTab({
 										<div
 											key={player.id}
 											className="queue-row"
+											data-testid="queue-row"
+											data-player-name={player.name}
 											style={{
 												display: "flex",
 												alignItems: "center",
