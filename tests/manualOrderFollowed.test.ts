@@ -74,4 +74,24 @@ describe("saved custom order", () => {
     // never the group that has only just come off court.
     for (const id of games[3]) expect(["p0", "p1", "p2", "p3", ...order.slice(0, 4)]).toContain(id);
   });
+
+  it("a late arrival or someone back from a break can be dragged straight into the next game", () => {
+    const lastFillAt = new Date(NOW - 5 * 60000);
+    // p0-p7 waiting since before the last fill; "late" just checked in (no games); "back" returned
+    // from a break after the last fill (has games, so normally waits behind those already waiting).
+    const ps = [
+      ...Array.from({ length: 8 }, (_, i) => qp(i, { queueEnteredAt: new Date(NOW - (30 - i) * 60000), gamesPlayed: 3 })),
+      qp(20, { id: "late", gamesPlayed: 0, queueEnteredAt: new Date(NOW - 60000) }),
+      qp(21, { id: "back", gamesPlayed: 3, queueEnteredAt: new Date(NOW - 60000) }),
+    ];
+    const base = { tiebreakSeed: "s", lastFillAt, mixEveryone: true };
+    // Without dragging: the new arrival gets the next court, the returning player waits a game.
+    const auto = rankQueue(ps, base).map((p) => p.id);
+    expect(auto.slice(0, 4)).toContain("late");
+    expect(auto.slice(0, 4)).not.toContain("back");
+    // Dragged to the top: both play next, in the order saved.
+    const order = ["back", "late", ...ps.filter((p) => p.id !== "back" && p.id !== "late").map((p) => p.id)];
+    const dragged = rankQueue(withOrder(ps, order), { ...base, manualOrderLength: order.length }).map((p) => p.id);
+    expect(dragged).toEqual(order);
+  });
 });

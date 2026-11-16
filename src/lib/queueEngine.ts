@@ -617,7 +617,14 @@ function selectPlayers(
   const joinedSinceFill = new Set(
     lastFillAt
       ? eligible
-          .filter((p) => p.manualPriority === undefined && p.queueEnteredAt.getTime() > lastFillAt.getTime())
+          .filter(
+            (p) =>
+              p.manualPriority === undefined &&
+              // Only people coming off a court: a new arrival (no games yet) still gets the next
+              // free court, and On Deck shows them the moment they check in.
+              p.gamesPlayed > 0 &&
+              p.queueEnteredAt.getTime() > lastFillAt.getTime()
+          )
           .map((p) => p.id)
       : []
   );
@@ -957,7 +964,7 @@ function selectNext(
   const now = Date.now();
   const scoreOf = (p: QueuePlayer) =>
     playerScore(p, mode, maxConsecutiveGames, now, stableTiebreak(tiebreakSeed ?? "request", p.id), manualOrderLength) +
-    (lastFillAt && p.manualPriority === undefined && p.queueEnteredAt.getTime() > lastFillAt.getTime()
+    (lastFillAt && p.manualPriority === undefined && p.gamesPlayed > 0 && p.queueEnteredAt.getTime() > lastFillAt.getTime()
       ? JOINED_SINCE_FILL_SCORE
       : 0);
   const members = new Set(units.flatMap((r) => [...r.teamA, ...r.teamB]));
