@@ -218,7 +218,15 @@ export function deriveLocalState(snapshot: QueueSnapshot, ops: LocalOp[]): Local
 
   for (const op of ops) {
     if (op.sessionId !== snapshot.sessionId) continue;
-    if (op.kind === "fill" && (known.has(op.localGameId) || serverIdOf.has(op.localGameId))) continue;
+    if (op.kind === "fill" && (known.has(op.localGameId) || serverIdOf.has(op.localGameId))) {
+      // Already on the server (and in this snapshot). Its players still come off the custom
+      // order and its request is played, even if the snapshot was taken a moment before the
+      // server cleared them - otherwise the same four could be picked straight back.
+      const played = new Set([...op.teamAPlayerIds, ...op.teamBPlayerIds]);
+      manualQueueOrder = manualQueueOrder.filter((id) => !played.has(id));
+      matchRequests = matchRequests.filter((r) => ![...r.teamA, ...r.teamB].every((id) => played.has(id)));
+      continue;
+    }
     if (op.kind === "fill") {
       const selected = new Set([...op.teamAPlayerIds, ...op.teamBPlayerIds]);
       for (const id of selected) {

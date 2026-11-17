@@ -475,7 +475,12 @@ export function OverviewTab({
 
 	const queuedPlayers: any[] = session?.queuedPlayers ?? [];
 	const maxConsecutive: number = session?.settings?.maxConsecutiveGames ?? 2;
-	const restingIds = restingPlayerIds(queuedPlayers, maxConsecutive);
+	// A custom order is followed exactly (the games-in-a-row limit doesn't bend it), so nobody in
+	// it is marked as sitting out.
+	const restingIds =
+		editingQueueOrder || (session?.manualQueueOrder?.length ?? 0) > 0
+			? new Set<string>()
+			: restingPlayerIds(queuedPlayers, maxConsecutive);
 	const restingLabel = `Sits out next game · ${maxConsecutive} in a row`;
 	const nameById = new Map<string, string>((session?.players ?? []).map((p: any) => [p.id, p.name]));
 	// Fixed partner's name for each player who has one.

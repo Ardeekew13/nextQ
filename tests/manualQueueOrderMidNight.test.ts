@@ -83,7 +83,7 @@ describe("a saved manual order decides the next game, mid-night", () => {
     });
   }
 
-  it("a keep-apart group still wins over the saved order", () => {
+  it("the saved order wins over a keep-apart group (the organiser placed them by hand)", () => {
     const T0 = Date.UTC(2026, 0, 1, 10);
     const p = (id: string, i: number, manualPriority?: number): QueuePlayer => ({
       id, gamesPlayed: 2, consecutiveGames: 0, queueEnteredAt: new Date(T0 + i * 60000), gamesSatOut: 0,
@@ -94,7 +94,38 @@ describe("a saved manual order decides the next game, mid-night", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     const ids = r.selected.map((x) => x.id);
-    expect(ids.includes("a") && ids.includes("b")).toBe(false);
+    expect(ids.sort()).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("the saved order wins over the games-in-a-row limit", () => {
+    const T0 = Date.UTC(2026, 0, 1, 10);
+    const p = (id: string, i: number, consecutiveGames: number, manualPriority?: number): QueuePlayer => ({
+      id, gamesPlayed: 3, consecutiveGames, queueEnteredAt: new Date(T0 + i * 60000), gamesSatOut: 0,
+      partnerHistory: {}, opponentHistory: {}, manualPriority,
+    });
+    // a and b have played 2 in a row; dragged to the top anyway.
+    const pool = [p("a", 0, 2, 0), p("b", 1, 2, 1), p("c", 2, 0, 2), p("d", 3, 0, 3), p("e", 4, 0), p("f", 5, 0), p("g", 6, 0), p("h", 7, 0)];
+    const r = generateNextGame(pool, { mode: QueueMode.HYBRID, tiebreakSeed: "s", manualOrderLength: 4, maxConsecutiveGames: 2 });
+    expect(r.ok && r.selected.map((x) => x.id).sort()).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("never puts the same four straight back on court together, even from a stale custom order", () => {
+    const T0 = Date.UTC(2026, 0, 1, 10);
+    const four = ["w", "x", "y", "z"];
+    const p = (id: string, i: number, manualPriority?: number): QueuePlayer => ({
+      id, gamesPlayed: 3, consecutiveGames: 1, gamesSatOut: 0, partnerHistory: {}, opponentHistory: {}, manualPriority,
+      // w-z just came off court together (after the last fill); the rest were waiting.
+      queueEnteredAt: new Date(T0 + (four.includes(id) ? 30 : i) * 60000),
+      lastGameWith: four.includes(id) ? four.filter((o) => o !== id) : [],
+    });
+    const pool = [p("w", 0, 0), p("x", 1, 1), p("y", 2, 2), p("z", 3, 3), ...["a", "b", "c", "d", "e", "f"].map((id, i) => p(id, i + 4))];
+    const r = generateNextGame(pool, {
+      mode: QueueMode.HYBRID, tiebreakSeed: "s", manualOrderLength: 4, lastFillAt: new Date(T0 + 20 * 60000),
+      pastGroups: new Set([four.join(":")]),
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.selected.map((x) => x.id).sort()).not.toEqual(four);
   });
 });
 

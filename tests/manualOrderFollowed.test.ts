@@ -94,4 +94,19 @@ describe("saved custom order", () => {
     const dragged = rankQueue(withOrder(ps, order), { ...base, manualOrderLength: order.length }).map((p) => p.id);
     expect(dragged).toEqual(order);
   });
+
+  it("players come off the custom order on the device even if the snapshot was taken before the server cleared them", () => {
+    const sp = (i: number): SnapshotPlayer => ({ id: `p${i}`, name: `P${i}`, checkedIn: true, active: true, gamesPlayed: 2, wins: 1, losses: 1,
+      currentStreak: 0, longestWinStreak: 0, consecutiveGames: 1, queueEnteredAt: new Date(NOW - (30 - i) * 60000).toISOString(), gamesSatOut: 0,
+      partnerHistory: {}, opponentHistory: {} });
+    // The server already has the game this device made (knownClientIds), but its copy of the
+    // custom order still lists the four - the snapshot landed a moment before they were cleared.
+    const snap = { sessionId: "s1", takenAt: new Date(NOW).toISOString(), queueMode: "HYBRID", maxConsecutiveGames: 2, lastGameNumber: 1,
+      players: Array.from({ length: 12 }, (_, i) => sp(i)), courts: [{ id: "c1", courtNumber: 1, status: "IN_USE" }, { id: "c2", courtNumber: 2, status: "AVAILABLE" }],
+      activeGames: [{ id: "g1", courtId: "c1", gameNumber: 1, teamA: ["p0", "p1"], teamB: ["p2", "p3"], satOut: [], status: "IN_PROGRESS", clientId: "local-1" }],
+      knownClientIds: ["local-1"], pastGroups: ["p0:p1:p2:p3"], keepApart: [], manualQueueOrder: ["p0", "p1", "p2", "p3", "p4"] } as QueueSnapshot;
+    const fill: LocalOp = { kind: "fill", id: "f1", sessionId: "s1", courtId: "c1", localGameId: "local-1", teamAPlayerIds: ["p0", "p1"], teamBPlayerIds: ["p2", "p3"],
+      playersSatOutIds: [], createdAt: new Date(NOW - 60000).toISOString() };
+    expect(deriveLocalState(snap, [fill]).manualQueueOrder).toEqual(["p4"]);
+  });
 });
