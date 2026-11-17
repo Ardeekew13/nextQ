@@ -358,12 +358,8 @@ export const sessionResolvers = {
           throw bad(`${p.name} has a fixed partner (${partnerDoc?.name ?? "another player"}). Put them on the same team, or remove the fixed partnership first.`);
         }
       }
-      for (const g of session.separatedGroups ?? []) {
-        const inGame = g.playerIds.map(String).filter((id) => all.includes(id));
-        if (inGame.length >= 2) {
-          throw bad(`${inGame.map(nameOf).join(" and ")} are set to be kept apart. Remove that first to put them in one game.`);
-        }
-      }
+      // Keep-apart groups don't block a request: the organiser is asking for this game on
+      // purpose (the queue engine plays a request as-is, see selectNext).
       session.matchRequests.push({ teamAPlayerIds: teamA, teamBPlayerIds: teamB } as never);
       await session.save();
       return session;

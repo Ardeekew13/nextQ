@@ -41,10 +41,11 @@ describe("requestMatch", () => {
     await expect(ask(["a", "b"], ["c", "d"])).resolves.toBeTruthy();
   });
 
-  it("refuses players set to be kept apart", async () => {
+  it("goes through even for players set to be kept apart (the organiser asked for this game)", async () => {
     session.separatedGroups = [{ playerIds: ["a", "d"] }];
     (SessionPlayer.find as any).mockResolvedValue(players());
-    await expect(ask(["a", "b"], ["c", "d"])).rejects.toThrow(/kept apart/);
+    await expect(ask(["a", "b"], ["c", "d"])).resolves.toBeTruthy();
+    expect(session.matchRequests).toHaveLength(1);
   });
 
   it("refuses a player who's already in another request", async () => {

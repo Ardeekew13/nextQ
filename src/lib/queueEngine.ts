@@ -22,7 +22,7 @@ import { seededRandom } from "@/lib/seededRandom";
  * a browser still running an older copy sees a mismatch, warns "refresh this page", and lets
  * the server pick games instead of its out-of-date local copy.
  */
-export const QUEUE_ENGINE_VERSION = "2026-11-16";
+export const QUEUE_ENGINE_VERSION = "2026-11-17";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -134,11 +134,11 @@ const NEVER_PLAYED_PRIORITY_BOOST = 500_000;
  */
 const MANUAL_ORDER_WEIGHT = 50_000_000;
 
-/** Swapping a manually-ordered player out of the next game costs more than every variety rule
- * (repeated trio 1e13, catch-up 1e10, third game in a row 1.5e8, fairness 1e8 per game): the
- * organiser chose who plays next. Only a keep-apart group (1e15), which the organiser also set,
- * outranks it. The consecutive-game limit still applies through the queue score. */
-const MANUAL_KEEP_WEIGHT = 1e14;
+/** Swapping a manually-ordered player out of the next game costs more than every other rule,
+ * keep-apart groups (1e15) included: the organiser dragged the queue into this order by hand,
+ * so it's followed exactly. The games-in-a-row limit doesn't apply to them either (see
+ * playerScore / belowLimitIds). Only fixed partners still play together. */
+const MANUAL_KEEP_WEIGHT = 1e16;
 
 /** When fewer than 4 waiting players are under the games-in-a-row limit, the limit can't be
  * fully kept. Each game a foursome's players would be over the limit costs this much - more
@@ -199,8 +199,9 @@ function playerScore(
   // Grows with every extra game over the limit, so when the limit has to be relaxed (too few
   // rested players) the ones with the longest run sit out first instead of the same few
   // players winning the tiebreak game after game.
+  // (Not for a player the organiser placed in a custom order: that order is followed exactly.)
   const consecutivePenalty =
-    player.consecutiveGames >= maxConsecutiveGames
+    player.consecutiveGames >= maxConsecutiveGames && player.manualPriority === undefined
       ? 1_000_000 * (player.consecutiveGames - maxConsecutiveGames + 1)
       : 0;
 
@@ -636,7 +637,10 @@ function selectPlayers(
     joinedSinceFill.size === 0 ? 0 : players.filter((p) => joinedSinceFill.has(p.id)).length;
 
   // If everyone is at consecutive limit, ignore the penalty (not enough alts)
-  const belowLimitIds = new Set(eligible.filter((p) => p.consecutiveGames < maxConsecutiveGames).map((p) => p.id));
+  // A player placed in a custom order counts as free to play: the organiser's order wins.
+  const belowLimitIds = new Set(
+    eligible.filter((p) => p.consecutiveGames < maxConsecutiveGames || p.manualPriority !== undefined).map((p) => p.id)
+  );
   const pool = belowLimitIds.size >= 4 ? eligible.filter((p) => belowLimitIds.has(p.id)) : eligible;
   const poolIds = new Set(pool.map((p) => p.id));
   const byId = new Map(pool.map((p) => [p.id, p]));
@@ -899,6 +903,16 @@ function selectPlayers(
   // HARD RULE: Don't allow the same exact group of 4 to be drawn consecutively
   if (pastGroups && pastGroups.has(groupKey(selected)) && eligible.length >= 5) {
     const selectedIds = new Set(selected.map((p) => p.id));
+    // The same four coming off court together: never straight back on together, whatever put
+    // them at the front (even a stale custom order). Only fixed pairs are kept whole.
+    const justTogether =
+      lastFillAt !== undefined &&
+      selected.every(
+        (p) =>
+          p.queueEnteredAt.getTime() > lastFillAt.getTime() && // just came off court...
+          (p.lastGameWith?.length ?? 0) === 3 &&
+          selected.every((q) => q.id === p.id || p.lastGameWith!.includes(q.id)) // ...together
+      );
     // Only swap out a player who isn't half of an intact fixed pair in this selection —
     // breaking up a fixed partnership to dodge a repeat group would defeat the point of it.
     let swapIndex = -1;
@@ -913,13 +927,22 @@ function selectPlayers(
         break;
       }
     }
+    if (swapIndex === -1 && justTogether) {
+      // Everyone is protected: give up the last-placed one who isn't half of a fixed pair.
+      for (let i = selected.length - 1; i >= 0; i--) {
+        if (!(selected[i].fixedPartnerId && selectedIds.has(selected[i].fixedPartnerId!))) {
+          swapIndex = i;
+          break;
+        }
+      }
+    }
     if (swapIndex !== -1) {
       for (const entry of entries) {
         if (entry.kind !== "single") continue; // keep it simple: don't swap in a pair here
         if (selectedIds.has(entry.player.id)) continue;
         // Not someone who joined since the last fill: "Up next" (shown before they came off
         // court) couldn't have included them, and the fill must match it.
-        if (joinedSinceFill.has(entry.player.id)) continue;
+        if (joinedSinceFill.has(entry.player.id) && !justTogether) continue;
         const newGroup = [...selected] as PlayerQuad;
         newGroup[swapIndex] = entry.player;
         if (
