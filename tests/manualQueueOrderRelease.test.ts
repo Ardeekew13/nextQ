@@ -7,7 +7,7 @@ vi.mock("@/graphql/guards", () => ({
   requireClubOwner: vi.fn(),
 }));
 vi.mock("@/models/Session", () => ({ Session: { updateOne: vi.fn(async () => ({})) } }));
-vi.mock("@/models/Court", () => ({ Court: { findById: vi.fn() } }));
+vi.mock("@/models/Court", () => ({ Court: { findById: vi.fn(), updateOne: vi.fn(async () => ({ modifiedCount: 1 })) } }));
 vi.mock("@/models/Game", () => ({ Game: { findOne: vi.fn(), create: vi.fn() } }));
 vi.mock("@/models/SessionPlayer", () => ({ SessionPlayer: { find: vi.fn(), updateMany: vi.fn(async () => ({})) } }));
 

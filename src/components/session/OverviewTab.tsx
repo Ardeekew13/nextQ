@@ -831,6 +831,19 @@ export function OverviewTab({
 		}
 	}
 
+	/** Voids a game that isn't on any court (see strandedGames). */
+	async function handleVoidStranded(gameId: string) {
+		try {
+			await cancelGame({ variables: { id: gameId } });
+			markSnapshotStale();
+			void refreshSnapshot();
+			message.success("Game voided - its players are back in the queue.");
+			refetch();
+		} catch (err) {
+			message.error(err instanceof Error ? err.message : "Could not void that game");
+		}
+	}
+
 	async function handleAddToQueue(playerId: string) {
 		try {
 			await checkInPlayer({ variables: { id: playerId, checkedIn: true } });
@@ -1325,6 +1338,28 @@ export function OverviewTab({
 			<div className="main-content-grid">
 				{/* Left: courts + on deck + last games */}
 				<div className="courts-left">
+					{/* A running game that no court shows (two fills landed on one court at once, before
+					    that was blocked): its players show as "playing" but aren't on court or in the queue. */}
+					{(() => {
+						const shown = new Set((data?.session?.courts ?? []).map((c: any) => c.currentGame?.id).filter(Boolean));
+						const stranded = (data?.session?.activeGames ?? []).filter((g: any) => !shown.has(g.id));
+						if (stranded.length === 0) return null;
+						const names = (t: any) => t.players.map((p: any) => p.name).join(" & ");
+						return (
+							<div role="alert" style={{ margin: "12px 20px 0", padding: "10px 14px", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 6, display: "flex", flexDirection: "column", gap: 6 }}>
+								{stranded.map((g: any) => (
+									<div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+										<span style={{ fontSize: 13, color: "#9a3412", flex: 1, minWidth: 220 }}>
+											Game #{g.gameNumber} ({names(g.teamA)} vs {names(g.teamB)}) isn't on any court, so these players can't be queued.
+										</span>
+										<Button size="small" danger onClick={() => handleVoidStranded(g.id)}>
+											Void it
+										</Button>
+									</div>
+								))}
+							</div>
+						);
+					})()}
 					{/* Courts header */}
 					<div
 						className="courts-header"

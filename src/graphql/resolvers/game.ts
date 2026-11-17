@@ -34,6 +34,27 @@ function releaseFromManualOrder(sessionId: unknown, playerIds: unknown[], reques
   );
 }
 
+/**
+ * Takes the court for a new game in one atomic step. Reading "court is available" and then saving
+ * a game let two fills that arrived together (auto-fill from one phone and a tap on another, or a
+ * retry) both put a game on the same court: the court showed one, and the other's players were
+ * stuck as "playing" without being on any court or in the queue.
+ */
+async function claimCourt(courtId: unknown) {
+  const res = await Court.updateOne(
+    { _id: courtId, status: CourtStatus.AVAILABLE, activeGameId: null },
+    { $set: { status: CourtStatus.IN_USE } }
+  );
+  if (res.modifiedCount === 0) {
+    throw new GraphQLError("That court was just filled. Refresh to see its game.", { extensions: { code: "CONFLICT" } });
+  }
+}
+
+/** Gives a claimed court back when its game couldn't be saved. */
+function releaseCourt(courtId: unknown) {
+  return Court.updateOne({ _id: courtId, activeGameId: null }, { $set: { status: CourtStatus.AVAILABLE } });
+}
+
 /** Players the organiser took out of a game go to the very front of the queue (in this order,
  * ahead of anyone bumped earlier) until they play - see lib/upNext.ts. */
 async function bumpToFront(sessionId: unknown, playerIds: string[]) {
@@ -157,7 +178,9 @@ export const gameResolvers = {
       const now = new Date();
       const createdAt = claimed && !Number.isNaN(claimed.getTime()) && claimed <= now ? claimed : now;
 
+      await claimCourt(court._id);
       let game: HydratedDocument<GameDoc> | null = null;
+      try {
       for (let attempt = 0; attempt < 4 && !game; attempt++) {
         const last = await Game.findOne({ sessionId: session._id }).sort({ gameNumber: -1 });
         try {
@@ -179,12 +202,19 @@ export const gameResolvers = {
           const dup = (err as { code?: number }).code === 11000;
           if (!dup) throw err;
           const again = await Game.findOne({ sessionId: session._id, clientId: args.clientGameId });
-          if (again) return again;
+          if (again) {
+            await releaseCourt(court._id);
+            return again;
+          }
           // otherwise the game number was taken by a concurrent write: retry with the next one
         }
       }
       if (!game) {
         throw new GraphQLError("Could not save the game, please try again.", { extensions: { code: "CONFLICT" } });
+      }
+      } catch (err) {
+        await releaseCourt(court._id);
+        throw err;
       }
 
       court.activeGameId = game._id;
@@ -279,7 +309,10 @@ export const gameResolvers = {
 
       const gameNumber = (lastGame?.gameNumber ?? 0) + 1;
 
-      const game = await Game.create({
+      await claimCourt(court._id);
+      let game: HydratedDocument<GameDoc>;
+      try {
+        game = await Game.create({
         sessionId: session._id,
         courtId: court._id,
         gameNumber,
@@ -288,7 +321,11 @@ export const gameResolvers = {
         status: GameStatus.QUEUED,
         playersSatOutIds,
         source: GameSource.AUTO,
-      });
+        });
+      } catch (err) {
+        await releaseCourt(court._id);
+        throw err;
+      }
 
       // Increment consecutive games for selected players, reset for sat-out players
       court.activeGameId = game._id;
@@ -377,7 +414,10 @@ export const gameResolvers = {
       const lastGame = await Game.findOne({ sessionId: court.sessionId }).sort({ gameNumber: -1 });
       const gameNumber = (lastGame?.gameNumber ?? 0) + 1;
 
-      const game = await Game.create({
+      await claimCourt(court._id);
+      let game: HydratedDocument<GameDoc>;
+      try {
+        game = await Game.create({
         sessionId: court.sessionId,
         courtId: court._id,
         gameNumber,
@@ -386,7 +426,11 @@ export const gameResolvers = {
         status: GameStatus.QUEUED,
         playersSatOutIds,
         source: validSource(args.source, GameSource.MANUAL),
-      });
+        });
+      } catch (err) {
+        await releaseCourt(court._id);
+        throw err;
+      }
 
       // Same bookkeeping as an auto-generated game: the four get a consecutive game, and everyone
       // else who was waiting is credited with sitting this one out (so being skipped counts).
