@@ -2,7 +2,7 @@
  * reaches the front of the queue - and Up next / Fill Court agree on it. */
 import { describe, expect, it } from "vitest";
 import { generateNextGame, rankQueue, type QueuePlayer } from "@/lib/queueEngine";
-import { deriveLocalState, generateLocalGame, rankLocalQueue, type LocalOp, type QueueSnapshot, type SnapshotPlayer } from "@/lib/offlineQueue";
+import { deriveLocalState, generateLocalGame, previewLocalGame, rankLocalQueue, type LocalOp, type QueueSnapshot, type SnapshotPlayer } from "@/lib/offlineQueue";
 import { fulfilledRequestIds } from "@/lib/upNext";
 
 const T0 = Date.UTC(2026, 0, 1, 10);
@@ -34,10 +34,10 @@ describe("requested matches", () => {
     expect(r.teamB.map((p) => p.id).sort()).toEqual(["p12", "p6"]);
   });
 
-  it("does nothing until all four are free (one is on court)", () => {
+  it("while one of the four is on court, the others are kept for it (not put in other games)", () => {
     const withoutD = pool().filter((p) => p.id !== "p12");
     const r = generateNextGame(withoutD, opts);
-    expect(r.ok && r.selected.map((p) => p.id).sort()).toEqual(["p1", "p2", "p3", "p4"]);
+    expect(r.ok && r.selected.map((p) => p.id).sort()).toEqual(["p3", "p4", "p5", "p7"]);
   });
 
   it("is marked played once those four are in a game", () => {
@@ -59,5 +59,40 @@ describe("requested matches", () => {
     if (!g.ok) return;
     const fill: LocalOp = { kind: "fill", id: "f1", sessionId: "s1", courtId: "c1", localGameId: "local-1", teamAPlayerIds: g.teamA, teamBPlayerIds: g.teamB, playersSatOutIds: g.satOut, createdAt: at(20).toISOString() };
     expect(deriveLocalState(snap, [fill]).matchRequests).toEqual([]);
+  });
+});
+
+describe("a requested match waiting for someone on court", () => {
+  // A-D on court 1 and E-H on court 2; I-L waiting longest; M, N, O waiting; the request is
+  // M & N vs O & E - E is still playing on court 2.
+  const T = Date.UTC(2026, 0, 1, 10);
+  const t = (m: number) => new Date(T + m * 60000).toISOString();
+  const names = "ABCDEFGHIJKLMNOP".split("");
+  const snap = {
+    sessionId: "s1", takenAt: t(20), queueMode: "HYBRID", maxConsecutiveGames: 2, lastGameNumber: 2, mixEveryone: true,
+    players: names.map((n, i): SnapshotPlayer => ({ id: n, name: n, checkedIn: true, active: true, gamesPlayed: 1, wins: 0, losses: 0,
+      currentStreak: 0, longestWinStreak: 0, consecutiveGames: i < 8 ? 1 : 0, queueEnteredAt: t(i < 8 ? 0 : i), gamesSatOut: 0,
+      partnerHistory: {}, opponentHistory: {} })),
+    activeGames: [
+      { id: "g1", courtId: "c1", gameNumber: 1, teamA: ["A", "B"], teamB: ["C", "D"], satOut: [], status: "IN_PROGRESS" },
+      { id: "g2", courtId: "c2", gameNumber: 2, teamA: ["E", "F"], teamB: ["G", "H"], satOut: [], status: "IN_PROGRESS" },
+    ],
+    courts: [{ id: "c1", courtNumber: 1, status: "IN_USE" }, { id: "c2", courtNumber: 2, status: "IN_USE" }],
+    pastGroups: ["A:B:C:D", "E:F:G:H"], keepApart: [], lastFillAt: t(1),
+    matchRequests: [{ id: "r1", teamA: ["M", "N"], teamB: ["O", "E"] }],
+  } as QueueSnapshot;
+
+  it("I-L play first; when E's court finishes the request goes on, not the players who just played", () => {
+    const ops: LocalOp[] = [{ kind: "complete", id: "r1", sessionId: "s1", gameId: "g1", winningTeam: "A", recordedAt: t(25) }];
+    const first = generateLocalGame(snap, deriveLocalState(snap, ops));
+    expect(first.ok && [...first.teamA, ...first.teamB].sort()).toEqual(["I", "J", "K", "L"]);
+    if (!first.ok) return;
+    ops.push({ kind: "fill", id: "f1", sessionId: "s1", courtId: "c1", localGameId: "local-1", teamAPlayerIds: first.teamA, teamBPlayerIds: first.teamB, playersSatOutIds: first.satOut, createdAt: t(25) });
+    // M, N and O are kept for the request meanwhile, and On Deck already shows it.
+    const onDeck = previewLocalGame(snap, deriveLocalState(snap, ops));
+    expect(onDeck.ok && [onDeck.teamA.sort(), onDeck.teamB.sort()]).toEqual([["M", "N"], ["E", "O"]]);
+    ops.push({ kind: "complete", id: "r2", sessionId: "s1", gameId: "g2", winningTeam: "A", recordedAt: t(30) });
+    const second = generateLocalGame(snap, deriveLocalState(snap, ops));
+    expect(second.ok && [second.teamA.sort(), second.teamB.sort()]).toEqual([["M", "N"], ["E", "O"]]);
   });
 });

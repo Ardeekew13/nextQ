@@ -3,7 +3,7 @@ import { Session } from "@/models/Session";
 import { SessionPlayer, type SessionPlayerDoc } from "@/models/SessionPlayer";
 import { GameStatus, QueueMode, type SessionSettings } from "@/types/enums";
 import { poolSeed, seededRandom } from "@/lib/seededRandom";
-import { rankQueue, generateNextGame as queueEngineGenerateNextGame, type QueuePlayer } from "@/lib/queueEngine";
+import { comingOffForRequests, rankQueue, generateNextGame as queueEngineGenerateNextGame, type QueuePlayer } from "@/lib/queueEngine";
 import { blendedStrength, normaliseName, type ClubRecord } from "@/lib/playerStrength";
 import { loadClubHistory } from "@/lib/clubHistory";
 import { recentGameMates } from "@/lib/lastGame";
@@ -210,13 +210,31 @@ export async function getNextGamePreview(
   teamB: { players: HydratedDocument<SessionPlayerDoc>[] };
 } | null> {
   const ctx = await loadQueueContext(sessionId);
-  if (ctx.eligibleDocs.length < 4) return null;
+  const eligible: QueuePlayer[] = ctx.eligibleDocs.map((d) => ({
+    ...toQueuePlayer(d, ctx.clubHistory, ctx.recentMates),
+    manualPriority: ctx.manualPriorityById.get(String(d._id)),
+  }));
+  // A requested match waiting only on players from the court that finishes next: preview the
+  // fill that happens when it does (see comingOffForRequests).
+  const byId = new Map(ctx.byId);
+  if (ctx.matchRequests.length > 0) {
+    const oldest = await Game.findOne(
+      { sessionId, status: { $in: [GameStatus.QUEUED, GameStatus.IN_PROGRESS] } },
+      { teamAPlayerIds: 1, teamBPlayerIds: 1 }
+    ).sort({ gameNumber: 1 });
+    if (oldest) {
+      const docs = await SessionPlayer.find({ _id: { $in: [...oldest.teamAPlayerIds, ...oldest.teamBPlayerIds] } });
+      const extra = comingOffForRequests(eligible, docs.map((d) => toQueuePlayer(d, ctx.clubHistory, ctx.recentMates)), ctx.matchRequests);
+      if (extra.length > 0) {
+        eligible.push(...extra);
+        for (const d of docs) byId.set(String(d._id), d);
+      }
+    }
+  }
+  if (eligible.length < 4) return null;
 
   const result = queueEngineGenerateNextGame(
-    ctx.eligibleDocs.map((d) => ({
-      ...toQueuePlayer(d, ctx.clubHistory, ctx.recentMates),
-      manualPriority: ctx.manualPriorityById.get(String(d._id)),
-    })),
+    eligible,
     {
       mode: ctx.mode,
       maxConsecutiveGames: ctx.maxConsecutiveGames,
@@ -234,7 +252,7 @@ export async function getNextGamePreview(
   );
   if (!result.ok) return null;
 
-  const resolve = (p: QueuePlayer) => ctx.byId.get(p.id);
+  const resolve = (p: QueuePlayer) => byId.get(p.id);
   const players = (team: QueuePlayer[]) =>
     team.map(resolve).filter((d): d is HydratedDocument<SessionPlayerDoc> => Boolean(d));
 

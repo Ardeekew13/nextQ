@@ -31,9 +31,9 @@ describe("requestMatch", () => {
     expect(session.matchRequests).toEqual([{ teamAPlayerIds: ["a", "b"], teamBPlayerIds: ["c", "d"] }]);
   });
 
-  it("refuses to split a fixed pair", async () => {
+  it("goes through even when it puts fixed partners on opposite teams (asked for on purpose)", async () => {
     (SessionPlayer.find as any).mockResolvedValue(players({ a: "c", c: "a" }));
-    await expect(ask(["a", "b"], ["c", "d"])).rejects.toThrow(/fixed partner/);
+    await expect(ask(["a", "b"], ["c", "d"])).resolves.toBeTruthy();
   });
 
   it("allows a fixed pair on the same team", async () => {
