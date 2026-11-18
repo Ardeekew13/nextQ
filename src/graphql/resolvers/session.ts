@@ -348,18 +348,8 @@ export const sessionResolvers = {
       const taken = (session.matchRequests ?? []).flatMap((r) => [...r.teamAPlayerIds, ...r.teamBPlayerIds].map(String));
       const busy = all.find((id) => taken.includes(id));
       if (busy) throw bad(`${nameOf(busy)} is already in a requested match. Cancel that one first.`);
-      // A fixed pair is never split, so a request has to keep them on the same team.
-      for (const p of players) {
-        const partner = p.fixedPartnerId ? String(p.fixedPartnerId) : null;
-        if (!partner) continue;
-        const team = teamA.includes(String(p._id)) ? teamA : teamB;
-        if (!team.includes(partner)) {
-          const partnerDoc = await SessionPlayer.findById(partner);
-          throw bad(`${p.name} has a fixed partner (${partnerDoc?.name ?? "another player"}). Put them on the same team, or remove the fixed partnership first.`);
-        }
-      }
-      // Keep-apart groups don't block a request: the organiser is asking for this game on
-      // purpose (the queue engine plays a request as-is, see selectNext).
+      // Fixed partners and keep-apart groups don't block a request: the organiser is asking for
+      // this exact game on purpose, and the queue engine plays a request as-is (see selectNext).
       session.matchRequests.push({ teamAPlayerIds: teamA, teamBPlayerIds: teamB } as never);
       await session.save();
       return session;

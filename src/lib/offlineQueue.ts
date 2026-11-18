@@ -10,7 +10,7 @@
  */
 
 import { QueueMode } from "@/types/enums";
-import { generateNextGame, rankQueue, type MatchRequest, type QueuePlayer } from "@/lib/queueEngine";
+import { comingOffForRequests, generateNextGame, rankQueue, type MatchRequest, type QueuePlayer } from "@/lib/queueEngine";
 import { poolSeed, seededRandom } from "@/lib/seededRandom";
 import { blendedStrength } from "@/lib/playerStrength";
 import { RECENT_GAMES_REMEMBERED } from "@/lib/lastGame";
@@ -353,6 +353,32 @@ export function generateLocalGame(snapshot: QueueSnapshot, state: LocalState): L
     state.eligible.map((p) => toQueuePlayer(p, manualIds.get(p.id))),
     engineOptions(snapshot, state)
   );
+  if (!result.ok) return { ok: false, reason: result.reason ?? "Unable to generate a game." };
+  const picked = new Set(result.selected.map((p) => p.id));
+  return {
+    ok: true,
+    teamA: result.teamA.map((p) => p.id),
+    teamB: result.teamB.map((p) => p.id),
+    satOut: state.eligible.filter((p) => !picked.has(p.id)).map((p) => p.id),
+  };
+}
+
+/**
+ * The "On Deck" preview: like generateLocalGame, plus - when a requested match is only waiting for
+ * players on the court that finishes next - those players as if just off court, so On Deck shows
+ * the request that the next fill will play. Never used to fill a court.
+ */
+export function previewLocalGame(snapshot: QueueSnapshot, state: LocalState): LocalGenerateResult {
+  const manualIds = manualPriorityById(state);
+  const eligible = state.eligible.map((p) => toQueuePlayer(p, manualIds.get(p.id)));
+  const oldest = [...state.activeGames].sort((a, b) => a.gameNumber - b.gameNumber)[0];
+  if (oldest && state.matchRequests.length > 0) {
+    const byId = new Map(state.players.map((p) => [p.id, p]));
+    const off = [...oldest.teamA, ...oldest.teamB].map((id) => byId.get(id)).filter((p): p is SnapshotPlayer => Boolean(p));
+    eligible.push(...comingOffForRequests(eligible, off.map((p) => toQueuePlayer(p, manualIds.get(p.id))), state.matchRequests));
+  }
+  if (eligible.length < 4) return { ok: false, reason: "Need at least 4 checked-in players waiting to fill a court." };
+  const result = generateNextGame(eligible, engineOptions(snapshot, state));
   if (!result.ok) return { ok: false, reason: result.reason ?? "Unable to generate a game." };
   const picked = new Set(result.selected.map((p) => p.id));
   return {

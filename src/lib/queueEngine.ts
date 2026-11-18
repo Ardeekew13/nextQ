@@ -966,6 +966,38 @@ export interface MatchRequest {
   teamB: [string, string];
 }
 
+/**
+ * For the "On Deck" preview only. The next fill happens when the next court finishes; if a
+ * requested match is only waiting for someone on that court, the preview should show the request
+ * (that's what the fill will do), so those players are added as if they'd just come off court.
+ * Returns the extra players to add to the pool, or [] when no request needs them.
+ */
+export function comingOffForRequests(
+  eligible: ReadonlyArray<QueuePlayer>,
+  nextOff: ReadonlyArray<QueuePlayer>,
+  requests: ReadonlyArray<MatchRequest>,
+  now: Date = new Date()
+): QueuePlayer[] {
+  const free = new Set(eligible.map((p) => p.id));
+  const off = new Map(nextOff.map((p) => [p.id, p]));
+  const needed = requests.some((r) => {
+    const ids = [...r.teamA, ...r.teamB];
+    return ids.some((id) => off.has(id)) && ids.every((id) => free.has(id) || off.has(id));
+  });
+  if (!needed) return [];
+  const ids = nextOff.map((p) => p.id);
+  return nextOff.map((p) => {
+    const mates = ids.filter((id) => id !== p.id);
+    return {
+      ...p,
+      queueEnteredAt: now,
+      gamesPlayed: p.gamesPlayed + 1,
+      lastGameWith: mates,
+      recentGames: [mates, ...(p.recentGames ?? [])].slice(0, 3),
+    };
+  });
+}
+
 type Selection =
   | { ok: true; selected: PlayerQuad; teams?: { teamA: PlayerPair; teamB: PlayerPair } }
   | { ok: false; reason: string };
@@ -983,19 +1015,27 @@ function selectNext(
   args: Parameters<typeof selectPlayers>
 ): Selection {
   const byId = new Map(pool.map((p) => [p.id, p]));
-  const units = requests.filter((r) => [...r.teamA, ...r.teamB].every((id) => byId.has(id)));
-  if (units.length === 0) return selectPlayers(...args);
+  const idsOf = (r: MatchRequest) => [...r.teamA, ...r.teamB];
+  // Everyone in a request who's free right now is kept for it: they aren't put in other games,
+  // even while a teammate is still on court, so the four are together the moment they can be.
+  const held = new Set(requests.flatMap(idsOf).filter((id) => byId.has(id)));
+  if (held.size === 0) return selectPlayers(...args);
+  const units = requests.filter((r) => idsOf(r).every((id) => byId.has(id)));
 
   const [, mode, maxConsecutiveGames, , , , , , tiebreakSeed, manualOrderLength, lastFillAt] = args;
   const now = Date.now();
-  const scoreOf = (p: QueuePlayer) =>
-    playerScore(p, mode, maxConsecutiveGames, now, stableTiebreak(tiebreakSeed ?? "request", p.id), manualOrderLength) +
-    (lastFillAt && p.manualPriority === undefined && p.gamesPlayed > 0 && p.queueEnteredAt.getTime() > lastFillAt.getTime()
-      ? JOINED_SINCE_FILL_SCORE
-      : 0);
-  const members = new Set(units.flatMap((r) => [...r.teamA, ...r.teamB]));
-  const others = pool.filter((p) => !members.has(p.id));
-  const unitScore = (r: MatchRequest) => Math.max(...[...r.teamA, ...r.teamB].map((id) => scoreOf(byId.get(id)!)));
+  const cameOffCourt = (p: QueuePlayer) => Boolean(lastFillAt && p.gamesPlayed > 0 && p.queueEnteredAt.getTime() > lastFillAt.getTime());
+  const base = (p: QueuePlayer) =>
+    playerScore(p, mode, maxConsecutiveGames, now, stableTiebreak(tiebreakSeed ?? "request", p.id), manualOrderLength);
+  const scoreOf = (p: QueuePlayer) => base(p) + (p.manualPriority === undefined && cameOffCourt(p) ? JOINED_SINCE_FILL_SCORE : 0);
+  const others = pool.filter((p) => !held.has(p.id));
+  // A request's turn is its last member's place in the line. A member who has only just come off
+  // court was waiting for this request already, so they don't send it to the back of the line.
+  const unitScore = (r: MatchRequest) => {
+    const members = idsOf(r).map((id) => byId.get(id)!);
+    const waiting = members.filter((p) => !cameOffCourt(p));
+    return Math.max(...(waiting.length > 0 ? waiting : members).map(base));
+  };
   const sorted = [...units].sort((a, b) => unitScore(a) - unitScore(b));
   const due = sorted.find((r) => others.every((p) => scoreOf(p) >= unitScore(r)));
   // Its last member has reached the front, or too few others are left to make a game without them.
@@ -1006,7 +1046,8 @@ function selectNext(
     return { ok: true, selected: [...teamA, ...teamB] as PlayerQuad, teams: { teamA, teamB } };
   }
   const rest: Parameters<typeof selectPlayers> = [...args];
-  rest[0] = others;
+  // Without enough others, the held players fill in rather than leave a court empty.
+  rest[0] = others.length >= 4 ? others : pool;
   return selectPlayers(...rest);
 }
 

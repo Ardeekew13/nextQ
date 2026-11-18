@@ -37,6 +37,7 @@ import { useOfflineResults } from "@/apollo/OfflineResultsProvider";
 import {
 	deriveLocalState,
 	generateLocalGame,
+	previewLocalGame,
 	isLocalGameId,
 	rankLocalQueue,
 	type QueueSnapshot,
@@ -463,7 +464,7 @@ export function OverviewTab({
 			consecutiveGames: p.consecutiveGames,
 			queueEnteredAt: p.queueEnteredAt,
 		}));
-		const next = generateLocalGame(snapshot, local);
+		const next = previewLocalGame(snapshot, local);
 		return {
 			...base,
 			courts,
