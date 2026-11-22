@@ -1,5 +1,6 @@
 import mongoose, { type InferSchemaType, type Model } from "mongoose";
 import { SkillLevel } from "@/types/enums";
+import { toPlayerName } from "@/lib/playerNames";
 
 const { Schema, model, models } = mongoose;
 
@@ -12,7 +13,8 @@ const ClubMemberSchema = new Schema(
   {
     clubId: { type: Schema.Types.ObjectId, ref: "Club", required: true, index: true },
     organiserId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    name: { type: String, required: true, trim: true },
+    /** Stored in UPPERCASE like session names (see toPlayerName). */
+    name: { type: String, required: true, trim: true, set: toPlayerName },
     nickname: { type: String, trim: true },
     skillLevel: { type: String, enum: Object.values(SkillLevel) },
     /** Total games played across all sessions in this club */

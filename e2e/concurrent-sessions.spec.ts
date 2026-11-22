@@ -82,7 +82,8 @@ test("a club can run two active sessions at once, each queueing its own players"
       ...game.generateNextGame.teamA.players,
       ...game.generateNextGame.teamB.players,
     ].map((p: { name: string }) => p.name);
-    expect(gamePlayerNames.sort()).toEqual([...newPlayerNames].sort());
+    // Names are stored in uppercase.
+    expect(gamePlayerNames.sort()).toEqual(newPlayerNames.map((n) => n.toUpperCase()).sort());
 
     // Visible to the public too: the club page lists both active sessions, each linking to
     // its own page - a real player can't land in the wrong queue.

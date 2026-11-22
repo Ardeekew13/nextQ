@@ -1,5 +1,6 @@
 import mongoose, { type InferSchemaType, type Model } from "mongoose";
 import { SkillLevel } from "@/types/enums";
+import { toPlayerName } from "@/lib/playerNames";
 
 const { Schema, model, models } = mongoose;
 
@@ -8,7 +9,7 @@ const SessionPlayerSchema = new Schema(
     sessionId: { type: Schema.Types.ObjectId, ref: "Session", required: true, index: true },
     /** Name shown for this session only - a label the organiser can change (e.g. "Christian L"
      * when two Christians come). Who the player is across sessions is memberId. */
-    name: { type: String, required: true, trim: true },
+    name: { type: String, required: true, trim: true, set: toPlayerName },
     nickname: { type: String, trim: true },
     /** The club member account this player is: stats, history and skill follow it across
      * sessions, whatever name they go by. Missing only on players added before accounts. */

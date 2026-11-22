@@ -65,13 +65,14 @@ test("import from Reclub: link by Reclub account, and a renamed Reclub player is
 
   const players = async () =>
     (await gql(page, "query($id: ID!){ session(id: $id){ players { name memberId } } }", { id })).session.players as Array<{ name: string; memberId: string }>;
-  await expect.poll(async () => (await players()).map((p) => p.name)).toEqual(expect.arrayContaining(["Pong", "Guesty"]));
-  const pong = (await players()).find((p) => p.name === "Pong")!;
+  // Names are stored in uppercase however Reclub spells them.
+  await expect.poll(async () => (await players()).map((p) => p.name)).toEqual(expect.arrayContaining(["PONG", "GUESTY"]));
+  const pong = (await players()).find((p) => p.name === "PONG")!;
   expect(pong.memberId).toBeTruthy();
 
   // Next event: Pong renamed himself "Jhon P" on Reclub. Same Reclub account -> same player.
   await page.reload();
   await page.getByRole("tab", { name: "Players" }).click();
   dialog = await openReclub("https://reclub.co/m/E2E002");
-  await expect(dialog.getByTestId("reclub-row").filter({ hasText: "Jhon P" })).toContainText("Already in this session as Pong");
+  await expect(dialog.getByTestId("reclub-row").filter({ hasText: "Jhon P" })).toContainText("Already in this session as PONG");
 });

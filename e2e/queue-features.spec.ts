@@ -22,7 +22,7 @@ async function reset(page: Page, id: string) {
     await gql(page, "mutation($id: ID!){ updateSessionPlayer(id: $id, input: { fixedPartnerId: null }){ id } }", { id: p.id });
   }
   // Late arrivals added by earlier tests go home again.
-  for (const p of s.players.filter((x: { name: string; checkedIn: boolean }) => x.name.startsWith("Late ") && x.checkedIn)) {
+  for (const p of s.players.filter((x: { name: string; checkedIn: boolean }) => /^late /i.test(x.name) && x.checkedIn)) {
     await gql(page, "mutation($id: ID!){ checkInPlayer(id: $id, checkedIn: false){ id } }", { id: p.id });
   }
   for (const r of s.matchRequests) {
@@ -224,7 +224,7 @@ test("a dragged custom order is followed exactly, and keeps being followed after
 test("late arrivals: a new player gets the next court; someone back from a break can be dragged in", async ({ page }) => {
   const id = await activeSessionId(page);
   const back: P = (await load(page, id)).queuedPlayers[0]; // has played; will step out and return
-  const name = `Late ${Date.now().toString().slice(-5)}`;
+  const name = `LATE ${Date.now().toString().slice(-5)}`; // names are stored in uppercase
   const added = (await gql(page, "mutation($s: ID!, $n: String!){ addSessionPlayer(sessionId: $s, input: { name: $n }){ id } }", { s: id, n: name })).addSessionPlayer;
   await gql(page, "mutation($id: ID!){ checkInPlayer(id: $id, checkedIn: true){ id } }", { id: added.id });
   await gql(page, "mutation($id: ID!){ checkInPlayer(id: $id, checkedIn: false){ id } }", { id: back.id });
