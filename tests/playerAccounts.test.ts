@@ -134,6 +134,18 @@ describe("Reclub import", () => {
     expect(db.members.find((m) => m._id === "m-b")!.reclubUserId).toBe(777);
   });
 
+  it("only confirmed players are listed and added - not the waitlist or invites", async () => {
+    reclubSource.fetch = async () => {
+      const m = meet("Pong");
+      return { ...m, participants: [...m.participants, { ...m.participants[0], key: "u:888", userId: 888, name: "Waity", status: "WAITLISTED" as const }] };
+    };
+    const p = await preview();
+    expect(p.rows.map((r: any) => r.name)).toEqual(["Pong", "Guesty"]);
+    await doImport([{ key: "u:888", newMember: true }]); // even if asked for
+    expect(db.players).toHaveLength(0);
+    expect(db.members.some((m) => m.name === "Waity")).toBe(false);
+  });
+
   it("a session name already taken gets a number, so courts stay clear", async () => {
     db.players.push({ _id: "x", sessionId: "s1", name: "Pong", memberId: "someone-else" });
     reclubSource.fetch = async () => meet("Pong");

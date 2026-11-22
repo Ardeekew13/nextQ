@@ -12,9 +12,11 @@ type MemberLite = { _id: unknown; name: string; reclubUserId?: number | null; re
 /** Fetches the event, turning Reclub/format problems into a readable error. Tests swap this. */
 export const reclubSource = { fetch: (link: string): Promise<ReclubMeet> => fetchReclubMeet(link) };
 
+/** Only confirmed players (and their +1s) are imported: not the waitlist or invites. */
 async function loadMeet(link: string) {
   try {
-    return await reclubSource.fetch(link);
+    const meet = await reclubSource.fetch(link);
+    return { ...meet, participants: meet.participants.filter((p) => p.status === "CONFIRMED") };
   } catch (err) {
     throw new GraphQLError(err instanceof Error ? err.message : "Couldn't read that Reclub event.", {
       extensions: { code: "BAD_USER_INPUT" },

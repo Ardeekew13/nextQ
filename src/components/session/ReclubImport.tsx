@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useApolloClient, useMutation } from "@apollo/client";
-import { App, Button, Checkbox, Input, Select, Tag, Typography } from "antd";
+import { App, Button, Checkbox, Input, Select, Typography } from "antd";
 import { IMPORT_RECLUB_PLAYERS, RECLUB_IMPORT_PREVIEW } from "@/graphql/documents/organiser";
 
 const { Text } = Typography;
@@ -22,7 +22,6 @@ type Row = {
   candidates: Match[];
 };
 
-const STATUS_LABEL: Record<string, string> = { CONFIRMED: "Confirmed", WAITLISTED: "Waitlist", INVITED: "Invited", OTHER: "Other" };
 const NEW = "__new__";
 
 /**
@@ -49,7 +48,7 @@ export function ReclubImport({ sessionId, onDone }: { sessionId: string; onDone:
       const nextPicked: Record<string, boolean> = {};
       const nextWho: Record<string, string> = {};
       for (const r of p.rows as Row[]) {
-        nextPicked[r.key] = r.status === "CONFIRMED" && !r.inSessionAs;
+        nextPicked[r.key] = !r.inSessionAs;
         nextWho[r.key] = r.match ? r.match.memberId : NEW;
       }
       setPicked(nextPicked);
@@ -103,7 +102,7 @@ export function ReclubImport({ sessionId, onDone }: { sessionId: string; onDone:
       </div>
       {!preview && (
         <Text type="secondary" style={{ display: "block", fontSize: 12, marginTop: 8 }}>
-          Players are linked by their Reclub account, so they stay the same person here even if they change their name on Reclub.
+          Adds the event's confirmed players (not the waitlist). Players are linked by their Reclub account, so they stay the same person here even if they change their name on Reclub.
         </Text>
       )}
       {preview && (
@@ -149,7 +148,6 @@ export function ReclubImport({ sessionId, onDone }: { sessionId: string; onDone:
                     <div>
                       <Text strong>{r.name}</Text>
                       {r.username && <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>@{r.username}</Text>}
-                      {r.status !== "CONFIRMED" && <Tag style={{ marginLeft: 6 }}>{STATUS_LABEL[r.status] ?? r.status}</Tag>}
                     </div>
                     <Text type="secondary" style={{ fontSize: 11 }}>
                       {already

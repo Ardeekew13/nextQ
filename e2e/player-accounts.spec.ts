@@ -42,19 +42,24 @@ test("import from Reclub: link by Reclub account, and a renamed Reclub player is
   const openReclub = async (link: string) => {
     await page.getByRole("button", { name: /Add player/i }).first().click();
     const dialog = page.getByRole("dialog", { name: "Add players" });
-    await dialog.getByRole("tab", { name: "From Reclub" }).click();
+    // The dialog animates in; retry the tab click until it's really selected.
+    const tab = dialog.getByRole("tab", { name: "From Reclub" });
+    await expect(async () => {
+      await tab.click();
+      await expect(tab).toHaveAttribute("aria-selected", "true", { timeout: 1_000 });
+    }).toPass();
     await dialog.getByLabel("Reclub event link").fill(link);
     await dialog.getByRole("button", { name: "Read" }).click();
     await expect(dialog.getByText(/E2E rally/)).toBeVisible();
     return dialog;
   };
 
-  // First import: Pong and his +1 are new; Waity (waitlist) isn't ticked.
+  // First import: Pong and his +1 are new; Waity is on the waitlist, so he isn't listed at all.
   let dialog = await openReclub("reclub.co/m/E2E001");
   const rows = dialog.getByTestId("reclub-row");
-  await expect(rows).toHaveCount(3);
+  await expect(rows).toHaveCount(2);
   await expect(rows.filter({ hasText: "Guesty" })).toContainText("+1 guest of Pong");
-  await expect(rows.filter({ hasText: "Waity" }).getByRole("checkbox")).not.toBeChecked();
+  await expect(dialog.getByText("Waity")).toHaveCount(0);
   await dialog.getByRole("button", { name: "Add 2 players" }).click();
   await expect(dialog).toBeHidden();
 
