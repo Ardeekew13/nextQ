@@ -642,6 +642,13 @@ export const RECLUB_IMPORT_PREVIEW = gql`
         match { ${RECLUB_MATCH_FIELDS} }
         candidates { ${RECLUB_MATCH_FIELDS} }
       }
+      members {
+        memberId
+        name
+        reclubUsername
+        linked
+        inSessionAs
+      }
     }
   }
 `;

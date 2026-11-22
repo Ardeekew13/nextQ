@@ -7,7 +7,7 @@ import { isSameName } from "@/lib/playerNames";
 import { requireSessionOwner } from "../guards";
 import type { GraphQLContext } from "../context";
 
-type MemberLite = { _id: unknown; name: string; reclubUserId?: number | null; reclubName?: string | null };
+type MemberLite = { _id: unknown; name: string; reclubUserId?: number | null; reclubName?: string | null; reclubUsername?: string | null };
 
 /** Fetches the event, turning Reclub/format problems into a readable error. Tests swap this. */
 export const reclubSource = { fetch: (link: string): Promise<ReclubMeet> => fetchReclubMeet(link) };
@@ -60,7 +60,7 @@ export const reclubResolvers = {
       const session = await requireSessionOwner(context, args.sessionId);
       const meet = await loadMeet(args.link);
       const [members, inSession] = await Promise.all([
-        ClubMember.find({ clubId: session.clubId }).select("name reclubUserId reclubName").lean<MemberLite[]>(),
+        ClubMember.find({ clubId: session.clubId }).select("name reclubUserId reclubName reclubUsername").lean<MemberLite[]>(),
         SessionPlayer.find({ sessionId: session._id }).select("name memberId").lean(),
       ]);
       const sessionNameOf = new Map(inSession.map((p) => [String(p.memberId ?? ""), p.name]));
@@ -85,6 +85,15 @@ export const reclubResolvers = {
             inSessionAs: match ? sessionNameOf.get(match.memberId) ?? null : null,
           };
         }),
+        members: [...members]
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((m) => ({
+            memberId: String(m._id),
+            name: m.name,
+            reclubUsername: m.reclubUsername ?? null,
+            linked: m.reclubUserId !== null && m.reclubUserId !== undefined,
+            inSessionAs: sessionNameOf.get(String(m._id)) ?? null,
+          })),
       };
     },
   },

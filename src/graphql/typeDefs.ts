@@ -484,12 +484,25 @@ export const typeDefs = gql`
     inSessionAs: String
   }
 
+  """A club member to pick for a Reclub row whose name differs from their NextQ name."""
+  type ReclubMemberOption {
+    memberId: ID!
+    name: String!
+    """Already linked to a Reclub account (then only that account can be them)."""
+    reclubUsername: String
+    linked: Boolean!
+    """In this session already, as this name."""
+    inSessionAs: String
+  }
+
   type ReclubImportPreview {
     code: String!
     eventName: String!
     startsAt: Date
     clubName: String
     rows: [ReclubImportRow!]!
+    """Every club member, for picking someone whose name differs."""
+    members: [ReclubMemberOption!]!
   }
 
   input ReclubImportPick {
