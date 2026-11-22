@@ -57,10 +57,14 @@ async function main() {
   const unlinked = await SessionPlayer.find({ $or: [{ memberId: null }, { memberId: { $exists: false } }] }).select("sessionId name").lean();
   let linked = 0;
   let created = 0;
+  let orphaned = 0; // rows whose session no longer exists (deleted sessions) - nothing to link
   const ambiguous = new Map<string, number>();
   for (const p of unlinked) {
     const session = clubOf.get(String(p.sessionId));
-    if (!session) continue;
+    if (!session) {
+      orphaned += 1;
+      continue;
+    }
     const k = keyOf(session.clubId, p.name);
     const found = byClubName.get(k) ?? [];
     if (found.length > 1) {
@@ -81,7 +85,7 @@ async function main() {
     linked += 1;
     if (apply && memberId) await SessionPlayer.updateOne({ _id: p._id }, { $set: { memberId } });
   }
-  console.log(`${unlinked.length} session players without an account: ${linked} ${apply ? "linked" : "would be linked"} (${created} new members), ${[...ambiguous.values()].reduce((a, b) => a + b, 0)} left for you.`);
+  console.log(`${unlinked.length} session players without an account: ${linked} ${apply ? "linked" : "would be linked"} (${created} new members), ${[...ambiguous.values()].reduce((a, b) => a + b, 0)} left for you, ${orphaned} from deleted sessions (ignored).`);
   for (const [k, n] of ambiguous) console.log(`  shared name "${k.split("|")[1]}" in club ${k.split("|")[0]}: ${n} session player(s)`);
   if (!apply) console.log("Dry run. Add --apply to write.");
   process.exit(0);
