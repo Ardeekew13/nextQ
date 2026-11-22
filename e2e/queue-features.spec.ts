@@ -3,7 +3,7 @@ import { activeSessionId, courtLineups, gql, login, resetToOneGame } from "./hel
 
 type P = { id: string; name: string };
 const SESSION = `query($id: ID!){ session(id: $id){
-  players { id name fixedPartnerId }
+  players { id name fixedPartnerId checkedIn }
   queuedPlayers { id name }
   matchRequests { id }
   courts { id courtNumber currentGame { id teamA { players { id name } } teamB { players { id name } } } }
@@ -20,6 +20,10 @@ async function reset(page: Page, id: string) {
   const s = await load(page, id);
   for (const p of s.players.filter((x: { fixedPartnerId?: string }) => x.fixedPartnerId)) {
     await gql(page, "mutation($id: ID!){ updateSessionPlayer(id: $id, input: { fixedPartnerId: null }){ id } }", { id: p.id });
+  }
+  // Late arrivals added by earlier tests go home again.
+  for (const p of s.players.filter((x: { name: string; checkedIn: boolean }) => x.name.startsWith("Late ") && x.checkedIn)) {
+    await gql(page, "mutation($id: ID!){ checkInPlayer(id: $id, checkedIn: false){ id } }", { id: p.id });
   }
   for (const r of s.matchRequests) {
     await gql(page, "mutation($s: ID!, $r: ID!){ cancelMatchRequest(sessionId: $s, requestId: $r){ id } }", { s: id, r: r.id });
@@ -213,4 +217,42 @@ test("a dragged custom order is followed exactly, and keeps being followed after
   await page.getByRole("button", { name: "Record Result" }).nth(other).click();
   await page.getByRole("dialog").getByText("Team A").first().click();
   await expect.poll(async () => (await courtLineups(page))[other]).toBe(saved.slice(4, 8).sort().join(","));
+});
+
+test("late arrivals: a new player gets the next court; someone back from a break can be dragged in", async ({ page }) => {
+  const id = await activeSessionId(page);
+  const back: P = (await load(page, id)).queuedPlayers[0]; // has played; will step out and return
+  const name = `Late ${Date.now().toString().slice(-5)}`;
+  const added = (await gql(page, "mutation($s: ID!, $n: String!){ addSessionPlayer(sessionId: $s, input: { name: $n }){ id } }", { s: id, n: name })).addSessionPlayer;
+  await gql(page, "mutation($id: ID!){ checkInPlayer(id: $id, checkedIn: true){ id } }", { id: added.id });
+  await gql(page, "mutation($id: ID!){ checkInPlayer(id: $id, checkedIn: false){ id } }", { id: back.id });
+  await gql(page, "mutation($id: ID!){ checkInPlayer(id: $id, checkedIn: true){ id } }", { id: back.id });
+
+  await page.goto(`/dashboard/sessions/${id}`);
+  await expect(page.getByTestId("on-deck-player")).toHaveCount(4);
+  // The new arrival is in On Deck straight away; the returning player waits behind the others.
+  expect(await onDeck(page)).toContain(name);
+  expect(await onDeck(page)).not.toContain(back.name);
+
+  // The organiser can still drag the returning player to the front.
+  await page.getByRole("button", { name: "Edit order" }).click();
+  const rows = page.getByTestId("queue-order-row");
+  const names = await rows.evaluateAll((els) => els.map((el) => el.querySelector("span span")?.textContent?.trim() ?? ""));
+  const from = names.indexOf(back.name);
+  await rows.nth(from).focus();
+  await page.keyboard.press("Space");
+  for (let i = 0; i < from; i++) {
+    await page.keyboard.press("ArrowUp");
+    await page.waitForTimeout(80);
+  }
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(200);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect.poll(async () => onDeck(page)).toContain(back.name);
+
+  // Fill Court plays exactly that On Deck.
+  const promised = await onDeck(page);
+  await page.getByRole("button", { name: "Fill Court" }).click();
+  await expect(page.getByRole("button", { name: "Record Result" })).toHaveCount(2);
+  expect(await courtLineups(page)).toContain(promised.join(","));
 });

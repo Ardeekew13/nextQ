@@ -10,7 +10,7 @@ vi.mock("@/models/SessionPlayer", () => ({ SessionPlayer: { aggregate: vi.fn(), 
 
 import { Session } from "@/models/Session";
 import { SessionPlayer } from "@/models/SessionPlayer";
-import { blendedStrength, strengthTier, HISTORY_SESSIONS } from "@/lib/playerStrength";
+import { playerKey, blendedStrength, strengthTier, HISTORY_SESSIONS } from "@/lib/playerStrength";
 import { loadClubHistory } from "@/lib/clubHistory";
 import { generateNextGame, rankQueue, type QueuePlayer } from "@/lib/queueEngine";
 import { deriveLocalState, generateLocalGame, rankLocalQueue, type QueueSnapshot } from "@/lib/offlineQueue";
@@ -126,7 +126,7 @@ describe("loadClubHistory — DB edge cases", () => {
       { name: "jm", sessionId: "s2", wins: undefined, gamesPlayed: 4 },
     ]);
     const h = await loadClubHistory("club", "now", ["JM", "jm "]);
-    expect(h.get("jm")).toEqual({ wins: 3, games: 9 });
+    expect(h.get(playerKey("jm"))).toEqual({ wins: 3, games: 9 });
   });
 
   it(`counts only the ${HISTORY_SESSIONS} most recent sessions`, async () => {
@@ -137,7 +137,7 @@ describe("loadClubHistory — DB edge cases", () => {
       sessions.map((s, i) => ({ name: "Ann", sessionId: s._id, wins: i < 2 ? 0 : 4, gamesPlayed: 4 }))
     );
     const h = await loadClubHistory("club", "now", ["Ann"]);
-    expect(h.get("ann")).toEqual({ wins: 40, games: 40 });
+    expect(h.get(playerKey("Ann"))).toEqual({ wins: 40, games: 40 });
   });
 });
 
@@ -376,5 +376,21 @@ describe("reset to default", () => {
     expect(DEFAULT_QUEUE_SETTINGS.mixEveryone).toBe(DEFAULT_SESSION_SETTINGS.mixEveryone);
     expect(DEFAULT_QUEUE_SETTINGS.rankMatchups).toBe(DEFAULT_SESSION_SETTINGS.rankMatchups);
     expect(DEFAULT_QUEUE_SETTINGS.balanceTeams).toBe(DEFAULT_SESSION_SETTINGS.balanceTeams);
+  });
+});
+
+describe("club history follows the account, not the name", () => {
+  it("two members called Christian get their own records", async () => {
+    const { Session } = await import("@/models/Session");
+    const { SessionPlayer } = await import("@/models/SessionPlayer");
+    const { loadClubHistory } = await import("@/lib/clubHistory");
+    (Session.find as any).mockReturnValue({ select: () => ({ sort: () => ({ limit: () => ({ lean: async () => [{ _id: "s1", sessionDate: "2026-01-01" }] }) }) }) });
+    (SessionPlayer.aggregate as any).mockResolvedValue([
+      { name: "Christian", memberId: "m1", sessionId: "s1", wins: 5, gamesPlayed: 6 },
+      { name: "Christian", memberId: "m2", sessionId: "s1", wins: 0, gamesPlayed: 6 },
+    ]);
+    const h = await loadClubHistory("club", "now", [{ name: "Christian", memberId: "m1" }, { name: "Christian L", memberId: "m2" }]);
+    expect(h.get(playerKey({ name: "x", memberId: "m1" }))).toEqual({ wins: 5, games: 6 });
+    expect(h.get(playerKey({ name: "x", memberId: "m2" }))).toEqual({ wins: 0, games: 6 });
   });
 });

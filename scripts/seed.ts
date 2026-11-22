@@ -29,6 +29,7 @@ import { User } from "../src/models/User";
 import { Club } from "../src/models/Club";
 import { Session } from "../src/models/Session";
 import { SessionPlayer } from "../src/models/SessionPlayer";
+import { ClubMember } from "../src/models/ClubMember";
 import { Court } from "../src/models/Court";
 import { Game } from "../src/models/Game";
 import { getEligiblePlayers } from "../src/lib/eligibility";
@@ -78,6 +79,11 @@ function toMatchPlayer(doc: {
 
 async function main() {
   await connectToDatabase();
+  // Bring indexes in line with the models (e.g. drops the old one-member-per-name index, now
+  // that two members can share a name). Dev/test databases only - production uses
+  // scripts/migrate-player-accounts.ts.
+  await ClubMember.syncIndexes();
+  await SessionPlayer.syncIndexes();
 
   console.log("Clearing previous seed data...");
   const existingClub = await Club.findOne({ slug: CLUB_SLUG });

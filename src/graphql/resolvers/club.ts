@@ -1,3 +1,4 @@
+import { ACCOUNT_KEY_EXPR } from "@/lib/members";
 import { GraphQLError } from "graphql";
 import { Club } from "@/models/Club";
 import { Session } from "@/models/Session";
@@ -58,7 +59,7 @@ export const clubResolvers = {
         { $match: { sessionId: { $in: sessionIds } } },
         {
           $group: {
-            _id: { $toLower: { $trim: { input: "$name" } } },
+            _id: ACCOUNT_KEY_EXPR,
             name: { $first: "$name" },
             nickname: { $first: "$nickname" },
             totalGames: { $sum: "$gamesPlayed" },
@@ -79,12 +80,15 @@ export const clubResolvers = {
       const activeMembers = await ClubMember.find({ clubId: club._id, active: { $ne: false } })
         .select("name")
         .lean();
-      const activeNames = new Set(activeMembers.map((m) => m.name.trim().toLowerCase()));
-      const activeRows = rows.filter((r) => activeNames.has(r._id));
+      // Rows are per account (member id), or "n:<name>" for games from before accounts.
+      const memberById = new Map(activeMembers.map((m) => [String(m._id), m]));
+      const activeNames = new Set(activeMembers.map((m) => `n:${m.name.trim().toLowerCase()}`));
+      const activeRows = rows.filter((r) => memberById.has(r._id) || activeNames.has(r._id));
 
       return activeRows.map((r, i) => ({
         rank: i + 1,
-        name: r.name,
+        // An account shows under its current club name, whatever it was called in each session.
+        name: memberById.get(r._id)?.name ?? r.name,
         nickname: r.nickname ?? null,
         totalGames: r.totalGames,
         wins: r.wins,

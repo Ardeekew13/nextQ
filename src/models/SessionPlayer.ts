@@ -6,8 +6,13 @@ const { Schema, model, models } = mongoose;
 const SessionPlayerSchema = new Schema(
   {
     sessionId: { type: Schema.Types.ObjectId, ref: "Session", required: true, index: true },
+    /** Name shown for this session only - a label the organiser can change (e.g. "Christian L"
+     * when two Christians come). Who the player is across sessions is memberId. */
     name: { type: String, required: true, trim: true },
     nickname: { type: String, trim: true },
+    /** The club member account this player is: stats, history and skill follow it across
+     * sessions, whatever name they go by. Missing only on players added before accounts. */
+    memberId: { type: Schema.Types.ObjectId, ref: "ClubMember", default: null, index: true },
     skillLevel: { type: String, enum: Object.values(SkillLevel) },
 
     checkedIn: { type: Boolean, default: false },

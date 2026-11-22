@@ -6,6 +6,7 @@ import { playerResolvers } from "./player";
 import { courtResolvers } from "./court";
 import { gameResolvers } from "./game";
 import { clubMemberResolvers } from "./clubMember";
+import { reclubResolvers } from "./reclub";
 
 export const resolvers = {
   Date: DateScalar,
@@ -18,6 +19,7 @@ export const resolvers = {
     ...courtResolvers.Query,
     ...gameResolvers.Query,
     ...clubMemberResolvers.Query,
+    ...reclubResolvers.Query,
   },
 
   Mutation: {
@@ -28,6 +30,7 @@ export const resolvers = {
     ...courtResolvers.Mutation,
     ...gameResolvers.Mutation,
     ...clubMemberResolvers.Mutation,
+    ...reclubResolvers.Mutation,
   },
 
   Club: clubResolvers.Club,

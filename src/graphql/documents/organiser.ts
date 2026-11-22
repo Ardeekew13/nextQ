@@ -18,6 +18,7 @@ export const PLAYER_FIELDS = gql`
     longestWinStreak
     gamesSatOut
     fixedPartnerId
+    memberId
   }
 `;
 
@@ -615,6 +616,41 @@ export const SESSION_STANDINGS_QUERY = gql`
         ...StandingFields
       }
       publicUrl
+    }
+  }
+`;
+
+const RECLUB_MATCH_FIELDS = `memberId name how reclubName`;
+
+export const RECLUB_IMPORT_PREVIEW = gql`
+  query ReclubImportPreview($sessionId: ID!, $link: String!) {
+    reclubImportPreview(sessionId: $sessionId, link: $link) {
+      code
+      eventName
+      startsAt
+      clubName
+      rows {
+        key
+        kind
+        status
+        name
+        username
+        reclubUserId
+        guestOfName
+        isHost
+        inSessionAs
+        match { ${RECLUB_MATCH_FIELDS} }
+        candidates { ${RECLUB_MATCH_FIELDS} }
+      }
+    }
+  }
+`;
+
+export const IMPORT_RECLUB_PLAYERS = gql`
+  mutation ImportReclubPlayers($sessionId: ID!, $link: String!, $picks: [ReclubImportPick!]!) {
+    importReclubPlayers(sessionId: $sessionId, link: $link, picks: $picks) {
+      id
+      name
     }
   }
 `;

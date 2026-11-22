@@ -8,6 +8,7 @@ import {
   App, Tabs, Typography, Checkbox, Empty, Spin, Dropdown, Popconfirm, Tooltip,
 } from "antd";
 import { PlusOutlined, TeamOutlined } from "@ant-design/icons";
+import { ReclubImport } from "./ReclubImport";
 import {
   ADD_SESSION_PLAYER,
   ADD_SESSION_PLAYERS,
@@ -232,7 +233,9 @@ export function PlayersTab({
   }, [onRoster, checkedIn, sittingOut, unrated]);
 
   const clubMembers: any[] = membersData?.clubMembers ?? [];
-  const importableMembers = clubMembers.filter((m: any) => !existingNames.has(m.name.toLowerCase()));
+  // By account: a member already in the session (under any name) isn't offered again.
+  const memberIdsInSession = new Set(players.map((p: any) => p.memberId).filter(Boolean));
+  const importableMembers = clubMembers.filter((m: any) => !memberIdsInSession.has(m.id) && !existingNames.has(m.name.toLowerCase()));
 
   function partnerOptions(excludeId?: string) {
     return players
@@ -373,13 +376,20 @@ export function PlayersTab({
       similar = res.data?.similarPlayers ?? [];
     } catch { /* if the check fails, fall through and just add */ }
 
-    const addAs = async (finalName: string) => {
+    // memberId: the club member this is; newMember: a new account even if the name is taken.
+    const addAs = async (finalName: string, member: { memberId?: string; newMember?: boolean } = {}) => {
       try {
-        await addSessionPlayer({ variables: { sessionId, input: { ...values, name: finalName } } });
+        await addSessionPlayer({ variables: { sessionId, input: { ...values, name: finalName, ...member } } });
         message.success("Player added — sitting out until checked in");
         singleForm.resetFields();
         refetch();
-      } catch (e) {
+      } catch (e: any) {
+        // Several club members have this exact name: ask which one.
+        const sameName = e?.graphQLErrors?.find((g: any) => g.extensions?.code === "SAME_NAME");
+        if (sameName) {
+          setSamePerson({ name: finalName, values, matches: (sameName.extensions.members ?? []).map((m: any) => ({ id: m.id, name: m.name, source: "CLUB" })) });
+          return;
+        }
         message.error(e instanceof Error ? e.message : "Could not add player");
       }
     };
@@ -388,26 +398,48 @@ export function PlayersTab({
       await addAs(name);
       return;
     }
-    const match = similar[0];
-    const matchLabel = match.source === "SESSION" ? "already in this session" : "on your club roster";
-    modal.confirm({
-      title: `Is "${name}" the same person as ${match.name}?`,
-      content: `${match.name} is ${matchLabel}. If it's the same person, we won't add a duplicate.`,
-      okText: "No, add as new",
-      cancelText: "Yes, same person",
-      maskClosable: false,
-      keyboard: false,
-      onOk: () => addAs(name),
-      onCancel: () => {
-        if (match.source === "SESSION") {
-          message.info(`${match.name} is already in this session — nothing added`);
+    const inSession = similar.find((m) => m.source === "SESSION");
+    const fromClub = similar.filter((m) => m.source === "CLUB");
+    if (fromClub.length === 0 && inSession) {
+      modal.confirm({
+        title: `Is "${name}" the same person as ${inSession.name}?`,
+        content: `${inSession.name} is already in this session. If it's someone else, add them as a new player.`,
+        okText: "No, add as new",
+        cancelText: "Yes, same person",
+        maskClosable: false,
+        keyboard: false,
+        onOk: () => addAs(name, { newMember: true }),
+        onCancel: () => {
+          message.info(`${inSession.name} is already in this session — nothing added`);
           singleForm.resetFields();
-        } else {
-          // Same person as a roster member: add them under their saved name.
-          void addAs(match.name);
-        }
-      },
-    });
+        },
+      });
+      return;
+    }
+    // One or more club members with this (or a similar) name: the organiser picks who it is, or
+    // a new person. Picking matters - games and stats follow the account, not the name.
+    setSamePerson({ name, values, matches: fromClub });
+  }
+
+  /** "Same person?" picker for a name that matches club members. */
+  const [samePerson, setSamePerson] = useState<{ name: string; values: any; matches: { id: string; name: string; source: string }[] } | null>(null);
+  async function pickSamePerson(choice: { memberId: string; name: string } | "new") {
+    if (!samePerson) return;
+    const { name, values } = samePerson;
+    setSamePerson(null);
+    try {
+      await addSessionPlayer({
+        variables: {
+          sessionId,
+          input: choice === "new" ? { ...values, name, newMember: true } : { ...values, name: choice.name, memberId: choice.memberId },
+        },
+      });
+      message.success("Player added — sitting out until checked in");
+      singleForm.resetFields();
+      refetch();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "Could not add player");
+    }
   }
 
   async function handleAddBulk(values: any) {
@@ -418,12 +450,17 @@ export function PlayersTab({
     if (dupes.length > 0) message.warning(`Skipped ${dupes.length} duplicate${dupes.length > 1 ? "s" : ""}`);
     if (inputs.length === 0) return;
     try {
-      await addSessionPlayers({ variables: { sessionId, inputs } });
-      message.success(`${inputs.length} player${inputs.length > 1 ? "s" : ""} added — sitting out until checked in`);
+      const res = await addSessionPlayers({ variables: { sessionId, inputs } });
+      const added = res.data?.addSessionPlayers?.length ?? inputs.length;
+      const skipped = inputs.length - added;
+      message.success(`${added} player${added === 1 ? "" : "s"} added — sitting out until checked in`);
+      // A name shared by several club members (or someone already here under another name) is
+      // left out: add them on their own to pick who they are.
+      if (skipped > 0) message.warning(`${skipped} skipped: add them one at a time to pick which club member they are.`);
       bulkForm.resetFields();
       setAddOpen(false);
       refetch();
-    } catch { message.error("Could not add players"); }
+    } catch (e) { message.error(e instanceof Error ? e.message : "Could not add players"); }
   }
 
   async function doUpdatePlayer(input: any) {
@@ -842,6 +879,10 @@ export function PlayersTab({
               ),
             },
             {
+              key: "reclub", label: "From Reclub",
+              children: <ReclubImport sessionId={sessionId} onDone={() => { setAddOpen(false); refetch(); }} />,
+            },
+            {
               key: "import", label: <span><TeamOutlined /> Club roster</span>,
               children: (
                 <div>
@@ -893,6 +934,29 @@ export function PlayersTab({
             },
           ]}
         />
+      </Modal>
+
+      {/* Same person? A name matching club members: games and stats follow the account picked. */}
+      <Modal
+        title={samePerson ? `Who is ${samePerson.name}?` : ""}
+        open={!!samePerson}
+        onCancel={() => setSamePerson(null)}
+        footer={null}
+        width={420}
+      >
+        <Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
+          Pick the club member if it's them, so their games and stats stay together. Someone else with the same name? Add them as a new player.
+        </Text>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {(samePerson?.matches ?? []).map((m) => (
+            <Button key={m.id} block onClick={() => pickSamePerson({ memberId: m.id, name: m.name })}>
+              Yes — {m.name}
+            </Button>
+          ))}
+          <Button block type="primary" style={{ background: "#e11d74", borderColor: "#e11d74" }} onClick={() => pickSamePerson("new")}>
+            No, a new player
+          </Button>
+        </div>
       </Modal>
 
       {/* Edit player modal */}

@@ -20,12 +20,21 @@ const ClubMemberSchema = new Schema(
     /** Number of sessions attended */
     sessionsPlayed: { type: Number, default: 0 },
     active: { type: Boolean, default: true },
+    /** Reclub account, when this member came from (or was matched to) a Reclub event. The user id
+     * never changes; username and name can, and are refreshed on every import. */
+    reclubUserId: { type: Number, default: null },
+    reclubUsername: { type: String, default: null },
+    reclubName: { type: String, default: null },
   },
   { timestamps: true }
 );
 
-// Unique name per club
-ClubMemberSchema.index({ clubId: 1, name: 1 }, { unique: true });
+// Names can repeat in a club (two Christians are two members); the account id is who they are.
+ClubMemberSchema.index({ clubId: 1, name: 1 });
+ClubMemberSchema.index(
+  { clubId: 1, reclubUserId: 1 },
+  { unique: true, partialFilterExpression: { reclubUserId: { $type: "number" } } }
+);
 
 export type ClubMemberDoc = InferSchemaType<typeof ClubMemberSchema>;
 

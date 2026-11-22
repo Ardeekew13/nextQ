@@ -177,6 +177,9 @@ export const typeDefs = gql`
     checkedIn: Boolean!
     checkedInAt: Date
     active: Boolean!
+    """The club member account this player is (stats follow it across sessions, whatever name
+    they use in a session). Null only for players added before accounts."""
+    memberId: ID
     """Optional mutual partner request. When set, the queue engine always keeps this
     player and their fixed partner together in the same game, on the same team."""
     fixedPartnerId: ID
@@ -444,8 +447,57 @@ export const typeDefs = gql`
     winRate: Float!
     sessionsPlayed: Int!
     active: Boolean!
+    """Reclub account this member is linked to (the id never changes; username and name can)."""
+    reclubUserId: Int
+    reclubUsername: String
+    reclubName: String
     createdAt: Date!
     updatedAt: Date!
+  }
+
+  """A club member a Reclub row could be."""
+  type ReclubMemberMatch {
+    memberId: ID!
+    name: String!
+    """RECLUB = linked by Reclub account (certain); NAME = same name (check it's them)."""
+    how: String!
+    reclubName: String
+  }
+
+  type ReclubImportRow {
+    """Stable within the event: u:<reclub user id> for players, g:<owner id>:<name> for +1 guests."""
+    key: String!
+    """PLAYER or GUEST (a +1 with no Reclub account)."""
+    kind: String!
+    """CONFIRMED, WAITLISTED, INVITED or OTHER."""
+    status: String!
+    name: String!
+    username: String
+    reclubUserId: Int
+    guestOfName: String
+    isHost: Boolean!
+    """The suggested club member: certain when linked by Reclub account, otherwise by name."""
+    match: ReclubMemberMatch
+    """Other club members with the same name, when the match isn't certain."""
+    candidates: [ReclubMemberMatch!]!
+    """Already in this session (as this name)."""
+    inSessionAs: String
+  }
+
+  type ReclubImportPreview {
+    code: String!
+    eventName: String!
+    startsAt: Date
+    clubName: String
+    rows: [ReclubImportRow!]!
+  }
+
+  input ReclubImportPick {
+    key: String!
+    """Link to this existing club member."""
+    memberId: ID
+    """Or make a new club member."""
+    newMember: Boolean
   }
 
   type SessionPlayerAllTime {
@@ -465,6 +517,11 @@ export const typeDefs = gql`
     skillLevel: SkillLevel
     """Optional: ID of another player already in this session to set as a mutual fixed partner."""
     fixedPartnerId: ID
+    """The club member this player is (picked from "same person?"). Without it, the one club member
+    with exactly this name is used, or a new member is made."""
+    memberId: ID
+    """Make a new club member even if someone in the club has the same name."""
+    newMember: Boolean
   }
 
   input AddClubMemberInput {
@@ -543,6 +600,8 @@ export const typeDefs = gql`
 
     clubMembers(clubId: ID!, filter: String): [ClubMember!]!
     similarPlayers(sessionId: ID!, name: String!): [SimilarPlayer!]!
+    """Reads a public Reclub event (link or code) and suggests which club member each player is."""
+    reclubImportPreview(sessionId: ID!, link: String!): ReclubImportPreview!
     "JSON snapshot of the queue state so the browser can keep generating games offline."
     sessionQueueSnapshot(sessionId: ID!): String!
 
@@ -606,6 +665,9 @@ export const typeDefs = gql`
     """Merges removeId into keepId: keepId inherits the game history and removeId is deleted."""
     mergeClubMembers(keepId: ID!, removeId: ID!): ClubMember!
     importClubMembersToSession(sessionId: ID!, memberIds: [ID!]!): [SessionPlayer!]!
+    """Adds the picked players of a Reclub event to the session, linking each to a club member by
+    their Reclub account (and remembering it for next time)."""
+    importReclubPlayers(sessionId: ID!, link: String!, picks: [ReclubImportPick!]!): [SessionPlayer!]!
 
     addCourt(sessionId: ID!, input: AddCourtInput!): Court!
     updateCourt(id: ID!, input: UpdateCourtInput!): Court!

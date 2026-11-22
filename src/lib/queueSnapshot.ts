@@ -6,7 +6,7 @@ import { GameStatus, QueueMode, type SessionSettings } from "@/types/enums";
 import type { QueueSnapshot } from "@/lib/offlineQueue";
 import { QUEUE_ENGINE_VERSION } from "@/lib/queueEngine";
 import { loadClubHistory } from "@/lib/clubHistory";
-import { normaliseName } from "@/lib/playerStrength";
+import { playerKey } from "@/lib/playerStrength";
 import { recentGameMates } from "@/lib/lastGame";
 import { sortCourtsForDisplay } from "@/lib/courtOrder";
 import { engineMatchRequests } from "@/lib/upNext";
@@ -30,7 +30,7 @@ export async function buildQueueSnapshot(sessionId: string): Promise<QueueSnapsh
   ]);
 
   const settings = session?.settings as SessionSettings | undefined;
-  const clubHistory = await loadClubHistory(session?.clubId, sessionId, players.map((p) => p.name));
+  const clubHistory = await loadClubHistory(session?.clubId, sessionId, players);
   const ids = (list: unknown[]) => list.map(String);
   const live = games.filter((g) => g.status === GameStatus.QUEUED || g.status === GameStatus.IN_PROGRESS);
   const past = games.filter((g) => g.status !== GameStatus.CANCELLED).slice(0, 200);
@@ -63,8 +63,8 @@ export async function buildQueueSnapshot(sessionId: string): Promise<QueueSnapsh
       opponentHistory: plain(p.opponentHistory),
       fixedPartnerId: p.fixedPartnerId ? String(p.fixedPartnerId) : null,
       skillLevel: p.skillLevel ?? null,
-      clubWins: clubHistory.get(normaliseName(p.name))?.wins ?? 0,
-      clubGames: clubHistory.get(normaliseName(p.name))?.games ?? 0,
+      clubWins: clubHistory.get(playerKey(p))?.wins ?? 0,
+      clubGames: clubHistory.get(playerKey(p))?.games ?? 0,
       lastGameWith: recentMates.get(String(p._id))?.[0] ?? [],
       recentGames: recentMates.get(String(p._id)) ?? [],
     })),

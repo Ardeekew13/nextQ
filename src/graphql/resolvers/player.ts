@@ -6,14 +6,16 @@ import { ClubMember } from "@/models/ClubMember";
 import { SessionStatus } from "@/types/enums";
 import { getSessionStandingsWithPlayers } from "@/lib/stats";
 import { getPlayerNamesForSession, getClubHistoryForSession } from "../context";
-import { blendedStrength, normaliseName, strengthTier } from "@/lib/playerStrength";
+import { blendedStrength, playerKey, strengthTier } from "@/lib/playerStrength";
 import { requireSessionOwner, requireOrganiser } from "../guards";
 import { isSameName, isSimilarName } from "@/lib/playerNames";
+import { assertNotInSession, resolveMember } from "@/lib/members";
 import type { GraphQLContext } from "../context";
 
 interface StrengthParent {
   sessionId: unknown;
   name: string;
+  memberId?: unknown;
   skillLevel?: string | null;
   wins: number;
   gamesPlayed: number;
@@ -24,7 +26,7 @@ async function playerStrength(parent: StrengthParent, context: GraphQLContext): 
   const history = await getClubHistoryForSession(context, String(parent.sessionId));
   return blendedStrength({
     skillLevel: parent.skillLevel,
-    club: history.get(normaliseName(parent.name)),
+    club: history.get(playerKey(parent)),
     wins: parent.wins,
     games: parent.gamesPlayed,
   });
@@ -110,17 +112,22 @@ async function getPlayerGames(sessionId: string, playerId: string) {
 export const playerResolvers = {
   Query: {
     /** Possible "same person" matches for a name about to be added: near matches among this
-     * session's players and the club roster (exact matches are blocked outright on add). */
+     * session's players (exact ones are blocked outright on add), and exact or near matches on
+     * the club roster who aren't in this session yet. */
     similarPlayers: async (_p: unknown, args: { sessionId: string; name: string }, context: GraphQLContext) => {
       const session = await requireSessionOwner(context, args.sessionId);
       const [players, members] = await Promise.all([
-        SessionPlayer.find({ sessionId: session._id }).select("name").lean(),
+        SessionPlayer.find({ sessionId: session._id }).select("name memberId").lean(),
         ClubMember.find({ clubId: session.clubId }).select("name").lean(),
       ]);
       const inSession = players.filter((p) => isSimilarName(p.name, args.name));
-      const sessionNames = players.map((p) => p.name);
+      // Club members who aren't in this session yet (by account: a member can be in the session
+      // under another name, e.g. "Christian L").
+      const inSessionMembers = new Set(players.map((p) => String(p.memberId ?? "")));
+      // Exact name matches too: a club member with this exact name may be someone else entirely
+      // (two Christians), so the organiser confirms who it is instead of it being assumed.
       const fromRoster = members.filter(
-        (m) => isSimilarName(m.name, args.name) && !sessionNames.some((n) => isSameName(n, m.name))
+        (m) => (isSameName(m.name, args.name) || isSimilarName(m.name, args.name)) && !inSessionMembers.has(String(m._id))
       );
       return [
         ...inSession.map((p) => ({ id: String(p._id), name: p.name, source: "SESSION" })),
@@ -160,7 +167,15 @@ export const playerResolvers = {
       _p: unknown,
       args: {
         sessionId: string;
-        input: { name: string; nickname?: string; skillLevel?: string; fixedPartnerId?: string | null };
+        input: {
+          name: string;
+          nickname?: string;
+          skillLevel?: string;
+          fixedPartnerId?: string | null;
+          /** The club member this is (from "same person?"), or newMember for a new account. */
+          memberId?: string | null;
+          newMember?: boolean | null;
+        };
       },
       context: GraphQLContext
     ) => {
@@ -174,11 +189,14 @@ export const playerResolvers = {
           extensions: { code: "BAD_USER_INPUT" },
         });
       }
+      const member = await resolveMember(session, args.input);
+      await assertNotInSession(session._id, member._id, args.input.name.trim());
       const player = await SessionPlayer.create({
         sessionId: session._id,
+        memberId: member._id,
         name: args.input.name.trim(),
-        nickname: args.input.nickname,
-        skillLevel: args.input.skillLevel,
+        nickname: args.input.nickname ?? member.nickname ?? undefined,
+        skillLevel: args.input.skillLevel ?? member.skillLevel ?? undefined,
       });
       session.playerIds.push(player._id);
       await session.save();
@@ -186,16 +204,7 @@ export const playerResolvers = {
         await setFixedPartner(player, args.input.fixedPartnerId, args.sessionId);
         await player.save();
       }
-      // Upsert into club roster, unless the same person is already on it under a
-      // spelling/spacing/case variant (the unique index only catches exact matches).
-      const rosterNames = await ClubMember.find({ clubId: session.clubId }).select("name").lean();
-      if (!rosterNames.some((m) => isSameName(m.name, args.input.name))) {
-        await ClubMember.findOneAndUpdate(
-          { clubId: session.clubId, name: args.input.name.trim() },
-          { $setOnInsert: { organiserId: session.organiserId, nickname: args.input.nickname, skillLevel: args.input.skillLevel } },
-          { upsert: true, new: false }
-        );
-      }
+      await ClubMember.updateOne({ _id: member._id }, { $inc: { sessionsPlayed: 1 } });
       return player;
     },
 
@@ -224,9 +233,31 @@ export const playerResolvers = {
           extensions: { code: "BAD_USER_INPUT" },
         });
       }
+      // Each name is the one club member with that name, or a new member. A name shared by
+      // several members is skipped (the organiser adds that person on their own to pick who).
+      const rows: Array<{ input: (typeof validNames)[number]; memberId: unknown }> = [];
+      const usedMembers = new Set(
+        (await SessionPlayer.find({ sessionId: session._id }).select("memberId").lean()).map((p) => String(p.memberId ?? ""))
+      );
+      for (const input of validNames) {
+        try {
+          const member = await resolveMember(session, input);
+          if (usedMembers.has(String(member._id))) continue;
+          usedMembers.add(String(member._id));
+          rows.push({ input, memberId: member._id });
+        } catch (err) {
+          if ((err as GraphQLError).extensions?.code !== "SAME_NAME") throw err;
+        }
+      }
+      if (rows.length === 0) {
+        throw new GraphQLError("Nobody new to add: everyone is already in this session or shares a name with several club members.", {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
       const players = await SessionPlayer.insertMany(
-        validNames.map((input) => ({
+        rows.map(({ input, memberId }) => ({
           sessionId: session._id,
+          memberId,
           name: input.name.trim(),
           nickname: input.nickname,
           skillLevel: input.skillLevel,
@@ -234,18 +265,7 @@ export const playerResolvers = {
       );
       session.playerIds.push(...players.map((p) => p._id));
       await session.save();
-      // Upsert into club roster, skipping anyone already there under a name variant.
-      const rosterNames = (await ClubMember.find({ clubId: session.clubId }).select("name").lean()).map((m) => m.name);
-      const newForRoster = validNames.filter((input) => !rosterNames.some((n) => isSameName(n, input.name)));
-      await Promise.all(
-        newForRoster.map((input) =>
-          ClubMember.findOneAndUpdate(
-            { clubId: session.clubId, name: input.name.trim() },
-            { $setOnInsert: { organiserId: session.organiserId, nickname: input.nickname, skillLevel: input.skillLevel } },
-            { upsert: true, new: false }
-          )
-        )
-      );
+      await ClubMember.updateMany({ _id: { $in: rows.map((r) => r.memberId) } }, { $inc: { sessionsPlayed: 1 } });
       return players;
     },
 
