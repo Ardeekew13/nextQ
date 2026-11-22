@@ -262,7 +262,7 @@ export const gameResolvers = {
       const clubHistory = await loadClubHistory(
         session.clubId,
         session._id,
-        eligibleDocs.map((d) => d.name)
+        eligibleDocs
       );
       const recentMates = recentGameMates(priorGames); // priorGames is newest first
       // Manual queue order (see setManualQueueOrder) takes priority over the usual

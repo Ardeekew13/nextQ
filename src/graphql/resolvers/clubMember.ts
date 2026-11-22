@@ -1,3 +1,4 @@
+import { ACCOUNT_KEY_EXPR, accountRows } from "@/lib/members";
 import { GraphQLError } from "graphql";
 import { ClubMember } from "@/models/ClubMember";
 import { Session } from "@/models/Session";
@@ -41,17 +42,19 @@ export const clubMemberResolvers = {
       }
 
       // Aggregate stats for all members in one go
-      const memberNames = members.map((m) => m.name);
+      // Per account (member id), plus rows from before accounts keyed by name.
       const stats = await SessionPlayer.aggregate([
-        { $match: { sessionId: { $in: sessionIds }, name: { $in: memberNames } } },
+        { $match: { sessionId: { $in: sessionIds } } },
         {
           $group: {
-            _id: "$name",
+            _id: ACCOUNT_KEY_EXPR,
             totalWins: { $sum: "$wins" },
             totalLosses: { $sum: "$losses" },
           },
         },
       ]);
+      const nameCount = new Map<string, number>();
+      for (const m of members) nameCount.set(m.name.trim().toLowerCase(), (nameCount.get(m.name.trim().toLowerCase()) ?? 0) + 1);
 
       // Create a map for O(1) lookups
       const statsMap = new Map(
@@ -67,7 +70,11 @@ export const clubMemberResolvers = {
 
       // Merge stats into members
       let result = members.map((m) => {
-        const playerStats = statsMap.get(m.name) || { wins: 0, losses: 0, totalGames: 0 };
+        const parts = accountRows(statsMap, m._id, m.name, nameCount.get(m.name.trim().toLowerCase()) === 1);
+        const playerStats = parts.reduce(
+          (t, s) => ({ wins: t.wins + s.wins, losses: t.losses + s.losses, totalGames: t.totalGames + s.totalGames }),
+          { wins: 0, losses: 0, totalGames: 0 }
+        );
         return {
           ...m,
           totalGames: playerStats.totalGames,
@@ -106,18 +113,16 @@ export const clubMemberResolvers = {
 
       // Get current session players (to know which names to aggregate)
       const currentPlayers = await SessionPlayer.find({ sessionId: args.sessionId })
-        .select("name nickname skillLevel")
+        .select("name nickname skillLevel memberId")
         .lean();
       if (currentPlayers.length === 0) return [];
 
-      const names = currentPlayers.map((p) => p.name);
-
-      // Aggregate wins/losses/gamesPlayed by player name across all club sessions
+      // Aggregate per account across all club sessions (rows from before accounts by name)
       const agg = await SessionPlayer.aggregate([
-        { $match: { sessionId: { $in: clubSessionIds }, name: { $in: names } } },
+        { $match: { sessionId: { $in: clubSessionIds } } },
         {
           $group: {
-            _id: "$name",
+            _id: ACCOUNT_KEY_EXPR,
             totalGames: { $sum: "$gamesPlayed" },
             totalWins: { $sum: "$wins" },
             totalLosses: { $sum: "$losses" },
@@ -130,8 +135,19 @@ export const clubMemberResolvers = {
       const statsMap = new Map(agg.map((r) => [r._id as string, r]));
 
       // Merge with current-session player metadata (nickname, skillLevel)
+      const sameNameMembers = await ClubMember.find({ clubId: session.clubId }).select("name").lean();
+      const nameCount = new Map<string, number>();
+      for (const m of sameNameMembers) nameCount.set(m.name.trim().toLowerCase(), (nameCount.get(m.name.trim().toLowerCase()) ?? 0) + 1);
       return currentPlayers.map((p) => {
-        const s = statsMap.get(p.name);
+        const parts = accountRows(statsMap, p.memberId, p.name, (nameCount.get(p.name.trim().toLowerCase()) ?? 0) <= 1);
+        const s = parts.length
+          ? parts.reduce((t, r) => ({
+              totalGames: t.totalGames + r.totalGames,
+              totalWins: t.totalWins + r.totalWins,
+              totalLosses: t.totalLosses + r.totalLosses,
+              sessionsPlayed: t.sessionsPlayed + r.sessionsPlayed,
+            }))
+          : undefined;
         const totalGames = s?.totalGames ?? 0;
         const totalWins = s?.totalWins ?? 0;
         const totalLosses = s?.totalLosses ?? 0;
@@ -200,16 +216,19 @@ export const clubMemberResolvers = {
       const normalizedName = member.name.trim().toLowerCase();
       await SessionPlayer.deleteMany({
         sessionId: { $in: draftSessions.map((s) => s._id) },
-        $expr: { $eq: [{ $toLower: { $trim: { input: "$name" } } }, normalizedName] },
+        $or: [
+          { memberId: member._id },
+          { memberId: null, $expr: { $eq: [{ $toLower: { $trim: { input: "$name" } } }, normalizedName] } },
+        ],
       });
 
       return true;
     },
 
     /**
-     * Merges one club member into another: the kept member inherits the removed member's
-     * game history (their session records are renamed, which is how club standings and
-     * all-time stats are grouped) and the removed member is deleted from the roster.
+     * Merges one club member into another (the same person added twice, e.g. "JHON" in NextQ
+     * and "Pong" from Reclub): the kept member inherits the other's games, stats and Reclub link,
+     * and the other is deleted from the roster.
      */
     mergeClubMembers: async (
       _p: unknown,
@@ -225,51 +244,69 @@ export const clubMemberResolvers = {
         throw new GraphQLError("Both players must belong to the same club.", { extensions: { code: "BAD_USER_INPUT" } });
       }
 
+      // A Reclub account can belong to only one member.
+      if (keep.reclubUserId != null && remove.reclubUserId != null && keep.reclubUserId !== remove.reclubUserId) {
+        throw new GraphQLError(`${keep.name} and ${remove.name} are linked to different Reclub accounts, so they're two people.`, {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
+
       const sessions = await Session.find({ clubId: keep.clubId }).select("_id status").lean();
-      const nameMatches = (name: string) => ({
-        $expr: { $eq: [{ $toLower: { $trim: { input: "$name" } } }, name.trim().toLowerCase()] },
+      const sessionIds = sessions.map((s) => s._id);
+      // A member's session rows: linked to their account, or (from before accounts) unlinked
+      // under their name.
+      const rowsOf = (m: { _id: unknown; name: string }) => ({
+        sessionId: { $in: sessionIds },
+        $or: [
+          { memberId: m._id },
+          {
+            memberId: null,
+            $expr: { $eq: [{ $toLower: { $trim: { input: "$name" } } }, m.name.trim().toLowerCase()] },
+          },
+        ],
       });
 
-      // Sessions that contain BOTH players can't simply be renamed into one (that would leave
-      // two identical names in the same session). Refuse if one is live; in a draft, the
-      // removed player has no history yet, so just drop them from it.
-      const both: { sessionId: unknown }[] = [];
-      for (const s of sessions) {
-        const [hasKeep, hasRemove] = await Promise.all([
-          SessionPlayer.exists({ sessionId: s._id, ...nameMatches(keep.name) }),
-          SessionPlayer.exists({ sessionId: s._id, ...nameMatches(remove.name) }),
-        ]);
-        if (hasKeep && hasRemove) both.push({ sessionId: s._id });
-      }
+      // A session with BOTH can't become one player. Refuse if it's running; in a draft the
+      // removed one has no games yet, so just drop them from it; a finished one means they
+      // played together, so they're two people.
+      const [keepRows, removeRows] = await Promise.all([
+        SessionPlayer.find(rowsOf(keep)).select("sessionId").lean(),
+        SessionPlayer.find(rowsOf(remove)).select("sessionId").lean(),
+      ]);
+      const keepSessions = new Set(keepRows.map((r) => String(r.sessionId)));
+      const both = [...new Set(removeRows.map((r) => String(r.sessionId)).filter((sid) => keepSessions.has(sid)))];
       const statusById = new Map(sessions.map((s) => [String(s._id), s.status]));
-      const live = both.some((b) => {
-        const st = statusById.get(String(b.sessionId));
-        return st === SessionStatus.ACTIVE || st === SessionStatus.PAUSED;
-      });
-      if (live) {
+      const running = both.some((sid) => [SessionStatus.ACTIVE, SessionStatus.PAUSED].includes(statusById.get(sid) as never));
+      if (running) {
         throw new GraphQLError(
           `${keep.name} and ${remove.name} are both in a session that's running right now. Finish it first, then merge.`,
           { extensions: { code: "BAD_USER_INPUT" } }
         );
       }
-      const draftBoth = both
-        .filter((b) => statusById.get(String(b.sessionId)) === SessionStatus.DRAFT)
-        .map((b) => b.sessionId);
+      if (both.some((sid) => statusById.get(sid) === SessionStatus.COMPLETED)) {
+        throw new GraphQLError(`${keep.name} and ${remove.name} played in the same session, so they can't be the same person.`, {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
+      const draftBoth = both.filter((sid) => statusById.get(sid) === SessionStatus.DRAFT);
       if (draftBoth.length > 0) {
-        await SessionPlayer.deleteMany({ sessionId: { $in: draftBoth }, ...nameMatches(remove.name) });
+        await SessionPlayer.deleteMany({ ...rowsOf(remove), sessionId: { $in: draftBoth } });
       }
 
-      await SessionPlayer.updateMany(
-        { sessionId: { $in: sessions.map((s) => s._id) }, ...nameMatches(remove.name) },
-        { $set: { name: keep.name } }
-      );
+      // Their games move to the kept account. Each session keeps the name they used there.
+      await SessionPlayer.updateMany(rowsOf(remove), { $set: { memberId: keep._id } });
 
       keep.sessionsPlayed = (keep.sessionsPlayed ?? 0) + (remove.sessionsPlayed ?? 0);
       keep.totalGames = (keep.totalGames ?? 0) + (remove.totalGames ?? 0);
       if (!keep.nickname && remove.nickname) keep.nickname = remove.nickname;
       if (!keep.skillLevel && remove.skillLevel) keep.skillLevel = remove.skillLevel;
-      await keep.save();
+      const reclub = keep.reclubUserId == null && remove.reclubUserId != null
+        ? { reclubUserId: remove.reclubUserId, reclubUsername: remove.reclubUsername, reclubName: remove.reclubName }
+        : null;
+      // Delete first: the Reclub id is unique per club, so it can only move once the other is gone.
       await ClubMember.findByIdAndDelete(remove._id);
+      if (reclub) Object.assign(keep, reclub);
+      await keep.save();
       return keep;
     },
 
@@ -289,19 +326,23 @@ export const clubMemberResolvers = {
         throw new GraphQLError("Not authorised.", { extensions: { code: "FORBIDDEN" } });
       }
 
-      const members = await ClubMember.find({ _id: { $in: args.memberIds } });
+      // Only this club's members.
+      const members = await ClubMember.find({ _id: { $in: args.memberIds }, clubId: session.clubId });
       if (members.length === 0) return [];
 
-      // Get existing session player names to skip duplicates
-      const existing = await SessionPlayer.find({ sessionId: session._id }).select("name");
+      // Skip anyone already in the session: the same account, or another player using that name
+      // (names must be unique within a session so courts and calls are clear).
+      const existing = await SessionPlayer.find({ sessionId: session._id }).select("name memberId");
       const existingNames = new Set(existing.map((p) => p.name.toLowerCase()));
+      const existingMembers = new Set(existing.map((p) => String(p.memberId ?? "")));
 
-      const toAdd = members.filter((m) => !existingNames.has(m.name.toLowerCase()));
+      const toAdd = members.filter((m) => !existingMembers.has(String(m._id)) && !existingNames.has(m.name.toLowerCase()));
       if (toAdd.length === 0) return [];
 
       const players = await SessionPlayer.insertMany(
         toAdd.map((m) => ({
           sessionId: session._id,
+          memberId: m._id,
           name: m.name,
           nickname: m.nickname ?? undefined,
           skillLevel: m.skillLevel ?? undefined,

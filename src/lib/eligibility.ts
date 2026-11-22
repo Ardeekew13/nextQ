@@ -4,7 +4,7 @@ import { SessionPlayer, type SessionPlayerDoc } from "@/models/SessionPlayer";
 import { GameStatus, QueueMode, type SessionSettings } from "@/types/enums";
 import { poolSeed, seededRandom } from "@/lib/seededRandom";
 import { comingOffForRequests, rankQueue, generateNextGame as queueEngineGenerateNextGame, type QueuePlayer } from "@/lib/queueEngine";
-import { blendedStrength, normaliseName, type ClubRecord } from "@/lib/playerStrength";
+import { blendedStrength, playerKey, type ClubRecord } from "@/lib/playerStrength";
 import { loadClubHistory } from "@/lib/clubHistory";
 import { recentGameMates } from "@/lib/lastGame";
 import type { HydratedDocument } from "mongoose";
@@ -67,7 +67,7 @@ export function toQueuePlayer(
     opponentHistory,
     winRate: blendedStrength({
       skillLevel: doc.skillLevel,
-      club: clubHistory?.get(normaliseName(doc.name)),
+      club: clubHistory?.get(playerKey(doc)),
       wins: doc.wins,
       games: doc.gamesPlayed,
     }),
@@ -131,7 +131,7 @@ async function loadQueueContext(sessionId: string): Promise<QueueContext> {
   const clubHistory = await loadClubHistory(
     session?.clubId,
     sessionId,
-    eligibleDocs.map((d) => d.name)
+    eligibleDocs
   );
   const pastGroups = new Set(
     priorGames.map((g) => [...g.teamAPlayerIds, ...g.teamBPlayerIds].map(String).sort().join(":"))

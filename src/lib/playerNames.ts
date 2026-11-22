@@ -49,3 +49,9 @@ export function isSimilarName(a: string, b: string): boolean {
   const allowed = shortest <= 3 ? 0 : shortest <= 6 ? 1 : 2;
   return allowed > 0 && editDistance(na, nb) <= allowed;
 }
+
+/** How every player name is stored: trimmed, single-spaced, UPPERCASE ("  leo  oba " -> "LEO OBA").
+ * Used as a Mongoose setter, so it applies to every way a name is written. */
+export function toPlayerName(name: unknown): unknown {
+  return typeof name === "string" ? name.trim().replace(/\s+/g, " ").toUpperCase() : name;
+}

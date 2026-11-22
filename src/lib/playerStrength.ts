@@ -40,6 +40,13 @@ export function normaliseName(name: string): string {
   return name.trim().toLowerCase();
 }
 
+/** Who a session player is across sessions: their club member account when linked (names can
+ * repeat or change), otherwise - for players added before accounts - their name. */
+export function playerKey(p: string | { name: string; memberId?: unknown }): string {
+  if (typeof p === "string") return `n:${normaliseName(p)}`;
+  return p.memberId ? `m:${String(p.memberId)}` : `n:${normaliseName(p.name)}`;
+}
+
 export type StrengthTier = "STRONG" | "MID" | "DEVELOPING";
 
 /** Above this estimated win rate a player is shown as Strong. */

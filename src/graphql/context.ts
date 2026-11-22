@@ -62,9 +62,9 @@ export async function getClubHistoryForSession(
   if (!cached) {
     cached = Promise.all([
       Session.findById(sessionId).select("clubId").lean(),
-      SessionPlayer.find({ sessionId }, { name: 1 }).lean(),
+      SessionPlayer.find({ sessionId }, { name: 1, memberId: 1 }).lean(),
     ]).then(([session, players]) =>
-      loadClubHistory(session?.clubId, sessionId, players.map((p) => p.name))
+      loadClubHistory(session?.clubId, sessionId, players)
     );
     context.clubHistoryCache.set(sessionId, cached);
   }
