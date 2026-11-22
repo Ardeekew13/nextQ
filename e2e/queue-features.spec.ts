@@ -183,16 +183,18 @@ test("a dragged custom order is followed exactly, and keeps being followed after
   const drag = async (from: number, steps: number) => {
     await rows.nth(from).focus();
     await page.keyboard.press("Space");
+    await page.waitForTimeout(150); // picked up
     for (let i = 0; i < Math.abs(steps); i++) {
       await page.keyboard.press(steps < 0 ? "ArrowUp" : "ArrowDown");
-      await page.waitForTimeout(80); // let each step's move animation settle
+      await page.waitForTimeout(120); // let each step's move animation settle
     }
     await page.keyboard.press("Space");
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(250);
   };
   const names = () => rows.evaluateAll((els) => els.map((el) => el.querySelector("span span")?.textContent?.trim() ?? ""));
   const initial = await names();
   await drag(7, -7);
+  await expect.poll(async () => (await names())[0]).toBe(initial[7]);
   await drag(1, 6);
   const saved = await names();
   // The drags really moved people: the old last is now first, the old first went down the list.

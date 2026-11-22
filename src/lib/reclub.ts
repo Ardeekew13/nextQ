@@ -135,7 +135,10 @@ export function parseReclubMeet(html: string, code: string): ReclubMeet {
 export async function fetchReclubMeet(link: string, fetchImpl: typeof fetch = fetch): Promise<ReclubMeet> {
   const code = reclubCode(link);
   if (!code) throw new Error("That doesn't look like a Reclub event link (reclub.co/m/…).");
-  const res = await fetchImpl(`https://reclub.co/m/${encodeURIComponent(code)}`, {
+  // RECLUB_BASE_URL is only for browser tests (a local stand-in for reclub.co); it's a server
+  // setting, never taken from the request.
+  const base = process.env.RECLUB_BASE_URL || "https://reclub.co";
+  const res = await fetchImpl(`${base}/m/${encodeURIComponent(code)}`, {
     headers: { "user-agent": "Mozilla/5.0 (compatible; NextQueue/1.0; +https://nextqueue.online)", accept: "text/html" },
     redirect: "follow",
     signal: AbortSignal.timeout(10_000),

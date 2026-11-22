@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { E2E_BASE_URL, E2E_JWT_SECRET, E2E_MONGODB_URI, E2E_PORT, assertSafeDatabase } from "./e2e/env";
+import { RECLUB_FIXTURE_URL } from "./e2e/reclub-fixture";
 
 assertSafeDatabase(E2E_MONGODB_URI);
 
@@ -44,6 +45,8 @@ export default defineConfig({
       RATE_LIMIT_PUBLIC_MAX: "1000000",
       RATE_LIMIT_IP_CEILING: "1000000",
       NEXT_PUBLIC_APP_URL: E2E_BASE_URL,
+      // "From Reclub" reads a local stand-in for reclub.co (e2e/reclub-fixture.ts).
+      RECLUB_BASE_URL: RECLUB_FIXTURE_URL,
     },
   },
 });

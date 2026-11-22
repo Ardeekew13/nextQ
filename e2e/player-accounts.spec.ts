@@ -31,3 +31,42 @@ test("adding a name that matches a club member asks who it is, and 'new player' 
   expect(added.memberId).toBeTruthy();
   expect(added.memberId).not.toBe(existing.id); // a separate account, not merged with the roster member
 });
+
+test("import from Reclub: link by Reclub account, and a renamed Reclub player is still the same person", async ({ page }) => {
+  await login(page);
+  const id = await activeSessionId(page);
+  await page.addInitScript((sid) => { try { window.localStorage.setItem(`support-prompt-mid-${sid}`, "1"); } catch { /* ignore */ } }, id);
+  await page.goto(`/dashboard/sessions/${id}`);
+  await page.getByRole("tab", { name: "Players" }).click();
+
+  const openReclub = async (link: string) => {
+    await page.getByRole("button", { name: /Add player/i }).first().click();
+    const dialog = page.getByRole("dialog", { name: "Add players" });
+    await dialog.getByRole("tab", { name: "From Reclub" }).click();
+    await dialog.getByLabel("Reclub event link").fill(link);
+    await dialog.getByRole("button", { name: "Read" }).click();
+    await expect(dialog.getByText(/E2E rally/)).toBeVisible();
+    return dialog;
+  };
+
+  // First import: Pong and his +1 are new; Waity (waitlist) isn't ticked.
+  let dialog = await openReclub("reclub.co/m/E2E001");
+  const rows = dialog.getByTestId("reclub-row");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.filter({ hasText: "Guesty" })).toContainText("+1 guest of Pong");
+  await expect(rows.filter({ hasText: "Waity" }).getByRole("checkbox")).not.toBeChecked();
+  await dialog.getByRole("button", { name: "Add 2 players" }).click();
+  await expect(dialog).toBeHidden();
+
+  const players = async () =>
+    (await gql(page, "query($id: ID!){ session(id: $id){ players { name memberId } } }", { id })).session.players as Array<{ name: string; memberId: string }>;
+  await expect.poll(async () => (await players()).map((p) => p.name)).toEqual(expect.arrayContaining(["Pong", "Guesty"]));
+  const pong = (await players()).find((p) => p.name === "Pong")!;
+  expect(pong.memberId).toBeTruthy();
+
+  // Next event: Pong renamed himself "Jhon P" on Reclub. Same Reclub account -> same player.
+  await page.reload();
+  await page.getByRole("tab", { name: "Players" }).click();
+  dialog = await openReclub("https://reclub.co/m/E2E002");
+  await expect(dialog.getByTestId("reclub-row").filter({ hasText: "Jhon P" })).toContainText("Already in this session as Pong");
+});
