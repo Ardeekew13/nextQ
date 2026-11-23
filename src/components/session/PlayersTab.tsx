@@ -21,6 +21,7 @@ import {
   SESSION_PLAYERS_ALLTIME_QUERY,
   SESSION_DASHBOARD_QUERY,
   SIMILAR_PLAYERS,
+  MERGE_SESSION_PLAYER,
 } from "@/graphql/documents/organiser";
 
 const { Text } = Typography;
@@ -77,6 +78,7 @@ const PLAYERS_QUERY = gql`
       players {
         id
         name
+        memberId
         nickname
         skillLevel
         checkedIn
@@ -200,6 +202,9 @@ export function PlayersTab({
   const [checkInPlayer] = useMutation(CHECK_IN_PLAYER);
   const [setPlayerActiveStatus] = useMutation(SET_PLAYER_ACTIVE_STATUS);
   const [importMembers] = useMutation(IMPORT_CLUB_MEMBERS_TO_SESSION);
+  const [mergeSessionPlayer, { loading: mergingPlayer }] = useMutation(MERGE_SESSION_PLAYER);
+  const [mergePlayer, setMergePlayer] = useState<any>(null);
+  const [mergeTargetId, setMergeTargetId] = useState<string | undefined>(undefined);
 
   const [selectedImportIds, setSelectedImportIds] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
@@ -793,6 +798,7 @@ export function PlayersTab({
                   <div className="pl-cell-action" onClick={(e) => e.stopPropagation()}>
                     <Dropdown trigger={["click"]} menu={{ items: [
                       { key: "edit", label: "Edit player", onClick: () => { setEditingPlayer(player); editForm.setFieldsValue(player); } },
+                      ...(clubId ? [{ key: "merge", label: "Already a club player…", onClick: () => { setMergePlayer(player); setMergeTargetId(undefined); fetchClubMembers({ variables: { clubId }, fetchPolicy: "network-only" }); } }] : []),
                       ...(player.fixedPartner ? [{ key: "unpair", label: `Unpair from ${player.fixedPartner.name}`, onClick: () => handleUnpair(player) }] : []),
                       player.checkedIn ? { key: "checkout", label: "Check out", onClick: () => checkInPlayer({ variables: { id: player.id, checkedIn: false } }).then(() => refetch()) } : { key: "checkin", label: "Check in", onClick: () => checkInPlayer({ variables: { id: player.id, checkedIn: true } }).then(() => refetch()) },
                       player.active ? { key: "sitout", label: "Sit out", onClick: () => setPlayerActiveStatus({ variables: { id: player.id, active: false } }).then(() => refetch()) } : { key: "requeue", label: "Back in queue", onClick: () => setPlayerActiveStatus({ variables: { id: player.id, active: true } }).then(() => refetch()) },
@@ -1008,6 +1014,47 @@ export function PlayersTab({
           onChange={(v: string) => setBulkSkill(v)}
           size="large"
           style={{ width: "100%", marginTop: 8 }}
+        />
+      </Modal>
+
+      {/* ── "This player is already in the club": link + merge the duplicate ── */}
+      <Modal
+        title={mergePlayer ? `${mergePlayer.name} is already a club player` : ""}
+        open={!!mergePlayer}
+        onCancel={() => setMergePlayer(null)}
+        okText="Merge"
+        okButtonProps={{ disabled: !mergeTargetId, loading: mergingPlayer }}
+        onOk={async () => {
+          if (!mergePlayer || !mergeTargetId) return;
+          try {
+            await mergeSessionPlayer({ variables: { sessionPlayerId: mergePlayer.id, memberId: mergeTargetId } });
+            message.success(`${mergePlayer.name} is now linked to their club history.`);
+            setMergePlayer(null);
+            await refetch();
+          } catch (e) {
+            message.error(e instanceof Error ? e.message : "Could not merge");
+          }
+        }}
+      >
+        <Text style={{ display: "block", marginBottom: 12, fontSize: 13 }}>
+          Pick who they already are in the club. Tonight&apos;s games count toward that player&apos;s history, and the
+          duplicate you just added is removed from the club roster. Their name in this session stays as{" "}
+          <strong>{mergePlayer?.name}</strong>.
+        </Text>
+        <Select
+          showSearch
+          style={{ width: "100%" }}
+          placeholder="Search club players"
+          loading={membersLoading}
+          value={mergeTargetId}
+          onChange={setMergeTargetId}
+          optionFilterProp="label"
+          options={((membersData?.clubMembers ?? []) as any[])
+            .filter((m) => m.id !== mergePlayer?.memberId && !players.some((p: any) => p.memberId === m.id))
+            .map((m) => ({
+              value: m.id,
+              label: `${m.name}${m.nickname ? ` (${m.nickname})` : ""} · ${m.sessionsPlayed ?? 0} sessions, ${m.totalGames ?? 0} games`,
+            }))}
         />
       </Modal>
     </div>

@@ -311,6 +311,46 @@ export const clubMemberResolvers = {
     },
 
     /**
+     * From a session's player list: "this player is already in the club as X". The row is
+     * linked to X; the duplicate account it was created with (if any) is merged into X, so its
+     * games and stats move over and it leaves the roster.
+     */
+    mergeSessionPlayer: async (
+      _p: unknown,
+      args: { sessionPlayerId: string; memberId: string },
+      context: GraphQLContext
+    ) => {
+      const row = await SessionPlayer.findById(args.sessionPlayerId);
+      if (!row) throw new GraphQLError("Player not found.", { extensions: { code: "NOT_FOUND" } });
+      const session = await Session.findById(row.sessionId).select("clubId").lean();
+      if (!session) throw new GraphQLError("Session not found.", { extensions: { code: "NOT_FOUND" } });
+      const target = await requireMemberOwner(context, args.memberId);
+      if (String(target.clubId) !== String(session.clubId)) {
+        throw new GraphQLError("That player isn't in this club.", { extensions: { code: "BAD_USER_INPUT" } });
+      }
+      if (row.memberId && String(row.memberId) === String(target._id)) return row;
+      const other = await SessionPlayer.findOne({ sessionId: row.sessionId, memberId: target._id, _id: { $ne: row._id } })
+        .select("name")
+        .lean();
+      if (other) {
+        throw new GraphQLError(`${target.name} is already in this session as ${other.name}.`, {
+          extensions: { code: "BAD_USER_INPUT" },
+        });
+      }
+      if (row.memberId) {
+        await clubMemberResolvers.Mutation.mergeClubMembers(
+          _p,
+          { keepId: String(target._id), removeId: String(row.memberId) },
+          context
+        );
+      } else {
+        row.memberId = target._id as never;
+        await row.save();
+      }
+      return SessionPlayer.findById(row._id);
+    },
+
+    /**
      * Bulk-import selected club members into a session.
      * Each member becomes a new SessionPlayer (skips if already in session by name).
      */

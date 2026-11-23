@@ -690,6 +690,9 @@ export const typeDefs = gql`
     removeClubMember(id: ID!): Boolean!
     """Merges removeId into keepId: keepId inherits the game history and removeId is deleted."""
     mergeClubMembers(keepId: ID!, removeId: ID!): ClubMember!
+    """This session player is someone already in the club: link the row to that player and
+    merge the duplicate account into them."""
+    mergeSessionPlayer(sessionPlayerId: ID!, memberId: ID!): SessionPlayer!
     importClubMembersToSession(sessionId: ID!, memberIds: [ID!]!): [SessionPlayer!]!
     """Adds the picked players of a Reclub event to the session, linking each to a club member by
     their Reclub account (and remembering it for next time)."""
