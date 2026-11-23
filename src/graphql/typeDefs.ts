@@ -285,6 +285,13 @@ export const typeDefs = gql`
     createdAt: Date!
   }
 
+  """Players the organiser chose to keep out of the same game ("Break them up")."""
+  type KeepApartGroup {
+    """Member ids, sorted and joined - pass to removeKeepApart."""
+    key: String!
+    players: [SessionPlayer!]!
+  }
+
   type TogetherGroup {
     id: ID!
     players: [SessionPlayer!]!
@@ -369,6 +376,7 @@ export const typeDefs = gql`
     manualQueueOrder: [ID!]!
     """Players taken out of a game by the organiser: first in the queue until they play."""
     upNextFirst: [ID!]!
+    keepApartGroups: [KeepApartGroup!]!
     """Requested games still waiting to be played."""
     matchRequests: [MatchRequest!]!
     """Players genuinely tied for 1st place under this session's ranking rules.
@@ -647,6 +655,9 @@ export const typeDefs = gql`
     updateSession(id: ID!, input: UpdateSessionInput!): Session!
     """Breaks a group up: from now on the queue never puts two or more of these players in the same game."""
     separatePlayers(sessionId: ID!, playerIds: [ID!]!): Session!
+    """Stop keeping one group apart (key from keepApartGroups), or all of them."""
+    removeKeepApart(sessionId: ID!, key: String!): Session!
+    clearKeepApart(sessionId: ID!): Session!
     """Saves a custom queue order: playerIds front-to-back is the order the queue engine
     will pick from next, overriding the usual wait-time/games-played ordering (fairness
     rules like the consecutive-game limit and fixed partners still apply on top). Every id

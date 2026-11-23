@@ -309,11 +309,19 @@ function countKeepApartBreaches(
 ): number {
   if (!keepApart || keepApart.length === 0) return 0;
   const ids = new Set(players.map((p) => p.id));
+  // Fixed partners always play together, so they count as one: a group holding both partners
+  // ("Ekang / Yecyec / Inday") only means keeping Ekang away from the pair. Counting them as
+  // two made every game with the pair a breach, and the pair waited until nobody else could play.
+  const unitOf = new Map<string, string>();
+  for (const p of players) {
+    const partner = p.fixedPartnerId && ids.has(p.fixedPartnerId) ? p.fixedPartnerId : null;
+    unitOf.set(p.id, partner ? [p.id, partner].sort().join(":") : p.id);
+  }
   let breaches = 0;
   for (const group of keepApart) {
-    let inQuad = 0;
-    for (const id of group) if (ids.has(id)) inQuad++;
-    if (inQuad >= 2) breaches++;
+    const units = new Set<string>();
+    for (const id of group) if (ids.has(id)) units.add(unitOf.get(id)!);
+    if (units.size >= 2) breaches++;
   }
   return breaches;
 }

@@ -65,10 +65,18 @@ export function findTogetherGroups(
 
   const frequent = [...byKey.values()].filter((g) => g.gamesTogether >= minGames);
 
+  // Fixed partners count as one person: they're together on purpose. A group is only worth
+  // breaking up when it holds at least two "people" once each pair is counted once.
+  const partnerOf = new Map<string, string>();
+  for (const [a, b] of fixedPairs) {
+    partnerOf.set(a, b);
+    partnerOf.set(b, a);
+  }
+  const people = (ids: string[]) =>
+    new Set(ids.map((id) => (partnerOf.has(id) && ids.includes(partnerOf.get(id)!) ? [id, partnerOf.get(id)!].sort().join(":") : id))).size;
+  void fixedKeys;
   const notSeparated = frequent.filter(
-    (g) =>
-      !separated.some((sep) => g.playerIds.every((id) => sep.includes(id))) &&
-      !(g.playerIds.length === 2 && fixedKeys.has(g.key))
+    (g) => !separated.some((sep) => g.playerIds.every((id) => sep.includes(id))) && people(g.playerIds) >= 2
   );
 
   const maximal = notSeparated.filter(
