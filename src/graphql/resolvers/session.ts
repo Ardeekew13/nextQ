@@ -329,6 +329,22 @@ export const sessionResolvers = {
       return session;
     },
 
+    removeKeepApart: async (_p: unknown, args: { sessionId: string; key: string }, context: GraphQLContext) => {
+      const session = await requireSessionOwner(context, args.sessionId);
+      session.separatedGroups = (session.separatedGroups ?? []).filter(
+        (g) => [...g.playerIds.map(String)].sort().join(":") !== args.key
+      ) as never;
+      await session.save();
+      return session;
+    },
+
+    clearKeepApart: async (_p: unknown, args: { sessionId: string }, context: GraphQLContext) => {
+      const session = await requireSessionOwner(context, args.sessionId);
+      session.separatedGroups = [] as never;
+      await session.save();
+      return session;
+    },
+
     requestMatch: async (
       _p: unknown,
       args: { sessionId: string; teamAPlayerIds: string[]; teamBPlayerIds: string[] },
@@ -416,6 +432,13 @@ export const sessionResolvers = {
     standings: async (parent: { _id: unknown }) => getSessionStandingsWithPlayers(String(parent._id)),
     podium: async (parent: { _id: unknown }) => getSessionPodiumWithPlayers(String(parent._id)),
     firstPlaceTie: async (parent: { _id: unknown }) => getSessionFirstPlaceTieWithPlayers(String(parent._id)),
+    keepApartGroups: async (parent: { _id: unknown; separatedGroups?: { playerIds: unknown[] }[] }) => {
+      const groups = (parent.separatedGroups ?? []).map((g) => g.playerIds.map(String));
+      if (groups.length === 0) return [];
+      const players = await SessionPlayer.find({ _id: { $in: groups.flat() } });
+      const byId = new Map(players.map((p) => [String(p._id), p]));
+      return groups.map((ids) => ({ key: [...ids].sort().join(":"), players: ids.map((id) => byId.get(id)).filter(Boolean) }));
+    },
     togetherGroups: async (parent: { _id: unknown; separatedGroups?: { playerIds: unknown[] }[] }) => {
       const games = await Game.find({ sessionId: parent._id, status: { $ne: GameStatus.CANCELLED } }).sort({
         gameNumber: 1,
@@ -441,6 +464,7 @@ export const sessionResolvers = {
         id: g.key,
         players: g.playerIds.map((id) => playerById.get(id)).filter(Boolean),
         gamesTogether: g.gamesTogether,
+        inARow: g.inARow,
         games: g.gameIds.map((id) => gameById.get(id)).filter(Boolean),
       }));
     },

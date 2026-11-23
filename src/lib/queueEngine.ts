@@ -22,7 +22,7 @@ import { seededRandom } from "@/lib/seededRandom";
  * a browser still running an older copy sees a mismatch, warns "refresh this page", and lets
  * the server pick games instead of its out-of-date local copy.
  */
-export const QUEUE_ENGINE_VERSION = "2026-11-17";
+export const QUEUE_ENGINE_VERSION = "2026-11-23";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -309,11 +309,19 @@ function countKeepApartBreaches(
 ): number {
   if (!keepApart || keepApart.length === 0) return 0;
   const ids = new Set(players.map((p) => p.id));
+  // Fixed partners always play together, so they count as one: a group holding both partners
+  // ("Ekang / Yecyec / Inday") only means keeping Ekang away from the pair. Counting them as
+  // two made every game with the pair a breach, and the pair waited until nobody else could play.
+  const unitOf = new Map<string, string>();
+  for (const p of players) {
+    const partner = p.fixedPartnerId && ids.has(p.fixedPartnerId) ? p.fixedPartnerId : null;
+    unitOf.set(p.id, partner ? [p.id, partner].sort().join(":") : p.id);
+  }
   let breaches = 0;
   for (const group of keepApart) {
-    let inQuad = 0;
-    for (const id of group) if (ids.has(id)) inQuad++;
-    if (inQuad >= 2) breaches++;
+    const units = new Set<string>();
+    for (const id of group) if (ids.has(id)) units.add(unitOf.get(id)!);
+    if (units.size >= 2) breaches++;
   }
   return breaches;
 }
@@ -495,6 +503,8 @@ const WAIT_JUMP_LIMIT_MINUTES = 8;
 
 /** How far down the queue the new-faces preference may look: about the next three games' worth. */
 const FRESH_FACES_SEARCH_WIDTH = 12;
+/** Strict + Mix everyone looks only this far down the line (two games' worth of players). */
+const STRICT_MIX_WIDTH = 8;
 
 /** At most this many "catching-up" players (well behind on games, e.g. a group that checked in
  * late) share a game, so a late group is mixed in with everyone instead of playing each other. */
@@ -512,6 +522,9 @@ const CATCH_UP_WEIGHT = 1e10;
 /** Never a third game in a row for the same pair: may cost at most one game of fairness
  * (a games unit is 1e8), and outranks the 8-minute waiting rule (1e5 per case). */
 const THIRD_IN_A_ROW_WEIGHT = 1.5e8;
+/** Strict mode's automatic split of two players who just shared 2 games in a row. Above the
+ * games-played fairness swap, below the On Deck promise, the games-in-a-row limit and trios. */
+const STRICT_SPLIT_WEIGHT = 5e12;
 
 /** How many catching-up players this game may hold: 3 if none of them has played yet, else 2. */
 function catchUpCap(catchingUp: QueuePlayer[]): number {
@@ -759,6 +772,9 @@ function selectPlayers(
       countKeepApartBreaches(players, keepApart) * 1000 +
       countRepeatedTriples(players, pastTriples) * 10 +
       (catchUpBunching(players, behind) > 0 ? 1 : 0) +
+      // Strict: the line holds, but two players who've shared their last two games are split
+      // up automatically (the organiser doesn't have to press "Break them up").
+      (mode === QueueMode.SMART && thirdInARowPairs(players) > 0 ? 1 : 0) +
       (mode === QueueMode.SMART ? 0 : minPartnerRepeats(players));
     if ((mixEveryone || rankMatchups) && mode !== QueueMode.SMART) {
       // Mix everyone: among players who aren't more than one game ahead of whoever has played
@@ -835,8 +851,9 @@ function selectPlayers(
         joinedLate(players) * JOINED_SINCE_FILL_WEIGHT +
         unfairSwapAgainst(defaultTop, players) * 100_000 +
         catchUpBunching(players, behind) +
-        // Not in strict SMART.
-        (mode === QueueMode.SMART ? 0 : thirdInARowPairs(players) * THIRD_IN_A_ROW_WEIGHT) +
+        // Strict too: never a third game in a row together (fixed partners excepted). In strict
+        // it's the automatic "Break them up", so it outranks the games-played fairness swap.
+        thirdInARowPairs(players) * (mode === QueueMode.SMART ? STRICT_SPLIT_WEIGHT : THIRD_IN_A_ROW_WEIGHT) +
         (mode === QueueMode.SMART ? 0 : minPartnerRepeats(players));
       if (violationsOf(defaultTop) > 0) {
       // Without the fairness step, dodging a repeat partner could pull in a player two games
@@ -858,7 +875,10 @@ function selectPlayers(
       // Runs after the rule fix above too. Players who finish a game rejoin the queue at the
       // same moment, so the default four is often three or four people off the same court —
       // the trio rule splits them up, but that alone happily leaves two of them together.
-      if (mode !== QueueMode.SMART && freshFacesCost(selectedList.slice(0, 4)) > 0) {
+      // Strict + Mix everyone: the same "new faces" swap, but only within the next game's worth
+      // of the line (STRICT_MIX_WIDTH players) so nobody waits more than one extra game for it.
+      const strictMix = mode === QueueMode.SMART && mixEveryone && manualOrderLength === 0;
+      if ((mode !== QueueMode.SMART || strictMix) && freshFacesCost(selectedList.slice(0, 4)) > 0) {
       // New faces: some of the four have already shared a court — maybe in their very last
       // game. Look a little further down the queue for a
       // fresher four, with three fairness guards:
@@ -869,9 +889,19 @@ function selectPlayers(
       const top = selectedList.slice(0, 4);
       const maxGames = Math.max(...top.map((p) => p.gamesPlayed));
       const membersOf = (e: Entry) => (e.kind === "pair" ? e.players : [e.player]);
-      const candidates = entries
+      let candidates = entries
         .filter((e) => membersOf(e).every((p) => p.gamesPlayed <= maxGames))
         .slice(0, FRESH_FACES_SEARCH_WIDTH);
+      if (strictMix) {
+        const windowed: Entry[] = [];
+        let seats = 0;
+        for (const e of entries) {
+          if (seats >= STRICT_MIX_WIDTH) break;
+          windowed.push(e);
+          seats += membersOf(e).length;
+        }
+        candidates = windowed.filter((e) => membersOf(e).every((p) => p.gamesPlayed <= maxGames));
+      }
       // Same rule order as above, fairness judged against the ORIGINAL priority-order four —
       // so new faces can never make the game less fair than the rules already forced.
       const fresher = findFoursomeAvoidingRepeatedTrios(candidates, orderedViolations, freshFacesCost, true);

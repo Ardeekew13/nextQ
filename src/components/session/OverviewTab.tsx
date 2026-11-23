@@ -14,6 +14,8 @@ import {
 	CLEAR_MANUAL_QUEUE_ORDER,
 	REQUEST_MATCH,
 	CANCEL_MATCH_REQUEST,
+	REMOVE_KEEP_APART,
+	CLEAR_KEEP_APART,
 	UPDATE_SESSION,
 	SESSION_DASHBOARD_QUERY,
 	SESSION_QUEUE_SNAPSHOT,
@@ -270,6 +272,14 @@ export function OverviewTab({
 	const [requestTeamA, setRequestTeamA] = useState<string[]>([]);
 	const [requestTeamB, setRequestTeamB] = useState<string[]>([]);
 	const [requestMatch, { loading: requestingMatch }] = useMutation(REQUEST_MATCH, {
+		refetchQueries: [{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } }],
+		awaitRefetchQueries: true,
+	});
+	const [removeKeepApart] = useMutation(REMOVE_KEEP_APART, {
+		refetchQueries: [{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } }],
+		awaitRefetchQueries: true,
+	});
+	const [clearKeepApart] = useMutation(CLEAR_KEEP_APART, {
 		refetchQueries: [{ query: SESSION_DASHBOARD_QUERY, variables: { id: sessionId } }],
 		awaitRefetchQueries: true,
 	});
@@ -1212,7 +1222,14 @@ export function OverviewTab({
 									<span style={{ fontSize: 15, color: "#b45309", flexShrink: 0 }}>⚠</span>
 									<Text style={{ fontSize: 13, flex: 1, minWidth: 220, color: "#111827" }}>
 										<strong>{nameList}</strong> have been in the same game{" "}
-										<strong style={{ color: "#b45309" }}>{group.gamesTogether} times</strong>.
+										<strong style={{ color: "#b45309" }}>{group.gamesTogether} times</strong>
+										{group.inARow >= 2 ? (
+											<>
+												, the last <strong style={{ color: "#b45309" }}>{group.inARow} in a row</strong>. The queue splits them up for the next game automatically. Press Break them up to keep them apart for the rest of the session.
+											</>
+										) : (
+											"."
+										)}
 									</Text>
 									<Button size="small" onClick={() => setHistoryGroup(group)}>
 										View history
@@ -1430,8 +1447,52 @@ export function OverviewTab({
 												</span>
 											</label>
 											{row("Balanced teams", "Split each game into the most evenly matched teams (best + weakest vs the middle two). Doesn't change who plays.", st.balanceTeams ?? true, "balanceTeams", "Balanced teams on.", "Balanced teams off.")}
-											{row("Mix everyone", "Prefer players who have shared the court least, so everyone plays with and against everyone.", !!st.mixEveryone, "mixEveryone", "Mixing everyone: new games favour players who haven't met.", "Mix everyone is off.")}
-											{row("Rank matchups", "Group players of similar strength into the same game (Strong with Strong). Equal court time still comes first.", !!st.rankMatchups, "rankMatchups", "Rank matchups on: similar players are grouped together.", "Rank matchups off.")}
+											{row("Mix everyone", st.queueMode === "SMART" ? "Strict: mixes players within the next two games of the line, so nobody waits more than one extra game." : "Prefer players who have shared the court least, so everyone plays with and against everyone.", !!st.mixEveryone, "mixEveryone", "Mixing everyone: new games favour players who haven't met.", "Mix everyone is off.")}
+											{st.queueMode === "SMART" ? (
+												<div style={{ fontSize: 11, color: "rgba(29,31,32,0.55)", lineHeight: 1.4 }}>
+													<b>Strict queue:</b> Rank matchups doesn't apply. Players who just played 2 games in a row together are split up automatically.
+												</div>
+											) : (
+												row("Rank matchups", "Group players of similar strength into the same game (Strong with Strong). Equal court time still comes first.", !!st.rankMatchups, "rankMatchups", "Rank matchups on: similar players are grouped together.", "Rank matchups off.")
+											)}
+											{(session?.keepApartGroups?.length ?? 0) > 0 && (
+												<div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 10 }}>
+													<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+														<span style={{ fontSize: 13, fontWeight: 600, color: "#1d1f20" }}>Kept apart ({session.keepApartGroups.length})</span>
+														<Button size="small" type="link" danger style={{ padding: 0 }}
+															onClick={async () => {
+																try {
+																	await clearKeepApart({ variables: { sessionId } });
+																	markSnapshotStale();
+																	void refreshSnapshot();
+																	message.success("No groups are kept apart now.");
+																} catch (e) { message.error(e instanceof Error ? e.message : "Could not clear"); }
+															}}>
+															Clear all
+														</Button>
+													</div>
+													<div style={{ fontSize: 11, color: "rgba(29,31,32,0.55)", lineHeight: 1.4, marginBottom: 6 }}>
+														These players aren't put in the same game. Each group can make someone wait longer for a game.
+													</div>
+													<div style={{ maxHeight: 160, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
+														{session.keepApartGroups.map((g: any) => (
+															<div key={g.key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+																<span style={{ flex: 1, minWidth: 0 }}>{g.players.map((p: any) => p.name).join(" / ")}</span>
+																<Button size="small" type="text" aria-label={`Stop keeping ${g.players.map((p: any) => p.name).join(" / ")} apart`}
+																	onClick={async () => {
+																		try {
+																			await removeKeepApart({ variables: { sessionId, key: g.key } });
+																			markSnapshotStale();
+																			void refreshSnapshot();
+																		} catch (e) { message.error(e instanceof Error ? e.message : "Could not remove"); }
+																	}}>
+																	✕
+																</Button>
+															</div>
+														))}
+													</div>
+												</div>
+											)}
 											<div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
 												<span style={{ fontSize: 11, color: "rgba(29,31,32,0.45)" }}>{isDefault ? "Using default settings" : "Custom settings"}</span>
 												<Button size="small" disabled={isDefault} loading={updatingMix}

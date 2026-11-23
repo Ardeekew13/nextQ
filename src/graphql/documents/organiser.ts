@@ -462,6 +462,13 @@ export const SESSION_DASHBOARD_QUERY = gql`
       }
       manualQueueOrder
       upNextFirst
+      keepApartGroups {
+        key
+        players {
+          id
+          name
+        }
+      }
       matchRequests {
         id
         teamAPlayerIds
@@ -470,6 +477,7 @@ export const SESSION_DASHBOARD_QUERY = gql`
       togetherGroups {
         id
         gamesTogether
+        inARow
         players {
           id
           name
@@ -685,6 +693,22 @@ export const SET_MANUAL_QUEUE_ORDER = gql`
     setManualQueueOrder(sessionId: $sessionId, playerIds: $playerIds) {
       id
       manualQueueOrder
+    }
+  }
+`;
+
+export const REMOVE_KEEP_APART = gql`
+  mutation RemoveKeepApart($sessionId: ID!, $key: String!) {
+    removeKeepApart(sessionId: $sessionId, key: $key) {
+      id
+    }
+  }
+`;
+
+export const CLEAR_KEEP_APART = gql`
+  mutation ClearKeepApart($sessionId: ID!) {
+    clearKeepApart(sessionId: $sessionId) {
+      id
     }
   }
 `;
