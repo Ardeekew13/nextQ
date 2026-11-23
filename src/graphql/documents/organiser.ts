@@ -1026,6 +1026,15 @@ export const MERGE_CLUB_MEMBERS = gql`
   }
 `;
 
+export const MERGE_SESSION_PLAYER = gql`
+  mutation MergeSessionPlayer($sessionPlayerId: ID!, $memberId: ID!) {
+    mergeSessionPlayer(sessionPlayerId: $sessionPlayerId, memberId: $memberId) {
+      id
+      memberId
+    }
+  }
+`;
+
 export const IMPORT_CLUB_MEMBERS_TO_SESSION = gql`
   mutation ImportClubMembersToSession($sessionId: ID!, $memberIds: [ID!]!) {
     importClubMembersToSession(sessionId: $sessionId, memberIds: $memberIds) {
