@@ -464,6 +464,7 @@ export const sessionResolvers = {
         id: g.key,
         players: g.playerIds.map((id) => playerById.get(id)).filter(Boolean),
         gamesTogether: g.gamesTogether,
+        inARow: g.inARow,
         games: g.gameIds.map((id) => gameById.get(id)).filter(Boolean),
       }));
     },

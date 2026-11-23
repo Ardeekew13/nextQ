@@ -296,6 +296,8 @@ export const typeDefs = gql`
     id: ID!
     players: [SessionPlayer!]!
     gamesTogether: Int!
+    """Games in a row they've just shared. At 2+ the queue splits them up next game by itself."""
+    inARow: Int!
     games: [Game!]!
   }
 

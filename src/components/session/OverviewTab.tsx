@@ -1222,7 +1222,14 @@ export function OverviewTab({
 									<span style={{ fontSize: 15, color: "#b45309", flexShrink: 0 }}>⚠</span>
 									<Text style={{ fontSize: 13, flex: 1, minWidth: 220, color: "#111827" }}>
 										<strong>{nameList}</strong> have been in the same game{" "}
-										<strong style={{ color: "#b45309" }}>{group.gamesTogether} times</strong>.
+										<strong style={{ color: "#b45309" }}>{group.gamesTogether} times</strong>
+										{group.inARow >= 2 ? (
+											<>
+												, the last <strong style={{ color: "#b45309" }}>{group.inARow} in a row</strong>. The queue splits them up for the next game automatically. Press Break them up to keep them apart for the rest of the session.
+											</>
+										) : (
+											"."
+										)}
 									</Text>
 									<Button size="small" onClick={() => setHistoryGroup(group)}>
 										View history
@@ -1440,16 +1447,13 @@ export function OverviewTab({
 												</span>
 											</label>
 											{row("Balanced teams", "Split each game into the most evenly matched teams (best + weakest vs the middle two). Doesn't change who plays.", st.balanceTeams ?? true, "balanceTeams", "Balanced teams on.", "Balanced teams off.")}
+											{row("Mix everyone", st.queueMode === "SMART" ? "Strict: mixes players within the next two games of the line, so nobody waits more than one extra game." : "Prefer players who have shared the court least, so everyone plays with and against everyone.", !!st.mixEveryone, "mixEveryone", "Mixing everyone: new games favour players who haven't met.", "Mix everyone is off.")}
 											{st.queueMode === "SMART" ? (
-												// Strict is a pure line by wait time: mixing and rank matchups don't apply.
 												<div style={{ fontSize: 11, color: "rgba(29,31,32,0.55)", lineHeight: 1.4 }}>
-													<b>Strict queue:</b> players go on in order of wait time, so Mix everyone and Rank matchups don't apply.
+													<b>Strict queue:</b> Rank matchups doesn't apply. Players who just played 2 games in a row together are split up automatically.
 												</div>
 											) : (
-												<>
-													{row("Mix everyone", "Prefer players who have shared the court least, so everyone plays with and against everyone.", !!st.mixEveryone, "mixEveryone", "Mixing everyone: new games favour players who haven't met.", "Mix everyone is off.")}
-													{row("Rank matchups", "Group players of similar strength into the same game (Strong with Strong). Equal court time still comes first.", !!st.rankMatchups, "rankMatchups", "Rank matchups on: similar players are grouped together.", "Rank matchups off.")}
-												</>
+												row("Rank matchups", "Group players of similar strength into the same game (Strong with Strong). Equal court time still comes first.", !!st.rankMatchups, "rankMatchups", "Rank matchups on: similar players are grouped together.", "Rank matchups off.")
 											)}
 											{(session?.keepApartGroups?.length ?? 0) > 0 && (
 												<div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 10 }}>

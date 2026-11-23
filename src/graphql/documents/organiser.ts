@@ -477,6 +477,7 @@ export const SESSION_DASHBOARD_QUERY = gql`
       togetherGroups {
         id
         gamesTogether
+        inARow
         players {
           id
           name

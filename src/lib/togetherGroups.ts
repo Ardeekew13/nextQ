@@ -20,6 +20,8 @@ export interface TogetherGroup {
   playerIds: string[];
   gameIds: string[];
   gamesTogether: number;
+  /** Games in a row the whole group has shared, counting back from each member's latest game. */
+  inARow: number;
 }
 
 function subsetsOf(ids: string[]): string[][] {
@@ -58,12 +60,32 @@ export function findTogetherGroups(
         existing.gameIds.push(game.id);
         existing.gamesTogether++;
       } else {
-        byKey.set(key, { key, playerIds: subset, gameIds: [game.id], gamesTogether: 1 });
+        byKey.set(key, { key, playerIds: subset, gameIds: [game.id], gamesTogether: 1, inARow: 0 });
       }
     }
   }
 
   const frequent = [...byKey.values()].filter((g) => g.gamesTogether >= minGames);
+
+  // Each player's games, latest first, to work out how many games in a row a group has shared.
+  const gamesOf = new Map<string, string[][]>();
+  for (const game of [...games].sort((a, b) => b.gameNumber - a.gameNumber))
+    for (const id of new Set(game.playerIds)) {
+      if (!gamesOf.has(id)) gamesOf.set(id, []);
+      gamesOf.get(id)!.push(game.playerIds);
+    }
+  for (const g of frequent) {
+    g.inARow = Math.min(
+      ...g.playerIds.map((id) => {
+        let n = 0;
+        for (const ids of gamesOf.get(id) ?? []) {
+          if (!g.playerIds.every((m) => ids.includes(m))) break;
+          n++;
+        }
+        return n;
+      })
+    );
+  }
 
   // Fixed partners count as one person: they're together on purpose. A group is only worth
   // breaking up when it holds at least two "people" once each pair is counted once.

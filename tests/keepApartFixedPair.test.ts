@@ -52,3 +52,26 @@ describe("keep-apart with fixed partners", () => {
     expect(groups).toEqual([]);
   });
 });
+
+describe("together groups: games in a row", () => {
+  it("reports how many games in a row the group just shared", () => {
+    const games = [
+      { id: "g1", gameNumber: 1, playerIds: ["ana", "ben", "x1", "y1"] },
+      { id: "g2", gameNumber: 2, playerIds: ["ana", "x2", "ben", "y2"] },
+      { id: "g3", gameNumber: 3, playerIds: ["ana", "ben", "x3", "y3"] },
+    ];
+    const [g] = findTogetherGroups(games);
+    expect(g.key).toBe("ana:ben");
+    expect(g.gamesTogether).toBe(3);
+    expect(g.inARow).toBe(3);
+  });
+
+  it("a break in between resets the run", () => {
+    const games = [
+      { id: "g1", gameNumber: 1, playerIds: ["ana", "ben", "x1", "y1"] },
+      { id: "g2", gameNumber: 2, playerIds: ["ana", "ben", "x2", "y2"] },
+      { id: "g3", gameNumber: 3, playerIds: ["ana", "x3", "y3", "z3"] },
+    ];
+    expect(findTogetherGroups(games)[0].inARow).toBe(0);
+  });
+});

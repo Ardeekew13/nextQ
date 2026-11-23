@@ -1,8 +1,9 @@
 /**
- * Strict mode (QueueMode.SMART): pure line by wait time. Whoever has waited longest plays next,
+ * Strict mode (QueueMode.SMART): line by wait time. Whoever has waited longest plays next,
  * newcomers join the back of the line, and On Deck is exactly the next game. Only the guardrails
- * may bend it: the games-in-a-row limit, fixed partners, keep-apart groups and never the exact
- * same four twice in a row.
+ * may bend it: the games-in-a-row limit, fixed partners, keep-apart groups, never the exact same
+ * four twice in a row, and the automatic split of two players who just shared 2 games in a row.
+ * Mix everyone, when on, reshuffles within the next two games of the line.
  */
 import { describe, expect, it } from "vitest";
 import { generateNextGame, rankQueue, type QueuePlayer, type QueueEngineOptions } from "@/lib/queueEngine";
@@ -26,9 +27,10 @@ function night(opts: { seed: string; start: number; arrivals: Array<{ at: number
   const pastGroups = new Set<string>();
   let clock = T0 + 5 * MIN;
   let lastFillAt: number | undefined;
-  const report = { maxWait: 0, fills: 0, outOfLine: 0, upNextBroken: 0, backToBack: 0, overLimit: 0, newcomerFirstWait: [] as number[], exactRepeat: 0 };
+  const report = { maxWait: 0, fills: 0, outOfLine: 0, upNextBroken: 0, backToBack: 0, overLimit: 0, newcomerFirstWait: [] as number[], exactRepeat: 0, autoSplit: 0, thirdInARow: 0, recentMeet: 0 };
   let promised: string[] | null = null;
   let lastFillPicked = new Set<string>();
+  let passedOver = new Set<string>();
 
   const eligible = () => {
     const busy = new Set(onCourt.flatMap((g) => g.ids));
@@ -53,8 +55,36 @@ function night(opts: { seed: string; start: number; arrivals: Array<{ at: number
       const sim = new Map(players.map((p) => [p.id, p]));
       const latestPicked = Math.max(...picked.map((id) => sim.get(id)!.queueEnteredAt));
       const skipped = pool.filter((p) => !picked.includes(p.id) && sim.get(p.id)!.queueEnteredAt < latestPicked - 2 * MIN);
-      const explained = skipped.every((p) => p.consecutiveGames >= 2 || p.fixedPartnerId);
-      if (skipped.length > 0 && !explained) report.outOfLine += 1;
+      // Games in a row two players have just shared (fixed partners never count).
+      const streak = (a: string, b: string) => {
+        if (sim.get(a)!.fixedPartnerId === b) return 0;
+        let n = 0;
+        for (const m of sim.get(a)!.recent) { if (!m.includes(b)) break; n++; }
+        return n;
+      };
+      const hasStreak = (ids: string[]) => ids.some((a, i) => ids.slice(i + 1).some((b) => streak(a, b) >= 2));
+      // The auto-split: the front four of the line would put two players together a third game
+      // running, so one of them waits a game.
+      const front = [...pool].sort((a, b) => a.queueEnteredAt.getTime() - b.queueEnteredAt.getTime()).slice(0, 4).map((p) => p.id);
+      if (hasStreak(front) && !hasStreak(picked)) report.autoSplit += 1;
+      // A third game in a row together counts only when it was avoidable without breaking the
+      // On Deck promise (players who came off court since the last fill weren't in it).
+      if (hasStreak(picked)) {
+        const free = pool.filter((p) => p.consecutiveGames < 2 && !(p.gamesPlayed > 0 && lastFillAt !== undefined && p.queueEnteredAt.getTime() > lastFillAt)).map((p) => p.id);
+        let avoidable = false;
+        for (let a = 0; a < free.length && !avoidable; a++)
+          for (let b = a + 1; b < free.length && !avoidable; b++)
+            for (let c = b + 1; c < free.length && !avoidable; c++)
+              for (let d = c + 1; d < free.length && !avoidable; d++)
+                if (!hasStreak([free[a], free[b], free[c], free[d]])) avoidable = true;
+        if (avoidable) report.thirdInARow += 1;
+      }
+      report.recentMeet += picked.reduce((n, a, i) => n + picked.slice(i + 1).filter((b) => sim.get(a)!.recent.some((m) => m.includes(b)) && sim.get(a)!.fixedPartnerId !== b).length, 0);
+      // Ties in the line (same wait) may pass someone over for one game, never two fills running.
+      // A player split from someone they just shared 2 games with (the auto-split) is explained.
+      const unexplained = skipped.filter((p) => !(p.consecutiveGames >= 2 || p.fixedPartnerId || picked.some((q) => streak(p.id, q) >= 2)));
+      if (unexplained.some((p) => passedOver.has(p.id))) report.outOfLine += 1;
+      passedOver = new Set(unexplained.map((p) => p.id));
       const key = [...picked].sort().join(":");
       if (pastGroups.has(key)) report.exactRepeat += 1;
       pastGroups.add(key);
@@ -112,7 +142,7 @@ describe("strict mode", () => {
     it(`${sc.name}: plays strictly in line, On Deck is always the next game, nobody back-to-back`, () => {
       for (let n = 0; n < 8; n++) {
         const r = night({ seed: `${sc.name}-${n}`, start: sc.start, arrivals: sc.arrivals, courts: sc.courts, fills: 40 });
-        expect(r.outOfLine, "out of line").toBe(0);
+        expect(r.outOfLine, "passed over two fills running").toBe(0);
         expect(r.upNextBroken, "On Deck != fill").toBe(0);
         expect(r.overLimit, "over the games-in-a-row limit").toBe(0);
         expect(r.backToBack, "straight back on court").toBe(0);
@@ -130,10 +160,26 @@ describe("strict mode", () => {
     expect(r.outOfLine).toBe(0);
   });
 
-  it("Mix everyone and late-group mixing are ignored: the line is the line", () => {
-    const plain = night({ seed: "mix", start: 18, arrivals: [{ at: 20, count: 4 }], courts: 2, fills: 30 });
-    const mixed = night({ seed: "mix", start: 18, arrivals: [{ at: 20, count: 4 }], courts: 2, fills: 30, extra: { mixEveryone: true } });
-    expect(mixed).toEqual(plain);
+  it("players who just shared 2 games in a row are split up automatically", () => {
+    for (let n = 0; n < 8; n++) {
+      const r = night({ seed: `split-${n}`, start: 18, arrivals: [], courts: 2, fills: 40 });
+      expect(r.thirdInARow, "third game in a row together").toBe(0);
+    }
+  });
+
+  it("Mix everyone mixes within the next two games of the line: fewer repeat meetings, wait barely changes", () => {
+    let plainMeet = 0, mixedMeet = 0;
+    for (let n = 0; n < 8; n++) {
+      const plain = night({ seed: `mix-${n}`, start: 18, arrivals: [{ at: 20, count: 4 }], courts: 2, fills: 30 });
+      const mixed = night({ seed: `mix-${n}`, start: 18, arrivals: [{ at: 20, count: 4 }], courts: 2, fills: 30, extra: { mixEveryone: true } });
+      plainMeet += plain.recentMeet;
+      mixedMeet += mixed.recentMeet;
+      expect(mixed.maxWait, "longest wait").toBeLessThanOrEqual(plain.maxWait + 17); // at most about one extra game
+      expect(mixed.upNextBroken).toBe(0);
+      expect(mixed.overLimit).toBe(0);
+      expect(mixed.backToBack).toBe(0);
+    }
+    expect(mixedMeet).toBeLessThan(plainMeet);
   });
 
   it("fixed partners still play together; the pair waits for its later half", () => {
